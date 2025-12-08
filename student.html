@@ -1,1 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IQ4U Chess Classroom — Student (Chessground)</title>
+
+  <!-- Local Chessground CSS (NO CDN) -->
+  <link rel="stylesheet" href="lib/chessground.base.css">
+  <link rel="stylesheet" href="lib/chessground.theme.css"> <!-- optional theme file if you have it -->
+
+  <style>
+    :root {
+      --card-bg: #ffffff;
+      --accent: #1976d2;
+      --muted: #666;
+    }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: #f3f6fb;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      align-items: center;
+      padding: 18px;
+    }
+
+    header {
+      width: 100%;
+      max-width: 960px;
+      display:flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .brand { display:flex; flex-direction: column; }
+    .brand h1 { margin:0; font-size:18px; color:#111; }
+    .brand small { color:var(--muted); }
+
+    .controls { display:flex; gap:8px; align-items:center; }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button.secondary {
+      background: white;
+      color: var(--accent);
+      border: 1px solid rgba(25,118,210,.15);
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--muted);
+      border: none;
+    }
+
+    main {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .left {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 6px 18px rgba(20,40,80,0.06);
+      flex: 0 0 420px;
+      display:flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #board {
+      width: 400px;
+      height: 400px;
+    }
+
+    .status { margin-top: 10px; width: 100%; text-align: center; color: var(--muted); font-size: 14px; }
+
+    .right {
+      flex: 1;
+      min-height: 200px;
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 12px;
+      box-shadow: 0 6px 18px rgba(20,40,80,0.06);
+    }
+
+    .panel-row { display:flex; gap:8px; margin-bottom:10px; }
+    .panel-row > div { flex:1; }
+
+    label.small { font-size:12px; color:var(--muted); display:block; margin-bottom:4px; }
+
+    pre#log {
+      background: #081427;
+      color: #d6f3ff;
+      padding: 10px;
+      border-radius: 6px;
+      height: 200px;
+      overflow:auto;
+      margin:0;
+      font-size:13px;
+    }
+
+    @media (max-width: 860px) {
+      main { flex-direction: column; align-items:center; }
+      .left { width: 100%; max-width: 420px; }
+      .right { width: 100%; max-width: 420px; }
+      #board { width: 320px; height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>IQ4U — Student Board (Chessground)</h1>
+      <small id="studentIdLabel">Loading...</small>
+    </div>
+
+    <div class="controls">
+      <button id="flipBtn" class="secondary">Flip Board</button>
+      <button id="undoBtn" class="secondary">Undo</button>
+      <button id="logoutBtn" class="ghost">Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="left">
+      <div id="board"></div>
+      <div class="status" id="status">Connecting to Firebase...</div>
+    </section>
+
+    <aside class="right">
+      <div class="panel-row">
+        <div>
+          <label class="small">Current FEN</label>
+          <input id="fenInput" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd" />
+        </div>
+      </div>
+
+      <div class="panel-row">
+        <div>
+          <label class="small">Latest PGN from Master (if any)</label>
+          <textarea id="pgnBox" style="width:100%;height:100px;border-radius:6px;border:1px solid #ddd;padding:8px" readonly></textarea>
+        </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <label class="small">Logs</label>
+        <pre id="log">Logs will appear here...</pre>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Firebase compat SDKs (local files not required; these are CDN-hosted because Firebase SDK is large.
+       If you want these locally too, download them and place inside lib/ and update the src paths.) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <!-- Local Chess.js and Chessground (NO CDN) -->
+  <script src="lib/chess.min.js"></script>
+  <script src="lib/chessground.min.js"></script>
+
+  <script>
+    /****************************************************
+     * Student page (Chessground, local libs)
+     *
+     * NOTE:
+     * - This file expects these local files under /lib:
+     *   - lib/chess.min.js           (chess.js)
+     *   - lib/chessground.min.js     (chessground)
+     *   - lib/chessground.base.css   (chessground css linked above)
+     *
+     * - Login must set localStorage.role = "student1" / "student2" etc.
+     * - Firebase SDKs included via compat CDN above. If you want them local,
+     *   download and put in /lib/ and change the <script> src accordingly.
+     ****************************************************/
+
+    // ---------- CONFIG ----------
+    const firebaseConfig = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4u-chess-classroom.appspot.com",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    // ---------- STATE ----------
+    const role = localStorage.getItem("role");
+    const studentLabel = document.getElementById("studentIdLabel");
+    const statusEl = document.getElementById("status");
+    const fenInput = document.getElementById("fenInput");
+    const pgnBox = document.getElementById("pgnBox");
+    const logEl = document.getElementById("log");
+
+    if (!role || !role.startsWith("student")) {
+      window.location.href = "index.html";
+    }
+    studentLabel.textContent = `You are: ${role}`;
+
+    function appendLog(msg) {
+      const t = new Date().toLocaleTimeString();
+      logEl.textContent = `[${t}] ${msg}\n` + logEl.textContent;
+    }
+
+    // ---------- chess.js game (move legality & PGN) ----------
+    const game = new Chess();
+
+    // ---------- Chessground init ----------
+    // Chessground expects a config object. We use its 'events' callbacks to capture moves.
+    // We assume Chessground global is available as Chessground.
+    const cgElement = document.getElementById('board');
+
+    const cfg = {
+      fen: game.fen(),
+      orientation: 'white',
+      draggable: {
+        enabled: true
+      },
+      highlight: true,
+      movable: {
+        color: undefined, // allow both; we enforce turn via chess.js
+        free: false
+      },
+      // events: object with move handler; many builds provide events.move(from, to)
+      events: {
+        // move is fired when a piece is moved by user
+        move: (from, to) => {
+          // validate with chess.js
+          const move = game.move({ from, to, promotion: 'q' });
+          if (!move) {
+            // illegal move — revert board to current legal position
+            cg.set({ fen: game.fen() });
+            appendLog(`Illegal move attempted: ${from}->${to}`);
+            return;
+          }
+          // legal move — update DB
+          const newFen = game.fen();
+          // mark local write so remote listener can ignore one cycle if needed
+          isLocalMove = true;
+          db.ref(`classroom/students/${role}/fen`).set(newFen)
+            .then(() => appendLog(`Moved ${move.san} and saved FEN to DB`))
+            .catch(err => appendLog("DB write error: " + err.message));
+        }
+      }
+    };
+
+    // Create chessground instance
+    // Some builds expose a factory function Chessground(...), some expose new Chessground.Chessground(...)
+    let cg = null;
+    try {
+      if (typeof Chessground === 'function') {
+        cg = Chessground(cgElement, cfg);
+      } else if (window.Chessground && typeof window.Chessground.Chessground === 'function') {
+        cg = new window.Chessground.Chessground(cgElement, cfg);
+      } else {
+        throw new Error('Chessground global not found or incompatible build.');
+      }
+    } catch (err) {
+      appendLog('Error initializing Chessground: ' + err.message);
+      statusEl.textContent = 'Chessground init failed — check console.';
+      console.error(err);
+      throw err;
+    }
+
+    // helper to set board fen (both game and chessground)
+    function setFenOnClient(fen) {
+      const ok = game.load(fen);
+      // game.load returns true/false in some builds — if invalid, it will throw or return false
+      cg.set({ fen: game.fen() });
+      fenInput.value = game.fen();
+      updateStatus();
+    }
+
+    // ---------- DB refs and sync ----------
+    const fenRef = db.ref(`classroom/students/${role}/fen`);
+    const pgnRef = db.ref(`classroom/students/${role}/pgn`);
+    const controlRef = db.ref(`classroom/students/${role}/control`);
+
+    let isLocalMove = false;
+
+    // Listen for remote FEN updates
+    fenRef.on('value', snap => {
+      const fen = snap.val();
+      if (!fen) return;
+      if (isLocalMove) {
+        // ignore the first update if it originated from this client
+        isLocalMove = false;
+        appendLog('Ignored FEN update (local write).');
+        return;
+      }
+      try {
+        setFenOnClient(fen);
+        appendLog('FEN updated from server.');
+      } catch (err) {
+        appendLog('Failed to load FEN from server: ' + err.message);
+      }
+    });
+
+    // Ensure an initial FEN exists on server
+    fenRef.once('value').then(snap => {
+      if (!snap.exists()) {
+        fenRef.set(game.fen());
+        appendLog('Initialized FEN on server (start position).');
+      } else {
+        const fen = snap.val();
+        if (fen) setFenOnClient(fen);
+        appendLog('Loaded existing FEN from server.');
+      }
+    }).catch(err => appendLog('Initial FEN read error: ' + err.message));
+
+    // Listen for PGN from master
+    pgnRef.on('value', snap => {
+      const pgn = snap.val();
+      if (!pgn) return;
+      pgnBox.value = pgn;
+      try {
+        // reset and load pgn
+        if (typeof game.load_pgn === 'function') {
+          game.reset();
+          game.load_pgn(pgn);
+        } else if (typeof game.loadPgn === 'function') {
+          game.reset();
+          game.loadPgn(pgn);
+        } else {
+          appendLog('This chess.js build does not support load_pgn().');
+        }
+        // update client & server FEN
+        isLocalMove = true;
+        const newFen = game.fen();
+        fenRef.set(newFen).then(() => {
+          cg.set({ fen: newFen });
+          fenInput.value = newFen;
+          appendLog('Loaded PGN from master and updated FEN.');
+        }).catch(err => appendLog('Failed saving FEN after PGN: ' + err.message));
+      } catch (err) {
+        appendLog('Error loading PGN: ' + err.message);
+      }
+    });
+
+    // Optional control (e.g., master lock)
+    controlRef.on('value', snap => {
+      const ctrl = snap.val();
+      if (!ctrl) return;
+      if (ctrl.locked) {
+        // disable moves by setting movable.free false and clear dests
+        try {
+          cg.set({ movable: { color: null, free: false } });
+        } catch (err) {}
+        appendLog('Master locked moves.');
+      } else {
+        try {
+          cg.set({ movable: { color: undefined, free: false } });
+        } catch (err) {}
+        appendLog('Master unlocked moves.');
+      }
+    });
+
+    // Manual FEN input
+    fenInput.addEventListener('change', () => {
+      const f = fenInput.value.trim();
+      if (!f) return;
+      try {
+        game.load(f);
+        const newFen = game.fen();
+        isLocalMove = true;
+        fenRef.set(newFen).then(() => {
+          cg.set({ fen: newFen });
+          appendLog('Manual FEN applied and saved.');
+        });
+      } catch (err) {
+        appendLog('Invalid FEN: ' + err.message);
+      }
+    });
+
+    // Flip button
+    document.getElementById('flipBtn').addEventListener('click', () => {
+      try {
+        const current = cg.state.orientation;
+        const next = current === 'white' ? 'black' : 'white';
+        cg.set({ orientation: next });
+      } catch (err) {
+        // fallback: re-set fen so board visually flips if method differs
+        appendLog('Flip error: ' + err.message);
+      }
+    });
+
+    // Undo button
+    document.getElementById('undoBtn').addEventListener('click', () => {
+      const mv = game.undo();
+      if (!mv) {
+        appendLog('No move to undo.');
+        return;
+      }
+      const newFen = game.fen();
+      isLocalMove = true;
+      fenRef.set(newFen).then(() => {
+        cg.set({ fen: newFen });
+        fenInput.value = newFen;
+        appendLog('Undo performed and saved.');
+      }).catch(err => appendLog('Undo save error: ' + err.message));
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      auth.signOut().catch(()=>{});
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    // Status updater
+    function updateStatus() {
+      let s = '';
+      if (game.in_checkmate()) s = 'Checkmate';
+      else if (game.in_draw()) s = 'Draw';
+      else if (game.in_check()) s = 'Check';
+      else s = (game.turn() === 'w') ? 'White to move' : 'Black to move';
+      statusEl.textContent = s;
+    }
+    setInterval(updateStatus, 500);
+
+    // Auth protection
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        appendLog('Not authenticated — redirecting to login.');
+        localStorage.removeItem('role');
+        setTimeout(()=>window.location.href='index.html', 700);
+      } else {
+        appendLog(`Signed in as ${user.email || user.uid}`);
+      }
+    });
+
+  </script>
+</body>
+</html>
 
