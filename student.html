@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board (local chess.min.js)</title>
+  <title>IQ4U — Student Board</title>
 
-  <!-- Chessboard CSS (cdnjs) -->
+  <!-- Chessboard.js CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
   <style>
@@ -66,46 +66,38 @@
         <strong>Moves</strong>
         <div id="movesList"></div>
       </div>
-
-      <div class="panel small">
-        <strong>Notes</strong>
-        <ul>
-          <li>Drag pieces — only legal moves allowed (Chess.js validates).</li>
-          <li>Load PGN then use Next/Previous to step through moves.</li>
-        </ul>
-      </div>
     </div>
   </div>
 
   <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-  <!-- LOCAL Chess.js (your uploaded file) -->
-  <script src="js/libs/chess.min.js"></script>
+  <!-- LOCAL absolute Chess.js (GitHub Pages URL) -->
+  <script src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js"></script>
 
-  <!-- Chessboard.js (cdnjs) -->
+  <!-- Chessboard.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
   <script>
-    // visible error helper
     const errorBox = document.getElementById('errorBox');
+
     function showError(msg){
       errorBox.style.display = 'block';
       errorBox.textContent = msg;
       console.error(msg);
     }
 
-    // sanity checks
+    // Check libraries
     if (typeof Chess === 'undefined') {
-      showError('Chess.js failed to load from local file: js/libs/chess.min.js. Confirm the file exists and the path is correct. Open this URL in your browser to verify: https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js');
+      showError('Chess.js failed to load from: https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js');
       throw new Error('Chess.js not loaded');
     }
+
     if (typeof Chessboard === 'undefined') {
-      showError('Chessboard.js failed to load from CDN. Check network or try another browser.');
+      showError('Chessboard.js failed to load from CDN.');
       throw new Error('Chessboard.js not loaded');
     }
 
-    // main app
     (function(){
       const game = new Chess();
       let board = null;
@@ -121,22 +113,21 @@
         if (pgnMoves.length > 0){
           html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
           for (let i=0;i<pgnMoves.length;i++){
-            const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' : 'style="padding:6px;border-radius:6px;"';
+            const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' :
+                                          'style="padding:6px;border-radius:6px;"';
             html += `<div ${cls}>${pgnMoves[i]}</div>`;
           }
           html += '</div><hr>';
         }
-        for (let i = 0; i < hist.length; i += 2) {
-          const no = Math.floor(i/2) + 1;
-          const w = hist[i] || '';
-          const b = hist[i+1] || '';
-          html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${w} ${b}</div>`;
+        for (let i=0;i<hist.length;i+=2){
+          const no = Math.floor(i/2)+1;
+          html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${hist[i]||''} ${hist[i+1]||''}</div>`;
         }
-        document.getElementById('movesList').innerHTML = html || '<div class="small">No moves yet.</div>';
+        document.getElementById('movesList').innerHTML = html || '<div>No moves yet.</div>';
       }
 
       function onDrop(source, target){
-        const move = game.move({ from: source, to: target, promotion: 'q' });
+        const move = game.move({ from: source, to: target, promotion:'q' });
         if (move === null) return 'snapback';
         pgnMoves = []; stepIndex = 0;
         updateFen(); refreshMoves();
@@ -145,63 +136,76 @@
       function onSnapEnd(){ board.position(game.fen()); }
 
       function initBoard(){
-        if (board && typeof board.destroy === 'function') board.destroy();
         board = Chessboard('board', {
-          draggable: true,
-          position: 'start',
+          draggable:true,
+          position:'start',
           orientation: orientation,
-          onDrop: onDrop,
-          onSnapEnd: onSnapEnd,
-          pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
+          onDrop:onDrop,
+          onSnapEnd:onSnapEnd,
+          pieceTheme:'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
         });
         updateFen(); refreshMoves();
       }
 
-      // Buttons
-      document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
-      document.getElementById('flipBtn').onclick = () => { board.flip(); };
-      document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves = []; stepIndex = 0; board.position('start'); updateFen(); refreshMoves(); };
-      document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
-      document.getElementById('orientationSelect').onchange = function(){ orientation = this.value; initBoard(); };
+      document.getElementById('undoBtn').onclick = () => {
+        game.undo(); board.position(game.fen());
+        updateFen(); refreshMoves();
+      };
+      document.getElementById('flipBtn').onclick = () => board.flip();
+      document.getElementById('resetBtn').onclick = () => {
+        game.reset(); pgnMoves=[]; stepIndex=0;
+        board.position('start'); updateFen(); refreshMoves();
+      };
+      document.getElementById('clearPgn').onclick = () => document.getElementById('pgnInput').value='';
+      document.getElementById('orientationSelect').onchange = function(){
+        orientation=this.value; initBoard();
+      };
 
       document.getElementById('loadFenBtn').onclick = () => {
         const txt = document.getElementById('pgnInput').value.trim();
-        if (!txt) { alert('Paste a FEN in the textarea then click Load FEN'); return; }
-        const ok = game.load(txt);
-        if (!ok) { alert('Invalid FEN'); return; }
-        pgnMoves = []; stepIndex = 0; board.position(game.fen()); updateFen(); refreshMoves();
+        if (!txt){ alert('Paste FEN first'); return; }
+        if (!game.load(txt)){ alert('Invalid FEN'); return; }
+        pgnMoves=[]; stepIndex=0; board.position(game.fen());
+        updateFen(); refreshMoves();
       };
 
       document.getElementById('loadPgnBtn').onclick = () => {
         const pgn = document.getElementById('pgnInput').value.trim();
-        if (!pgn) { alert('Paste PGN then click Load PGN'); return; }
+        if (!pgn){ alert('Paste PGN first'); return; }
         const tmp = new Chess();
         let ok = true;
-        try {
-          if (typeof tmp.load_pgn === 'function') ok = tmp.load_pgn(pgn);
-          else if (typeof tmp.loadPgn === 'function') ok = tmp.loadPgn(pgn);
-          else ok = tmp.load(pgn);
-        } catch(e) { ok = false; }
-        if (!ok) { alert('Could not parse PGN. Make sure PGN is valid.'); return; }
-        pgnMoves = tmp.history().slice(); stepIndex = 0; game.reset(); board.position('start'); updateFen(); refreshMoves();
+        try{
+          ok = tmp.load_pgn ? tmp.load_pgn(pgn) :
+               tmp.loadPgn ? tmp.loadPgn(pgn) :
+               tmp.load(pgn);
+        }catch(e){ ok=false; }
+
+        if (!ok){ alert('Invalid PGN'); return; }
+
+        pgnMoves = tmp.history();
+        stepIndex = 0;
+        game.reset();
+        board.position('start');
+        updateFen(); refreshMoves();
       };
 
       document.getElementById('nextBtn').onclick = () => {
-        if (pgnMoves.length === 0 || stepIndex >= pgnMoves.length) return;
-        const m = game.move(pgnMoves[stepIndex], { sloppy: true });
-        if (m === null) { alert('Failed to apply move: ' + pgnMoves[stepIndex]); return; }
-        stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
+        if (stepIndex >= pgnMoves.length) return;
+        const m = game.move(pgnMoves[stepIndex], {sloppy:true});
+        if (!m){ alert('Could not apply move'); return; }
+        stepIndex++;
+        board.position(game.fen());
+        updateFen(); refreshMoves();
       };
 
       document.getElementById('prevBtn').onclick = () => {
-        if (pgnMoves.length === 0 || stepIndex <= 0) return;
-        game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves();
+        if (stepIndex <= 0) return;
+        game.undo(); stepIndex--;
+        board.position(game.fen());
+        updateFen(); refreshMoves();
       };
 
-      // start
       initBoard();
-      // debug
-      window._iq4u = { game, board, pgnMoves };
     })();
   </script>
 </body>
