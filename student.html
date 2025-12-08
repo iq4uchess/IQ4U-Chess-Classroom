@@ -1,36 +1,39 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>IQ4U — Student Board (pieces diagnostic)</title>
 
-  <!-- chessboard.css -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
-
-  <style>
-    body{ font-family: Arial, sans-serif; margin:16px; background:#f6f7fb; color:#111; }
-    .status{ padding:8px; border-radius:6px; margin-bottom:12px; display:none; }
-    .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
-    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
-    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
-    .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
-    /* explicit forced size & border so board and pieces show */
-    #board-wrapper{ width:420px; height:420px; display:flex; align-items:center; justify-content:center; }
-    #board{ width:400px; height:400px; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; }
-    #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; }
-    textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
-    .small{ font-size:13px; color:#555; }
-    @media (max-width:900px){
-      .container{ grid-template-columns:1fr; }
-      #board-wrapper{ width:100%; }
-      #board{ width:100%; height:80vw; max-height:420px; }
-      .controls{ justify-content:center; }
-    }
-  </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+<style>
+  body{ font-family: Arial, sans-serif; margin:12px; background:#f6f7fb; color:#111; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .status{ padding:8px; border-radius:6px; background:#fff; border:1px solid #e6eefc; }
+  .diag{ width:360px; max-height:520px; overflow:auto; background:#fff; border:1px solid #e6eefc; padding:8px; border-radius:8px; }
+  .diag h4{ margin:6px 0; }
+  .ok{ color:green; font-weight:700 }
+  .bad{ color:#b91c1c; font-weight:700 }
+  #board-wrapper{ width:420px; height:420px; display:flex; align-items:center; justify-content:center; }
+  #board{ width:400px; height:400px; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; }
+  .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
+  button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+  .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
+  .small{ font-size:13px; color:#555; }
+  pre.debug{ max-height:140px; overflow:auto; background:#0b1220; color:#9ae6b4; padding:8px; border-radius:6px; }
+  @media (max-width:1100px){ .topbar{flex-direction:column; align-items:stretch} .diag{ width:100%; } }
+</style>
 </head>
 <body>
-  <div id="statusBox" class="status"></div>
+  <div class="topbar">
+    <div class="status" id="status">Initializing piece diagnostic...</div>
+    <div class="diag" id="diag">
+      <h4>Piece check (will list 12 files)</h4>
+      <div id="pieceResults">Running...</div>
+      <hr>
+      <div class="small">If any file shows <span class="bad">404</span> — the filename or path is wrong (case-sensitive). Copy the failing URL and open it in browser to see the exact response.</div>
+    </div>
+  </div>
 
   <div class="controls">
     <button id="undoBtn">Undo</button>
@@ -39,225 +42,205 @@
     <button id="flipBtn">Flip</button>
   </div>
 
-  <div class="container">
-    <div class="panel">
-      <div id="board-wrapper"><div id="board" aria-label="Chessboard container"></div></div>
-      <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
-        <div>Orientation:
-          <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
+  <div style="display:flex; gap:18px;">
+    <div style="flex:0 0 460px;">
+      <div class="panel">
+        <div id="board-wrapper"><div id="board" aria-label="Chessboard container"></div></div>
+        <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+          <div>Orientation:
+            <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
+          </div>
+          <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
         </div>
-        <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
       </div>
     </div>
 
-    <div style="display:flex; flex-direction:column; gap:12px;">
+    <div style="flex:1;">
       <div class="panel">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <strong>PGN / FEN Input</strong>
+        <strong>PGN / FEN Input</strong>
+        <textarea id="pgnInput" style="width:100%;height:160px;margin-top:8px" placeholder="Paste PGN or FEN"></textarea>
+        <div style="margin-top:8px; display:flex; gap:8px;">
           <button id="loadPgnBtn">Load PGN</button>
-        </div>
-        <div style="margin-top:8px;">
-          <textarea id="pgnInput" placeholder="Paste PGN or FEN here. Example PGN: 1. e4 e5 2. Nf3 Nc6"></textarea>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <button id="clearPgn">Clear</button>
-            <button id="loadFenBtn">Load FEN</button>
-            <button id="resetBtn">Reset</button>
-          </div>
+          <button id="loadFenBtn">Load FEN</button>
+          <button id="resetBtn">Reset</button>
         </div>
       </div>
-
-      <div class="panel">
+      <div class="panel" style="margin-top:12px;">
         <strong>Moves</strong>
-        <div id="movesList"></div>
+        <div id="movesList" style="min-height:220px"></div>
       </div>
     </div>
   </div>
 
-  <!-- jQuery (optional) -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+(function(){
+  // CONFIG
+  const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
+  const PIECE_BASE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+  const FALLBACK = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
+  const PIECES = ['wK','wQ','wR','wB','wN','wP','bK','bQ','bR','bB','bN','bP'];
 
-  <script>
-  (function(){
-    const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
-    const PIECE_BASE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
-    const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
-    const statusBox = document.getElementById('statusBox');
+  const statusEl = document.getElementById('status');
+  const pieceResults = document.getElementById('pieceResults');
 
-    function setStatus(msg, show=true){
-      statusBox.textContent = msg;
-      statusBox.style.display = show ? 'block' : 'none';
-      console.log('STATUS:', msg);
-    }
+  function setStatus(s){ statusEl.textContent = s; }
 
-    async function ensureChess(){
-      if (typeof Chess !== 'undefined') return true;
-      // try dynamic import (ESM)
+  // Load Chess (try module import then script)
+  async function ensureChess(){
+    if (typeof Chess !== 'undefined') return true;
+    try{
+      const mod = await import(CHESS_URL + '?t=' + Date.now());
+      const candidate = mod.default || mod.Chess || mod;
+      if (candidate){ window.Chess = candidate; console.log('Chess loaded via import'); return true; }
+    }catch(e){ console.warn('import failed', e && e.message); }
+    // script fallback
+    await new Promise(r=>{
+      const s = document.createElement('script'); s.src = CHESS_URL + '?t=' + Date.now(); s.onload = ()=>r(); s.onerror=()=>r(); document.head.appendChild(s);
+    });
+    return typeof Chess !== 'undefined';
+  }
+
+  // load chessboard library
+  function loadChessboard(){
+    return new Promise((res,rej)=>{
+      if (typeof Chessboard !== 'undefined') return res();
+      const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
+      s.onload = ()=>res(); s.onerror = (e)=>rej(e); document.head.appendChild(s);
+    });
+  }
+
+  // check each piece URL with HEAD then GET fallback
+  async function checkPieces(){
+    setStatus('Checking piece files in ' + PIECE_BASE);
+    pieceResults.innerHTML = 'Checking...';
+    const rows = [];
+    for (const p of PIECES){
+      const url = PIECE_BASE + p + '.png';
+      let ok=false, statusText='?';
       try{
-        setStatus('Loading Chess.js via dynamic import...');
-        const mod = await import(CHESS_URL + '?t=' + Date.now());
-        const candidate = mod.default || mod.Chess || mod;
-        if (candidate){
-          window.Chess = candidate;
-          setStatus('Chess.js loaded (module).', false);
-          return true;
-        }
+        const head = await fetch(url, { method:'HEAD', cache:'no-store', mode:'cors' });
+        statusText = head.status + ' ' + head.statusText;
+        ok = head.ok;
       }catch(e){
-        console.warn('dynamic import failed:', e && e.message || e);
-      }
-      // fallback: classic script tag
-      return new Promise((resolve) => {
-        setStatus('Loading Chess.js via classic script...');
-        const s = document.createElement('script');
-        s.src = CHESS_URL + '?t=' + Date.now();
-        s.async = false;
-        s.onload = () => { setStatus('Chess.js loaded (script).', false); resolve(typeof Chess !== 'undefined'); };
-        s.onerror = (err) => { console.warn('script load failed', err); setStatus('Chess.js load failed.', true); resolve(false); };
-        document.head.appendChild(s);
-      });
-    }
-
-    async function loadChessboard(){
-      if (typeof Chessboard !== 'undefined') return;
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
-        s.async = false;
-        s.onload = () => resolve();
-        s.onerror = (e) => reject(e);
-        document.head.appendChild(s);
-      });
-    }
-
-    // check if a sample piece exists (HEAD first, fallback to GET)
-    async function pieceExists(url){
-      try{
-        const head = await fetch(url, { method: 'HEAD', cache: 'no-store', mode: 'cors' });
-        if (head.ok) return true;
-      }catch(e){
-        // HEAD may be disallowed; try GET but don't download whole if huge
+        // try GET
         try{
-          const r = await fetch(url, { method: 'GET', cache: 'no-store', mode: 'cors' });
-          return r.ok && (r.headers.get('content-type') || '').includes('image');
+          const r = await fetch(url + '?t=' + Date.now(), { method:'GET', cache:'no-store', mode:'cors' });
+          statusText = r.status + ' ' + r.statusText;
+          ok = r.ok && ((r.headers.get('content-type')||'').includes('image') || (r.headers.get('content-type')||'').includes('svg'));
         }catch(e2){
-          return false;
+          statusText = 'error';
+          ok=false;
         }
       }
-      return false;
+      rows.push({piece:p, url, ok, statusText});
+      // update UI incremental
+      updatePieceUI(rows);
     }
+    return rows;
+  }
 
-    // choose pieceTheme url (custom or fallback)
-    async function choosePieceTheme(){
-      const testUrl = PIECE_BASE + 'wP.png';
-      try{
-        const ok = await pieceExists(testUrl);
-        if (ok) return PIECE_BASE + '{piece}.png';
-      }catch(e){ console.warn('piece check failed', e); }
-      return FALLBACK_THEME;
+  function updatePieceUI(rows){
+    let html = '<table style="width:100%">';
+    html += '<tr><th style="text-align:left">Piece</th><th style="text-align:left">Status</th><th style="text-align:left">URL</th></tr>';
+    for (const r of rows){
+      const cls = r.ok ? 'ok' : 'bad';
+      html += `<tr><td>${r.piece}</td><td class="${cls}">${r.statusText}</td><td style="font-size:12px"><a href="${r.url}" target="_blank">${r.url}</a></td></tr>`;
     }
+    html += '</table>';
+    pieceResults.innerHTML = html;
+  }
 
-    // create board, given chosen pieceTheme
-    function createBoard(pieceTheme){
-      // sanity: ensure Chessboard available
-      if (typeof Chessboard === 'undefined') throw new Error('Chessboard library missing');
+  // choose theme based on checks
+  async function detectAndStart(){
+    setStatus('Loading libraries...');
+    const okChess = await ensureChess();
+    if (!okChess){ setStatus('Failed to load Chess.js — open console', true); return; }
+    try{ await loadChessboard(); }catch(e){ setStatus('Failed to load Chessboard.js — open console', true); return; }
 
-      const orientation = document.getElementById('orientationSelect').value || 'white';
-      board = Chessboard('board', {
-        draggable: true,
-        position: 'start',
-        orientation: orientation,
-        onDrop: onDrop,
-        onSnapEnd: onSnapEnd,
-        pieceTheme: pieceTheme
-      });
+    // perform piece checks
+    const results = await checkPieces();
+    const missing = results.filter(r=>!r.ok);
+    let pieceTheme;
+    if (missing.length === 0){
+      pieceTheme = PIECE_BASE + '{piece}.png';
+      setStatus('Using custom piece set: cburnett');
+    } else {
+      pieceTheme = FALLBACK;
+      setStatus('Custom piece set incomplete — falling back to Wikipedia pieces. See list for missing files.');
     }
+    console.log('decided pieceTheme=', pieceTheme, 'missing=', missing);
+    startBoard(pieceTheme);
+  }
 
-    // main state & handlers
-    let game, board, pgnMoves = [], stepIndex = 0;
+  // start the board with the chosen pieceTheme
+  let game, board, pgnMoves = [], stepIndex = 0;
+  function startBoard(pieceTheme){
+    // create game
+    game = new Chess();
+    // create board with explicit sizing
+    board = Chessboard('board', {
+      draggable: true,
+      position: 'start',
+      onDrop: function(source, target){
+        const move = game.move({ from: source, to: target, promotion:'q' });
+        if (move === null) return 'snapback';
+        pgnMoves = []; stepIndex = 0; updateFen(); refreshMoves();
+      },
+      onSnapEnd: function(){ board.position(game.fen()); },
+      pieceTheme: pieceTheme
+    });
+    updateFen();
+    refreshMoves();
+    wireUI();
+    // expose for debug
+    window._iq4u = { game, board };
+  }
 
-    function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
-    function refreshMoves(){
-      const hist = game.history();
-      let html = '';
-      if (pgnMoves.length > 0){
-        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
-        for (let i=0;i<pgnMoves.length;i++){
-          const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' : 'style="padding:6px;border-radius:6px;"';
-          html += `<div ${cls}>${pgnMoves[i]}</div>`;
-        }
-        html += '</div><hr>';
-      }
-      for (let i=0;i<hist.length;i+=2){
-        const no = Math.floor(i/2)+1;
-        html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${hist[i] || ''} ${hist[i+1] || ''}</div>`;
-      }
-      document.getElementById('movesList').innerHTML = html || '<div class="small">No moves yet.</div>';
+  function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
+  function refreshMoves(){
+    const hist = game.history();
+    let html = '';
+    for (let i=0;i<hist.length;i+=2){
+      const no = Math.floor(i/2)+1;
+      html += `<div style="padding:6px"><strong>${no}.</strong> ${hist[i]||''} ${hist[i+1]||''}</div>`;
     }
+    document.getElementById('movesList').innerHTML = html || '<div class="small">No moves yet.</div>';
+  }
 
-    function onDrop(source, target){
-      const move = game.move({ from: source, to: target, promotion: 'q' });
-      if (move === null) return 'snapback';
-      pgnMoves = []; stepIndex = 0; updateFen(); refreshMoves();
-    }
-    function onSnapEnd(){ board.position(game.fen()); }
+  function wireUI(){
+    document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
+    document.getElementById('flipBtn').onclick = () => board.flip();
+    document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves = []; stepIndex = 0; board.position('start'); updateFen(); refreshMoves(); };
+    document.getElementById('loadFenBtn').onclick = () => {
+      const txt = document.getElementById('pgnInput').value.trim();
+      if (!txt){ alert('Paste FEN first'); return; }
+      if (!game.load(txt)){ alert('Invalid FEN'); return; }
+      pgnMoves = []; stepIndex = 0; board.position(game.fen()); updateFen(); refreshMoves();
+    };
+    document.getElementById('loadPgnBtn').onclick = () => {
+      const pgn = document.getElementById('pgnInput').value.trim();
+      if (!pgn){ alert('Paste PGN first'); return; }
+      const tmp = new Chess(); let ok=true;
+      try{ ok = tmp.load_pgn ? tmp.load_pgn(pgn) : tmp.loadPgn ? tmp.loadPgn(pgn) : tmp.load(pgn); } catch(e){ ok=false; }
+      if (!ok){ alert('Invalid PGN'); return; }
+      pgnMoves = tmp.history(); stepIndex = 0; game.reset(); board.position('start'); updateFen(); refreshMoves();
+    };
+    document.getElementById('nextBtn').onclick = () => {
+      if (pgnMoves.length===0 || stepIndex>=pgnMoves.length) return;
+      const m = game.move(pgnMoves[stepIndex], { sloppy:true });
+      if (m===null){ alert('Could not apply move'); return; }
+      stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
+    };
+    document.getElementById('prevBtn').onclick = () => {
+      if (pgnMoves.length===0 || stepIndex<=0) return;
+      game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves();
+    };
+  }
 
-    // UI wiring (buttons)
-    function wireUI(){
-      document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
-      document.getElementById('flipBtn').onclick = () => board.flip();
-      document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves=[]; stepIndex=0; board.position('start'); updateFen(); refreshMoves(); };
-      document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
-      document.getElementById('orientationSelect').onchange = function(){ if (board && typeof board.destroy === 'function'){ board.destroy(); createBoard(currentPieceTheme); } };
-      document.getElementById('loadFenBtn').onclick = () => {
-        const txt = document.getElementById('pgnInput').value.trim(); if (!txt){ alert('Paste FEN first'); return; }
-        if (!game.load(txt)){ alert('Invalid FEN'); return; }
-        pgnMoves = []; stepIndex=0; board.position(game.fen()); updateFen(); refreshMoves();
-      };
-      document.getElementById('loadPgnBtn').onclick = () => {
-        const pgn = document.getElementById('pgnInput').value.trim(); if (!pgn){ alert('Paste PGN'); return; }
-        const tmp = new Chess(); let ok = true;
-        try { ok = tmp.load_pgn ? tmp.load_pgn(pgn) : tmp.loadPgn ? tmp.loadPgn(pgn) : tmp.load(pgn); } catch(e){ ok = false; }
-        if (!ok){ alert('Invalid PGN'); return; }
-        pgnMoves = tmp.history(); stepIndex=0; game.reset(); board.position('start'); updateFen(); refreshMoves();
-      };
-      document.getElementById('nextBtn').onclick = () => {
-        if (pgnMoves.length===0 || stepIndex>=pgnMoves.length) return;
-        const m = game.move(pgnMoves[stepIndex], { sloppy:true }); if (m===null){ alert('Could not apply move'); return; }
-        stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
-      };
-      document.getElementById('prevBtn').onclick = () => { if (pgnMoves.length===0 || stepIndex<=0) return; game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves(); };
-    }
+  // run
+  detectAndStart();
 
-    // flow: load libs -> decide pieceTheme -> init board
-    let currentPieceTheme = FALLBACK_THEME;
-
-    async function start(){
-      setStatus('Loading libraries...');
-      const okChess = await ensureChess();
-      if (!okChess){ setStatus('Failed to load Chess.js. Check console.', true); return; }
-      try{ await loadChessboard(); }catch(e){ setStatus('Failed to load Chessboard.js', true); console.error(e); return; }
-
-      setStatus('Checking piece set (custom then fallback)...', false);
-      try{
-        currentPieceTheme = await choosePieceTheme();
-      }catch(e){
-        console.warn('choosePieceTheme error', e);
-        currentPieceTheme = FALLBACK_THEME;
-      }
-
-      // initialize game + board
-      game = new Chess();
-      createBoard(currentPieceTheme);
-      updateFen();
-      refreshMoves();
-      wireUI();
-      setStatus('Ready (using piece theme: ' + (currentPieceTheme === FALLBACK_THEME ? 'wikipedia fallback' : 'cburnett') + ')', false);
-      console.log('Using pieceTheme:', currentPieceTheme);
-      window._iq4u = { game, board };
-    }
-
-    // start on load
-    window.addEventListener('load', start);
-  })();
-  </script>
+})();
+</script>
 </body>
 </html>
