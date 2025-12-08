@@ -3,11 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U Chess Classroom — Student (Chessground)</title>
+  <title>IQ4U Chess Classroom — Student (Chessground, local libs)</title>
 
-  <!-- Local Chessground CSS (NO CDN) -->
+  <!-- Local Chessground CSS -->
   <link rel="stylesheet" href="lib/chessground.base.css">
-  <link rel="stylesheet" href="lib/chessground.theme.css"> <!-- optional theme file if you have it -->
 
   <style>
     :root {
@@ -162,29 +161,24 @@
     </aside>
   </main>
 
-  <!-- Firebase compat SDKs (local files not required; these are CDN-hosted because Firebase SDK is large.
-       If you want these locally too, download them and place inside lib/ and update the src paths.) -->
+  <!-- Firebase compat SDKs (CDN - recommended). If you need them local I can provide download commands. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
-  <!-- Local Chess.js and Chessground (NO CDN) -->
-  <script src="lib/chess.min.js"></script>
+  <!-- Local libs (your files) -->
+  <script src="lib/chess.js"></script>
   <script src="lib/chessground.min.js"></script>
 
   <script>
     /****************************************************
      * Student page (Chessground, local libs)
+     * This version matches these files:
+     *  - /lib/chess.js
+     *  - /lib/chessground.min.js
+     *  - /lib/chessground.base.css
      *
-     * NOTE:
-     * - This file expects these local files under /lib:
-     *   - lib/chess.min.js           (chess.js)
-     *   - lib/chessground.min.js     (chessground)
-     *   - lib/chessground.base.css   (chessground css linked above)
-     *
-     * - Login must set localStorage.role = "student1" / "student2" etc.
-     * - Firebase SDKs included via compat CDN above. If you want them local,
-     *   download and put in /lib/ and change the <script> src accordingly.
+     * Defensive initialization for Chessground and chess.js
      ****************************************************/
 
     // ---------- CONFIG ----------
@@ -220,90 +214,135 @@
       logEl.textContent = `[${t}] ${msg}\n` + logEl.textContent;
     }
 
-    // ---------- chess.js game (move legality & PGN) ----------
-    const game = new Chess();
+    // ---------- chess.js (ensure global Chess exists) ----------
+    let ChessCtor = null;
+    if (typeof Chess !== 'undefined') {
+      ChessCtor = Chess;             // some builds expose `Chess`
+    } else if (typeof window.Chess !== 'undefined') {
+      ChessCtor = window.Chess;
+    } else if (typeof window.ChessJS !== 'undefined') {
+      ChessCtor = window.ChessJS;
+    } else {
+      appendLog('ERROR: chess.js not found. Ensure lib/chess.js defines global Chess.');
+      throw new Error('chess.js global not found');
+    }
 
-    // ---------- Chessground init ----------
-    // Chessground expects a config object. We use its 'events' callbacks to capture moves.
-    // We assume Chessground global is available as Chessground.
+    const game = new ChessCtor(); // chess.js instance for legality, pgn, fen
+
+    // ---------- Chessground init (defensive) ----------
     const cgElement = document.getElementById('board');
+    let cg = null;
 
+    // config common to builds
     const cfg = {
       fen: game.fen(),
       orientation: 'white',
-      draggable: {
-        enabled: true
+      movable: {
+        free: false,
+        // color undefined so both colors can move; chess.js enforces legal moves
+        color: undefined
       },
       highlight: true,
-      movable: {
-        color: undefined, // allow both; we enforce turn via chess.js
-        free: false
-      },
-      // events: object with move handler; many builds provide events.move(from, to)
+      animations: { duration: 200 },
       events: {
-        // move is fired when a piece is moved by user
+        // many chessground builds call events.move(from, to)
         move: (from, to) => {
-          // validate with chess.js
-          const move = game.move({ from, to, promotion: 'q' });
-          if (!move) {
-            // illegal move — revert board to current legal position
-            cg.set({ fen: game.fen() });
-            appendLog(`Illegal move attempted: ${from}->${to}`);
-            return;
-          }
-          // legal move — update DB
-          const newFen = game.fen();
-          // mark local write so remote listener can ignore one cycle if needed
-          isLocalMove = true;
-          db.ref(`classroom/students/${role}/fen`).set(newFen)
-            .then(() => appendLog(`Moved ${move.san} and saved FEN to DB`))
-            .catch(err => appendLog("DB write error: " + err.message));
+          handleUserMove(from, to);
         }
       }
     };
 
-    // Create chessground instance
-    // Some builds expose a factory function Chessground(...), some expose new Chessground.Chessground(...)
-    let cg = null;
-    try {
-      if (typeof Chessground === 'function') {
-        cg = Chessground(cgElement, cfg);
-      } else if (window.Chessground && typeof window.Chessground.Chessground === 'function') {
-        cg = new window.Chessground.Chessground(cgElement, cfg);
-      } else {
-        throw new Error('Chessground global not found or incompatible build.');
+    // Helper to attempt multiple init styles
+    function createChessground() {
+      appendLog('Trying to init Chessground — available globals: ' + Object.keys(window).filter(k => k.toLowerCase().includes('chess')).join(', '));
+      try {
+        // Common factory style: Chessground(element, config)
+        if (typeof Chessground === 'function') {
+          return Chessground(cgElement, cfg);
+        }
+
+        // Namespaced/class style: new Chessground.Chessground(element, config)
+        if (window.Chessground && typeof window.Chessground.Chessground === 'function') {
+          return new window.Chessground.Chessground(cgElement, cfg);
+        }
+
+        // Some builds expose Chessground.default or .mount
+        if (window.Chessground && typeof window.Chessground === 'object' && typeof window.Chessground.mount === 'function') {
+          window.Chessground.mount(cgElement, cfg);
+          // mount may not return instance; try to read a global reference
+          return window.chessgroundInstance || null;
+        }
+
+        throw new Error('No compatible Chessground export found.');
+      } catch (err) {
+        appendLog('Chessground init error: ' + err.message);
+        console.error(err);
+        throw err;
       }
-    } catch (err) {
-      appendLog('Error initializing Chessground: ' + err.message);
-      statusEl.textContent = 'Chessground init failed — check console.';
-      console.error(err);
-      throw err;
     }
 
-    // helper to set board fen (both game and chessground)
+    cg = createChessground();
+    if (!cg) {
+      appendLog('Chessground instance not returned. Some builds do not return instance on mount; attempting to proceed with a minimal API.');
+    } else {
+      appendLog('Chessground initialized.');
+    }
+
+    // ---------- helpers ----------
+    let isLocalMove = false;
+
+    function handleUserMove(from, to) {
+      // Validate with chess.js
+      const mv = game.move({ from, to, promotion: 'q' });
+      if (!mv) {
+        // illegal — reset board to legal position
+        try {
+          if (cg && typeof cg.set === 'function') cg.set({ fen: game.fen() });
+        } catch (e) {}
+        appendLog(`Illegal move attempted: ${from} → ${to}`);
+        return;
+      }
+      const newFen = game.fen();
+      isLocalMove = true;
+      db.ref(`classroom/students/${role}/fen`).set(newFen)
+        .then(() => appendLog(`Moved ${mv.san} — saved FEN.`))
+        .catch(err => appendLog('DB write error: ' + err.message));
+    }
+
     function setFenOnClient(fen) {
       const ok = game.load(fen);
-      // game.load returns true/false in some builds — if invalid, it will throw or return false
-      cg.set({ fen: game.fen() });
+      // Some builds return true/false; if invalid, chess.js may throw
+      try {
+        if (!ok && typeof ok !== 'undefined') {
+          appendLog('Warning: game.load returned false for the FEN.');
+        }
+      } catch(e){}
+      // update Chessground
+      try {
+        if (cg && typeof cg.set === 'function') cg.set({ fen: game.fen() });
+        else {
+          // some mounted builds require a different API — attempt to set the element's inner state
+          appendLog('Warning: cg.set not available; visual may not update. Inspect your Chessground build API.');
+        }
+      } catch (err) {
+        console.warn(err);
+      }
       fenInput.value = game.fen();
       updateStatus();
     }
 
-    // ---------- DB refs and sync ----------
+    // ---------- DB refs ----------
     const fenRef = db.ref(`classroom/students/${role}/fen`);
     const pgnRef = db.ref(`classroom/students/${role}/pgn`);
     const controlRef = db.ref(`classroom/students/${role}/control`);
-
-    let isLocalMove = false;
 
     // Listen for remote FEN updates
     fenRef.on('value', snap => {
       const fen = snap.val();
       if (!fen) return;
       if (isLocalMove) {
-        // ignore the first update if it originated from this client
         isLocalMove = false;
-        appendLog('Ignored FEN update (local write).');
+        appendLog('Ignored FEN update (local origin).');
         return;
       }
       try {
@@ -314,15 +353,17 @@
       }
     });
 
-    // Ensure an initial FEN exists on server
+    // Ensure initial FEN exists
     fenRef.once('value').then(snap => {
       if (!snap.exists()) {
         fenRef.set(game.fen());
-        appendLog('Initialized FEN on server (start position).');
+        appendLog('Initialized FEN on server (startpos).');
       } else {
         const fen = snap.val();
-        if (fen) setFenOnClient(fen);
-        appendLog('Loaded existing FEN from server.');
+        if (fen) {
+          setFenOnClient(fen);
+          appendLog('Loaded existing FEN from server.');
+        }
       }
     }).catch(err => appendLog('Initial FEN read error: ' + err.message));
 
@@ -332,22 +373,18 @@
       if (!pgn) return;
       pgnBox.value = pgn;
       try {
-        // reset and load pgn
-        if (typeof game.load_pgn === 'function') {
-          game.reset();
-          game.load_pgn(pgn);
-        } else if (typeof game.loadPgn === 'function') {
-          game.reset();
-          game.loadPgn(pgn);
-        } else {
-          appendLog('This chess.js build does not support load_pgn().');
+        // Defensive PGN loader for chess.js variants
+        if (typeof game.load_pgn === 'function') { game.reset(); game.load_pgn(pgn); }
+        else if (typeof game.loadPgn === 'function') { game.reset(); game.loadPgn(pgn); }
+        else if (typeof game.load === 'function') {
+          // fallback: try to parse moves manually (not implemented)
+          appendLog('No PGN loader available on this chess.js build.');
         }
-        // update client & server FEN
-        isLocalMove = true;
+        // write resulting FEN back
         const newFen = game.fen();
+        isLocalMove = true;
         fenRef.set(newFen).then(() => {
-          cg.set({ fen: newFen });
-          fenInput.value = newFen;
+          setFenOnClient(newFen);
           appendLog('Loaded PGN from master and updated FEN.');
         }).catch(err => appendLog('Failed saving FEN after PGN: ' + err.message));
       } catch (err) {
@@ -355,25 +392,24 @@
       }
     });
 
-    // Optional control (e.g., master lock)
+    // Control (lock/unlock)
     controlRef.on('value', snap => {
       const ctrl = snap.val();
       if (!ctrl) return;
       if (ctrl.locked) {
-        // disable moves by setting movable.free false and clear dests
         try {
-          cg.set({ movable: { color: null, free: false } });
+          if (cg && typeof cg.set === 'function') cg.set({ movable: { color: null, free: false } });
         } catch (err) {}
         appendLog('Master locked moves.');
       } else {
         try {
-          cg.set({ movable: { color: undefined, free: false } });
+          if (cg && typeof cg.set === 'function') cg.set({ movable: { color: undefined, free: false } });
         } catch (err) {}
         appendLog('Master unlocked moves.');
       }
     });
 
-    // Manual FEN input
+    // Manual FEN
     fenInput.addEventListener('change', () => {
       const f = fenInput.value.trim();
       if (!f) return;
@@ -382,7 +418,7 @@
         const newFen = game.fen();
         isLocalMove = true;
         fenRef.set(newFen).then(() => {
-          cg.set({ fen: newFen });
+          setFenOnClient(newFen);
           appendLog('Manual FEN applied and saved.');
         });
       } catch (err) {
@@ -390,19 +426,20 @@
       }
     });
 
-    // Flip button
+    // Flip
     document.getElementById('flipBtn').addEventListener('click', () => {
       try {
-        const current = cg.state.orientation;
+        // many builds use cg.state.orientation or cg.state().orientation
+        const current = (cg && cg.state && cg.state.orientation) || (cg && cg.state && cg.state().orientation) || 'white';
         const next = current === 'white' ? 'black' : 'white';
-        cg.set({ orientation: next });
+        if (cg && typeof cg.set === 'function') cg.set({ orientation: next });
+        else appendLog('Flip not supported by this Chessground build.');
       } catch (err) {
-        // fallback: re-set fen so board visually flips if method differs
         appendLog('Flip error: ' + err.message);
       }
     });
 
-    // Undo button
+    // Undo
     document.getElementById('undoBtn').addEventListener('click', () => {
       const mv = game.undo();
       if (!mv) {
@@ -412,8 +449,7 @@
       const newFen = game.fen();
       isLocalMove = true;
       fenRef.set(newFen).then(() => {
-        cg.set({ fen: newFen });
-        fenInput.value = newFen;
+        setFenOnClient(newFen);
         appendLog('Undo performed and saved.');
       }).catch(err => appendLog('Undo save error: ' + err.message));
     });
@@ -428,10 +464,10 @@
     // Status updater
     function updateStatus() {
       let s = '';
-      if (game.in_checkmate()) s = 'Checkmate';
-      else if (game.in_draw()) s = 'Draw';
-      else if (game.in_check()) s = 'Check';
-      else s = (game.turn() === 'w') ? 'White to move' : 'Black to move';
+      if (game.in_checkmate && game.in_checkmate()) s = 'Checkmate';
+      else if (game.in_draw && game.in_draw()) s = 'Draw';
+      else if (game.in_check && game.in_check()) s = 'Check';
+      else s = (game.turn && game.turn() === 'w') ? 'White to move' : 'Black to move';
       statusEl.textContent = s;
     }
     setInterval(updateStatus, 500);
@@ -450,4 +486,3 @@
   </script>
 </body>
 </html>
-
