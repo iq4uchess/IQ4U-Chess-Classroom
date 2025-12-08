@@ -3,11 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board (fetch-inject Chess.js)</title>
+  <title>IQ4U — Student Board (robust chess loader)</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     body{ font-family: Arial, sans-serif; margin:16px; background:#f6f7fb; color:#111; }
+    .status{ padding:10px; border-radius:8px; margin-bottom:12px; }
+    .ok{ background:#ecfdf5; border:1px solid #bbf7d0; color:#065f46; }
+    .warn{ background:#fff7ed; border:1px solid #ffedd5; color:#92400e; }
+    .err{ background:#ffefef; border:1px solid #ffd6d6; color:#7a1f1f; }
+    pre.debug{ max-height:220px; overflow:auto; background:#071127; color:#9ae6b4; padding:8px; border-radius:6px; }
     .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
@@ -15,17 +20,15 @@
     .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
     #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; }
     textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
-    .status{ padding:10px; border-radius:8px; margin-bottom:12px; }
-    .ok{ background:#ecfdf5; border:1px solid #bbf7d0; color:#065f46; }
-    .warn{ background:#fff7ed; border:1px solid #ffedd5; color:#92400e; }
-    .err{ background:#ffefef; border:1px solid #ffd6d6; color:#7a1f1f; }
-    pre.debug{ max-height:200px; overflow:auto; background:#0b1220; color:#9ae6b4; padding:8px; border-radius:6px; }
     @media (max-width:900px){ .container{ grid-template-columns:1fr; } #board{ width:100%; } .controls{ justify-content:center; } }
   </style>
 </head>
 <body>
-  <div id="status" class="status warn">Loading Chess.js from GitHub Pages (fetching)...</div>
-  <div id="debug" style="display:none"><strong>Debug info (paste if you need help):</strong><pre class="debug" id="debugText"></pre></div>
+  <div id="status" class="status warn">Starting loader...</div>
+  <div id="debugWrap" style="display:none">
+    <strong>Debug (copy this if you need help):</strong>
+    <pre id="debug" class="debug"></pre>
+  </div>
 
   <div class="controls">
     <button id="undoBtn">Undo</button>
@@ -68,111 +71,138 @@
     </div>
   </div>
 
-  <script>
-  // CONFIG: change this if your path or branch is different
-  const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
-  const debugText = document.getElementById('debugText');
-  const statusBox = document.getElementById('status');
+<script>
+/* CONFIG: set to your GitHub Pages JS path */
+const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
+const debugEl = document.getElementById('debug');
+const debugWrap = document.getElementById('debugWrap');
+const statusEl = document.getElementById('status');
 
-  function debugLog(msg){
-    console.log(msg);
-    debugText.textContent += msg + "\\n";
-    document.getElementById('debug').style.display = 'block';
+function dbg(msg){ console.log(msg); debugWrap.style.display='block'; debugEl.textContent += msg + "\\n"; }
+function setStatus(type, msg){
+  statusEl.className = 'status ' + (type || 'warn');
+  statusEl.textContent = msg;
+  dbg(`[STATUS ${type}] ${msg}`);
+}
+
+// Try dynamic import (ESM) -> fallback to eval -> fallback to script tag src
+async function loadChessFlexible(url){
+  setStatus('warn', 'Attempting dynamic import (module) from: ' + url);
+  try{
+    // add cache-buster
+    const importUrl = url + '?t=' + Date.now();
+    const mod = await import(importUrl);
+    dbg('dynamic import resolved: ' + Object.keys(mod).slice(0,10).join(', '));
+    // module could export default or named Chess
+    const candidate = mod.default || mod.Chess || mod;
+    if (candidate){
+      // if the module exported a constructor or object, assign to global
+      window.Chess = candidate;
+      setStatus('ok', 'Loaded Chess via dynamic import (module).');
+      return true;
+    } else {
+      dbg('dynamic import returned module but no obvious export found — continuing to fallback.');
+    }
+  }catch(e){
+    dbg('dynamic import failed: ' + (e && e.message || e));
   }
 
-  async function fetchAndInjectChess(){
-    statusBox.className = 'status warn';
-    statusBox.textContent = 'Fetching chess.min.js from: ' + CHESS_URL;
-    try{
-      const resp = await fetch(CHESS_URL, { cache: 'no-store', mode: 'cors' });
-      debugLog('FETCH STATUS: ' + resp.status + ' ' + resp.statusText);
-      // print some headers for diagnosis
-      try{
-        const ct = resp.headers.get('content-type');
-        debugLog('Content-Type: ' + ct);
-        debugLog('X-Content-Type-Options: ' + (resp.headers.get('x-content-type-options') || 'none'));
-      }catch(e){ debugLog('Could not read headers: ' + e.message); }
-
-      if (!resp.ok){
-        statusBox.className = 'status err';
-        statusBox.textContent = 'Failed to fetch chess.min.js — HTTP ' + resp.status + '. See debug below.';
-        const txt = await resp.text().catch(()=>'<no response body>');
-        debugLog('RESPONSE BODY:\\n' + txt.slice(0,2000));
-        return false;
-      }
-
-      const jsText = await resp.text();
-      // quick sanity check: does it contain "function Chess" or "Chess" token?
-      if (!/Chess/.test(jsText)){
-        statusBox.className = 'status warn';
-        statusBox.textContent = 'Fetched file but contents look unexpected. See debug.';
-        debugLog('Fetched file preview (first 2000 chars):\\n' + jsText.slice(0,2000));
-        // still attempt to inject to see real result
-      }
-
-      // inject: evaluate the code in global scope
-      try{
-        // Use Function constructor to create a script in global scope
-        // We wrap in IIFE to avoid leaking temporary variables
-        new Function(jsText)();
-        statusBox.className = 'status ok';
-        statusBox.textContent = 'Chess.js injected successfully.';
-        debugLog('Chess.js injected. typeof Chess = ' + (typeof Chess));
-        return true;
-      }catch(execErr){
-        statusBox.className = 'status err';
-        statusBox.textContent = 'Fetched JS but failed to execute it. See console & debug.';
-        debugLog('EXECUTION ERROR: ' + execErr.stack || execErr.message);
-        return false;
-      }
-
-    }catch(err){
-      statusBox.className = 'status err';
-      statusBox.textContent = 'Network error while fetching chess.min.js. See debug.';
-      debugLog('FETCH ERROR: ' + (err.stack || err.message));
+  // Next fallback: fetch and evaluate as script text using <script> tag (avoids Function() issues)
+  setStatus('warn', 'Attempting to fetch & inject script text from: ' + url);
+  try{
+    const resp = await fetch(url + '?t=' + Date.now(), { cache: 'no-store', mode: 'cors' });
+    dbg('fetch status: ' + resp.status + ' ' + resp.statusText);
+    const ct = resp.headers.get('content-type'); dbg('content-type: ' + ct);
+    if (!resp.ok){
+      setStatus('err', 'Failed to fetch chess.min.js — HTTP ' + resp.status);
+      const body = await resp.text().catch(()=>'<no body>');
+      dbg('response body preview:\\n' + body.slice(0,2000));
       return false;
     }
-  }
-
-  // Load chessboard.js after chess is injected (we append script tag)
-  function loadChessboardThenStart(){
-    return new Promise((resolve, reject) => {
-      if (typeof Chessboard !== 'undefined'){
-        resolve();
-        return;
-      }
+    const jsText = await resp.text();
+    // Try injecting script element with textContent (this executes as classic script)
+    try{
       const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
-      s.async = false;
-      s.onload = () => { debugLog('chessboard.js loaded'); resolve(); };
-      s.onerror = (e) => { debugLog('Failed to load chessboard.js: ' + e); reject(e); };
+      s.text = jsText;
       document.head.appendChild(s);
-    });
+      dbg('Injected script element with fetched text.');
+      if (typeof Chess !== 'undefined'){
+        setStatus('ok', 'Injected script text and Chess global is present.');
+        return true;
+      } else {
+        dbg('Injected script executed but Chess global is not present.');
+      }
+    }catch(execErr){
+      dbg('Injection via script element failed: ' + (execErr && execErr.stack || execErr));
+    }
+
+    // If still not present, last fallback: append <script src="..."> tag (simple src load)
+    try{
+      setStatus('warn', 'Attempting to load via <script src=> fallback.');
+      const s2 = document.createElement('script');
+      s2.src = url + '?t=' + Date.now();
+      s2.async = false;
+      s2.onload = () => { dbg('script src loaded'); if (typeof Chess !== 'undefined'){ setStatus('ok','Loaded Chess via script src.'); startAfterChess(); } else { dbg('script src loaded but Chess still undefined'); } };
+      s2.onerror = (e) => { dbg('script src error: ' + e); setStatus('err','script src load failed.'); };
+      document.head.appendChild(s2);
+      // Wait briefly for onload; return true if Chess exists
+      await new Promise(r => setTimeout(r, 800));
+      if (typeof Chess !== 'undefined') return true;
+    }catch(e){ dbg('script src injection failed: ' + e); }
+  }catch(fetchErr){
+    dbg('Fetch/Inject error: ' + (fetchErr && fetchErr.stack || fetchErr));
+    setStatus('err', 'Fetch error while trying to retrieve chess.min.js');
+    return false;
   }
 
-  // Main UI initialization (called after both libs available)
-  function initUI(){
-    if (typeof Chess === 'undefined'){
-      statusBox.className = 'status err';
-      statusBox.textContent = 'Chess global not found after injection.';
-      debugLog('Chess is undefined — aborting UI init');
-      return;
-    }
-    if (typeof Chessboard === 'undefined'){
-      statusBox.className = 'status err';
-      statusBox.textContent = 'Chessboard.js not available.';
-      debugLog('Chessboard is undefined — aborting UI init');
-      return;
-    }
+  // All attempts failed
+  setStatus('err', 'All attempts to load Chess.js failed.');
+  return false;
+}
 
-    statusBox.className = 'status ok';
-    statusBox.textContent = 'Libraries ready. Initializing board...';
+// helper to ensure chessboard exists before UI init
+function loadChessboard(){
+  return new Promise((resolve, reject) => {
+    if (typeof Chessboard !== 'undefined') return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
+    s.async = false;
+    s.onload = () => { dbg('chessboard.js loaded'); resolve(); };
+    s.onerror = (e) => { dbg('chessboard.js load error: ' + e); reject(e); };
+    document.head.appendChild(s);
+  });
+}
+
+// Main init flow
+(async function(){
+  setStatus('warn', 'Loader starting...');
+  const ok = await loadChessFlexible(CHESS_URL);
+  if (!ok){
+    dbg('loader gave up');
+    return;
+  }
+
+  // ensure Chess is present
+  dbg('typeof Chess after loader: ' + typeof Chess);
+  try{
+    await loadChessboard();
+  }catch(e){
+    dbg('chessboard load failed: ' + e);
+    setStatus('err','Failed to load chessboard.js');
+    return;
+  }
+
+  // init app
+  setStatus('ok','Libraries ready. Initializing board...');
+  (function initApp(){
+    if (typeof Chess === 'undefined' || typeof Chessboard === 'undefined'){
+      dbg('Cannot init App — Chess or Chessboard missing. Chess:' + typeof Chess + ' Chessboard:' + typeof Chessboard);
+      setStatus('err','Cannot initialize board — missing libraries.');
+      return;
+    }
 
     const game = new Chess();
-    let board = null;
-    let pgnMoves = [];
-    let stepIndex = 0;
-    let orientation = document.getElementById('orientationSelect').value || 'white';
+    let board = null, pgnMoves = [], stepIndex = 0, orientation = document.getElementById('orientationSelect').value || 'white';
 
     function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
     function refreshMoves(){
@@ -194,19 +224,14 @@
     }
 
     function onDrop(source, target){
-      const move = game.move({ from: source, to: target, promotion: 'q' });
+      const move = game.move({ from: source, to: target, promotion:'q' });
       if (move === null) return 'snapback';
-      pgnMoves = []; stepIndex = 0;
-      updateFen(); refreshMoves();
+      pgnMoves = []; stepIndex=0; updateFen(); refreshMoves();
     }
     function onSnapEnd(){ board.position(game.fen()); }
 
-    function initBoard(){
-      board = Chessboard('board', {
-        draggable:true, position:'start', orientation:orientation,
-        onDrop:onDrop, onSnapEnd:onSnapEnd,
-        pieceTheme:'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
-      });
+    function initBoard(){ 
+      board = Chessboard('board', { draggable:true, position:'start', orientation:orientation, onDrop:onDrop, onSnapEnd:onSnapEnd, pieceTheme:'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png' });
       updateFen(); refreshMoves();
     }
 
@@ -214,21 +239,17 @@
     document.getElementById('flipBtn').onclick = () => { board.flip(); };
     document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves=[]; stepIndex=0; board.position('start'); updateFen(); refreshMoves(); };
     document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
-    document.getElementById('orientationSelect').onchange = function(){ orientation = this.value; initBoard(); };
+    document.getElementById('orientationSelect').onchange = function(){ orientation=this.value; initBoard(); };
 
     document.getElementById('loadFenBtn').onclick = () => {
-      const txt = document.getElementById('pgnInput').value.trim();
-      if (!txt){ alert('Paste FEN first'); return; }
-      if (!game.load(txt)){ alert('Invalid FEN'); return; }
-      pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMoves();
+      const txt = document.getElementById('pgnInput').value.trim(); if (!txt){ alert('Paste FEN first'); return; }
+      if (!game.load(txt)){ alert('Invalid FEN'); return; } pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMoves();
     };
 
     document.getElementById('loadPgnBtn').onclick = () => {
       const pgn = document.getElementById('pgnInput').value.trim(); if (!pgn){ alert('Paste PGN first'); return; }
-      const tmp = new Chess(); let ok=true;
-      try { ok = tmp.load_pgn ? tmp.load_pgn(pgn) : tmp.loadPgn ? tmp.loadPgn(pgn) : tmp.load(pgn); } catch(e){ ok=false; }
-      if (!ok){ alert('Invalid PGN'); return; }
-      pgnMoves = tmp.history(); stepIndex=0; game.reset(); board.position('start'); updateFen(); refreshMoves();
+      const tmp = new Chess(); let ok=true; try{ ok = tmp.load_pgn ? tmp.load_pgn(pgn) : tmp.loadPgn ? tmp.loadPgn(pgn) : tmp.load(pgn); }catch(e){ ok=false; }
+      if (!ok){ alert('Invalid PGN'); return; } pgnMoves = tmp.history(); stepIndex=0; game.reset(); board.position('start'); updateFen(); refreshMoves();
     };
 
     document.getElementById('nextBtn').onclick = () => {
@@ -240,26 +261,10 @@
 
     initBoard();
     window._iq4u = { game, board };
-    statusBox.textContent = 'Board ready.';
-  }
-
-  // flow: fetch->inject -> load chessboard -> initUI
-  (async function(){
-    const ok = await fetchAndInjectChess();
-    if (!ok){
-      debugLog('Aborting: Chess.js not available');
-      return;
-    }
-    try{
-      await loadChessboardThenStart();
-    }catch(e){
-      debugLog('Chessboard load error: ' + e);
-      statusBox.className = 'status err';
-      statusBox.textContent = 'Failed to load chessboard.js from CDN. Check network/console.';
-      return;
-    }
-    initUI();
+    dbg('Board initialized. Chess type: ' + typeof Chess);
+    setStatus('ok','Board ready.');
   })();
-  </script>
+})();
+</script>
 </body>
 </html>
