@@ -3,95 +3,123 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board</title>
+  <title>IQ4U — Student Board (CDN fixed)</title>
 
-  <!-- Chessboard.js CSS (working CDN) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/www/css/chessboard-1.0.0.min.css" />
+  <!-- Use cdnjs (serves correct MIME types) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
   <style>
-    body { font-family: Arial, sans-serif; padding: 16px; background: #f4f4f4; }
-    .controls { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
-    button { padding: 8px 12px; border: none; background: #333; color: white; border-radius: 6px; cursor: pointer; }
-    #board { width: 400px; }
-    .container { display: grid; grid-template-columns: 420px 1fr; gap: 20px; }
-    #movesList { background: white; padding: 8px; border-radius: 8px; height: 250px; overflow-y: auto; }
-    textarea { width: 100%; height: 140px; padding: 8px; border-radius: 6px; }
-    .panel { background: white; padding: 12px; border-radius: 8px; }
+    body{ font-family: Arial, sans-serif; margin:16px; background:#f4f6fb; color:#111; }
+    .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
+    #board{ width:400px; background: #fff; border-radius:8px; padding:8px; box-shadow:0 6px 18px rgba(2,6,23,.06); }
+    .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
+    #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; }
+    textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
+    @media (max-width:900px){ .container{ grid-template-columns: 1fr; } #board{ width:100%; } .controls{ justify-content:center; } }
   </style>
 </head>
-
 <body>
 
-  <!-- Top Control Buttons -->
   <div class="controls">
     <button id="undoBtn">Undo</button>
     <button id="prevBtn">Previous</button>
     <button id="nextBtn">Next</button>
-    <button id="flipBtn">Flip</button>
+    <button id="flipBtn">Flip Board</button>
   </div>
 
   <div class="container">
-
-    <!-- BOARD AREA -->
-    <div>
+    <!-- Board -->
+    <div class="panel">
       <div id="board"></div>
-      <p>FEN: <span id="fenDisplay"></span></p>
+      <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>Orientation:
+          <select id="orientationSelect">
+            <option value="white">White</option>
+            <option value="black">Black</option>
+          </select>
+        </div>
+        <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
+      </div>
     </div>
 
-    <!-- SIDE PANEL -->
-    <div>
+    <!-- Side controls -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
       <div class="panel">
-        <h3>PGN / FEN Input</h3>
-        <textarea id="pgnInput" placeholder="Paste PGN here"></textarea>
-        <button id="loadPgnBtn">Load PGN</button>
-        <button id="loadFenBtn">Load FEN</button>
-        <button id="resetBtn">Reset</button>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong>PGN / FEN Input</strong>
+          <button id="loadPgnBtn">Load PGN</button>
+        </div>
+        <div style="margin-top:8px;">
+          <textarea id="pgnInput" placeholder="Paste PGN or FEN here. Example PGN: 1. e4 e5 2. Nf3 Nc6"></textarea>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="clearPgn">Clear</button>
+            <button id="loadFenBtn">Load FEN</button>
+            <button id="resetBtn">Reset</button>
+          </div>
+        </div>
       </div>
 
       <div class="panel">
-        <h3>Moves</h3>
+        <strong>Moves</strong>
         <div id="movesList"></div>
       </div>
-    </div>
 
+      <div class="panel small">
+        <strong>Notes</strong>
+        <ul>
+          <li>Drag pieces — only legal moves allowed (Chess.js enforces legality).</li>
+          <li>Load PGN then use Next/Previous to step through moves.</li>
+        </ul>
+      </div>
+    </div>
   </div>
 
-  <!-- JS LIBRARIES (WORKING CDNs) -->
-
-  <!-- jQuery -->
+  <!-- JS LIBRARIES (stable cdnjs builds) -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-  <!-- Chess.js (working CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.13.4/chess.min.js"></script>
-
-  <!-- Chessboard.js (working CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/www/js/chessboard-1.0.0.min.js"></script>
+  <!-- chess.js UMD global build (no exports) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.0/chess.min.js"></script>
+  <!-- chessboard.js UMD global build -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
   <script>
-    let game = new Chess();
+    // Basic safety check
+    if (typeof Chess === 'undefined') {
+      console.error('Chess.js did not load — check network / extensions.');
+      alert('Chess.js failed to load. See console for details.');
+    }
+    if (typeof Chessboard === 'undefined') {
+      console.error('Chessboard.js did not load — check network / extensions.');
+      alert('Chessboard.js failed to load. See console for details.');
+    }
+
+    // Initialize
+    const game = new Chess();
     let board = null;
     let pgnMoves = [];
     let stepIndex = 0;
+    let orientation = 'white';
 
-    function updateFen() {
-      document.getElementById("fenDisplay").textContent = game.fen();
-    }
-
-    function refreshMoves() {
-      const moves = game.history();
-      let html = "";
-      moves.forEach((m, idx) => {
-        const num = Math.floor(idx / 2) + 1;
-        if (idx % 2 === 0) html += `<b>${num}.</b> `;
-        html += m + " ";
+    function initBoard() {
+      if (board) board.destroy();
+      board = Chessboard('board', {
+        draggable: true,
+        position: 'start',
+        orientation: orientation,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
       });
-      document.getElementById("movesList").innerHTML = html;
+      updateFen();
+      refreshMoves();
     }
 
     function onDrop(source, target) {
-      let move = game.move({ from: source, to: target, promotion: "q" });
-      if (move === null) return "snapback";
-
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+      if (move === null) return 'snapback';
+      // user made new branch — clear PGN stepping
+      pgnMoves = []; stepIndex = 0;
       updateFen();
       refreshMoves();
     }
@@ -100,86 +128,93 @@
       board.position(game.fen());
     }
 
-    function initBoard() {
-      board = Chessboard("board", {
-        draggable: true,
-        position: "start",
-        onDrop: onDrop,
-        onSnapEnd: onSnapEnd
-      });
-      updateFen();
+    function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
+
+    function refreshMoves(){
+      // display history or loaded PGN highlight
+      const hist = game.history();
+      if (pgnMoves.length > 0) {
+        let html = '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        for (let i=0;i<pgnMoves.length;i++){
+          const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' : 'style="padding:6px;border-radius:6px;"';
+          html += `<div ${cls}>${pgnMoves[i]}</div>`;
+        }
+        html += '</div><hr>';
+        document.getElementById('movesList').innerHTML = html;
+      }
+      // show the actual applied history as pairs
+      let pairs = '';
+      for (let i = 0; i < hist.length; i += 2) {
+        const no = Math.floor(i/2) + 1;
+        const w = hist[i] || '';
+        const b = hist[i+1] || '';
+        pairs += `<div style="padding:6px;border-radius:6px;"> <strong>${no}.</strong> ${w} ${b}</div>`;
+      }
+      document.getElementById('movesList').innerHTML += pairs || '<div class="small">No moves yet.</div>';
     }
 
-    // BUTTON CONTROLS
-    document.getElementById("undoBtn").onclick = () => {
-      game.undo();
-      board.position(game.fen());
-      updateFen();
-      refreshMoves();
+    // Buttons
+    document.getElementById('undoBtn').onclick = () => {
+      game.undo(); board.position(game.fen()); updateFen(); refreshMoves();
+    };
+    document.getElementById('flipBtn').onclick = () => board.flip();
+    document.getElementById('resetBtn').onclick = () => {
+      game.reset(); pgnMoves = []; stepIndex = 0; board.position('start'); updateFen(); refreshMoves();
+    };
+    document.getElementById('clearPgn').onclick = () => document.getElementById('pgnInput').value = '';
+
+    document.getElementById('loadFenBtn').onclick = () => {
+      const txt = document.getElementById('pgnInput').value.trim();
+      if (!txt) { alert('Paste a FEN into the textarea and click Load FEN'); return; }
+      const ok = game.load(txt);
+      if (!ok) { alert('Invalid FEN'); return; }
+      pgnMoves = []; stepIndex = 0; board.position(game.fen()); updateFen(); refreshMoves();
     };
 
-    document.getElementById("flipBtn").onclick = () => board.flip();
-
-    document.getElementById("resetBtn").onclick = () => {
-      game.reset();
-      board.position("start");
-      pgnMoves = [];
-      stepIndex = 0;
-      updateFen();
-      refreshMoves();
-    };
-
-    document.getElementById("loadFenBtn").onclick = () => {
-      const fen = document.getElementById("pgnInput").value.trim();
-      if (!game.load(fen)) {
-        alert("Invalid FEN");
-        return;
-      }
-      board.position(fen);
-      updateFen();
-      refreshMoves();
-    };
-
-    document.getElementById("loadPgnBtn").onclick = () => {
-      const pgn = document.getElementById("pgnInput").value.trim();
+    document.getElementById('loadPgnBtn').onclick = () => {
+      const pgn = document.getElementById('pgnInput').value.trim();
+      if (!pgn) { alert('Paste PGN and click Load PGN'); return; }
+      // parse PGN using a temp chess instance
       const tmp = new Chess();
-
-      if (!tmp.load_pgn(pgn)) {
-        alert("Invalid PGN");
-        return;
-      }
-
-      pgnMoves = tmp.history();
-      stepIndex = 0;
-
-      game.reset();
-      board.position("start");
-
-      updateFen();
-      refreshMoves();
+      // older chess.js exposes load_pgn, newer exposes loadPgn — try both safely
+      let ok = true;
+      try {
+        if (typeof tmp.load_pgn === 'function') {
+          ok = tmp.load_pgn(pgn);
+        } else if (typeof tmp.loadPgn === 'function') {
+          ok = tmp.loadPgn(pgn);
+        } else {
+          ok = tmp.load(pgn);
+        }
+      } catch (e) { ok = false; }
+      if (!ok) { alert('Could not parse PGN. Make sure PGN is valid.'); return; }
+      pgnMoves = tmp.history().slice(); stepIndex = 0; game.reset(); board.position('start'); updateFen(); refreshMoves();
     };
 
-    document.getElementById("nextBtn").onclick = () => {
+    document.getElementById('nextBtn').onclick = () => {
+      if (pgnMoves.length === 0) return;
       if (stepIndex >= pgnMoves.length) return;
-      game.move(pgnMoves[stepIndex]);
-      stepIndex++;
-      board.position(game.fen());
-      updateFen();
-      refreshMoves();
+      const m = game.move(pgnMoves[stepIndex], { sloppy: true });
+      if (m === null) { alert('Failed to apply move: ' + pgnMoves[stepIndex]); return; }
+      stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
     };
 
-    document.getElementById("prevBtn").onclick = () => {
-      if (stepIndex <= 0) return;
-      game.undo();
-      stepIndex--;
-      board.position(game.fen());
-      updateFen();
-      refreshMoves();
+    document.getElementById('prevBtn').onclick = () => {
+      if (pgnMoves.length === 0 || stepIndex <= 0) return;
+      game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves();
     };
 
-    // INIT
-    initBoard();
+    document.getElementById('orientationSelect').onchange = function() {
+      orientation = this.value;
+      initBoard();
+    };
+
+    // init
+    window.addEventListener('load', () => {
+      initBoard();
+      // make debug accessible in console
+      window._iq4u = { game, board, pgnMoves };
+    });
   </script>
-
 </body>
 </html>
