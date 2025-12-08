@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board (local Chess.js)</title>
+  <title>IQ4U — Student Board (local chess.min.js)</title>
 
-  <!-- chessboard.js CSS (cdnjs) -->
+  <!-- Chessboard CSS (cdnjs) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
   <style>
@@ -80,14 +80,14 @@
   <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-  <!-- LOCAL Chess.js - loaded first from your uploaded file -->
+  <!-- LOCAL Chess.js (your uploaded file) -->
   <script src="js/libs/chess.min.js"></script>
 
-  <!-- Chessboard.js (cdnjs build) -->
+  <!-- Chessboard.js (cdnjs) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
   <script>
-    // Quick runtime checks and visible error if something didn't load
+    // visible error helper
     const errorBox = document.getElementById('errorBox');
     function showError(msg){
       errorBox.style.display = 'block';
@@ -95,18 +95,17 @@
       console.error(msg);
     }
 
+    // sanity checks
     if (typeof Chess === 'undefined') {
-      showError('Chess.js failed to load from local file: js/libs/chess.min.js. Please confirm the file exists at that path and is publicly accessible on GitHub Pages.');
-      // stop further execution
-      throw new Error('Chess.js not available');
+      showError('Chess.js failed to load from local file: js/libs/chess.min.js. Confirm the file exists and the path is correct. Open this URL in your browser to verify: https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js');
+      throw new Error('Chess.js not loaded');
     }
-
     if (typeof Chessboard === 'undefined') {
       showError('Chessboard.js failed to load from CDN. Check network or try another browser.');
-      throw new Error('Chessboard.js not available');
+      throw new Error('Chessboard.js not loaded');
     }
 
-    // Main app
+    // main app
     (function(){
       const game = new Chess();
       let board = null;
@@ -199,9 +198,9 @@
         game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves();
       };
 
-      // Init board now
+      // start
       initBoard();
-      // Expose for debugging
+      // debug
       window._iq4u = { game, board, pgnMoves };
     })();
   </script>
