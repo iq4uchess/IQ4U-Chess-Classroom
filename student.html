@@ -1,220 +1,263 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>IQ4U — Student Board (production)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IQ4U — Student Board</title>
 
-<!-- chessboard.css (cdnjs) -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <!-- chessboard.css -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
-<style>
-  body{ font-family: Arial, sans-serif; margin:16px; background:#f6f7fb; color:#111; }
-  .status{ padding:8px; border-radius:6px; margin-bottom:12px; background:#ecfdf5; border:1px solid #bbf7d0; color:#065f46; display:none; }
-  .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
-  button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
-  .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
-  .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
-  /* explicit forced size & border so board is visible */
-  #board-wrapper{ width:420px; height:420px; display:flex; align-items:center; justify-content:center; }
-  #board{ width:400px; height:400px; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; }
-  #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; }
-  textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
-  @media (max-width:900px){ .container{ grid-template-columns:1fr; } #board-wrapper{ width:100%; } #board{ width:100%; height:80vw; max-height:420px; } }
-</style>
+  <style>
+    body{ font-family: Arial, sans-serif; margin:16px; background:#f6f7fb; color:#111; }
+    .status{ padding:8px; border-radius:6px; margin-bottom:12px; display:none; }
+    .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
+    .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
+    /* explicit forced size & border so board and pieces show */
+    #board-wrapper{ width:420px; height:420px; display:flex; align-items:center; justify-content:center; }
+    #board{ width:400px; height:400px; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; }
+    #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; }
+    textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
+    .small{ font-size:13px; color:#555; }
+    @media (max-width:900px){
+      .container{ grid-template-columns:1fr; }
+      #board-wrapper{ width:100%; }
+      #board{ width:100%; height:80vw; max-height:420px; }
+      .controls{ justify-content:center; }
+    }
+  </style>
 </head>
 <body>
+  <div id="statusBox" class="status"></div>
 
-<div id="statusBox" class="status">Initializing...</div>
-
-<div class="controls">
-  <button id="undoBtn">Undo</button>
-  <button id="prevBtn">Previous</button>
-  <button id="nextBtn">Next</button>
-  <button id="flipBtn">Flip</button>
-</div>
-
-<div class="container">
-  <div class="panel">
-    <div id="board-wrapper"><div id="board" aria-label="Chessboard container"></div></div>
-    <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
-      <div>Orientation:
-        <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
-      </div>
-      <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
-    </div>
+  <div class="controls">
+    <button id="undoBtn">Undo</button>
+    <button id="prevBtn">Previous</button>
+    <button id="nextBtn">Next</button>
+    <button id="flipBtn">Flip</button>
   </div>
 
-  <div style="display:flex; flex-direction:column; gap:12px;">
+  <div class="container">
     <div class="panel">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <strong>PGN / FEN Input</strong>
-        <button id="loadPgnBtn">Load PGN</button>
+      <div id="board-wrapper"><div id="board" aria-label="Chessboard container"></div></div>
+      <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>Orientation:
+          <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
+        </div>
+        <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
       </div>
-      <div style="margin-top:8px;">
-        <textarea id="pgnInput" placeholder="Paste PGN or FEN here. Example PGN: 1. e4 e5 2. Nf3 Nc6"></textarea>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <button id="clearPgn">Clear</button>
-          <button id="loadFenBtn">Load FEN</button>
-          <button id="resetBtn">Reset</button>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong>PGN / FEN Input</strong>
+          <button id="loadPgnBtn">Load PGN</button>
+        </div>
+        <div style="margin-top:8px;">
+          <textarea id="pgnInput" placeholder="Paste PGN or FEN here. Example PGN: 1. e4 e5 2. Nf3 Nc6"></textarea>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="clearPgn">Clear</button>
+            <button id="loadFenBtn">Load FEN</button>
+            <button id="resetBtn">Reset</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="panel">
-      <strong>Moves</strong>
-      <div id="movesList"></div>
+      <div class="panel">
+        <strong>Moves</strong>
+        <div id="movesList"></div>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- load jQuery (optional for other UI parts) -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- jQuery (optional) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-<script>
-/* PRODUCTION loader: assumes Chess is available either as global or module export on your GitHub Pages file.
-   This script:
-   - tries dynamic import (if module)
-   - falls back to classic <script src> load
-   - after Chess and Chessboard are present, renders the board and logs status
-*/
-const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
-const statusBox = document.getElementById('statusBox');
+  <script>
+  (function(){
+    const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
+    const PIECE_BASE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+    const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
+    const statusBox = document.getElementById('statusBox');
 
-function setStatus(msg, show=true){
-  statusBox.textContent = msg;
-  statusBox.style.display = show ? 'block' : 'none';
-  console.log('STATUS:', msg);
-}
-
-async function ensureChess(){
-  // quick check
-  if (typeof Chess !== 'undefined') { setStatus('Chess.js already present', false); return true; }
-
-  // try dynamic import (module)
-  try {
-    setStatus('Attempting dynamic import for Chess.js...');
-    const mod = await import(CHESS_URL + '?t=' + Date.now());
-    // module may export Chess as named or default
-    const candidate = mod.default || mod.Chess || mod;
-    if (candidate) {
-      window.Chess = candidate;
-      setStatus('Loaded Chess via dynamic import', false);
-      return true;
+    function setStatus(msg, show=true){
+      statusBox.textContent = msg;
+      statusBox.style.display = show ? 'block' : 'none';
+      console.log('STATUS:', msg);
     }
-  } catch(e){
-    console.warn('dynamic import failed:', e && e.message || e);
-  }
 
-  // fallback: append script tag (classic UMD)
-  return new Promise((resolve) => {
-    setStatus('Loading Chess.js via script tag fallback...');
-    const s = document.createElement('script');
-    s.src = CHESS_URL + '?t=' + Date.now();
-    s.async = false;
-    s.onload = () => {
-      console.log('Chess.js script loaded via src. typeof Chess=', typeof Chess);
-      resolve(typeof Chess !== 'undefined');
-    };
-    s.onerror = (err) => { console.warn('script load error', err); resolve(false); };
-    document.head.appendChild(s);
-  });
-}
+    async function ensureChess(){
+      if (typeof Chess !== 'undefined') return true;
+      // try dynamic import (ESM)
+      try{
+        setStatus('Loading Chess.js via dynamic import...');
+        const mod = await import(CHESS_URL + '?t=' + Date.now());
+        const candidate = mod.default || mod.Chess || mod;
+        if (candidate){
+          window.Chess = candidate;
+          setStatus('Chess.js loaded (module).', false);
+          return true;
+        }
+      }catch(e){
+        console.warn('dynamic import failed:', e && e.message || e);
+      }
+      // fallback: classic script tag
+      return new Promise((resolve) => {
+        setStatus('Loading Chess.js via classic script...');
+        const s = document.createElement('script');
+        s.src = CHESS_URL + '?t=' + Date.now();
+        s.async = false;
+        s.onload = () => { setStatus('Chess.js loaded (script).', false); resolve(typeof Chess !== 'undefined'); };
+        s.onerror = (err) => { console.warn('script load failed', err); setStatus('Chess.js load failed.', true); resolve(false); };
+        document.head.appendChild(s);
+      });
+    }
 
-function loadChessboard(){ // returns promise resolving when chessboard.js is ready
-  if (typeof Chessboard !== 'undefined') return Promise.resolve();
-  return new Promise((res,reject)=>{
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
-    s.async = false;
-    s.onload = () => { console.log('chessboard.js loaded'); res(); };
-    s.onerror = (e) => { console.warn('Failed to load chessboard.js', e); reject(e); };
-    document.head.appendChild(s);
-  });
-}
+    async function loadChessboard(){
+      if (typeof Chessboard !== 'undefined') return;
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
+        s.async = false;
+        s.onload = () => resolve();
+        s.onerror = (e) => reject(e);
+        document.head.appendChild(s);
+      });
+    }
 
-function createBoardInstance(){
-  // ensure the #board element has visible size
-  const bw = document.getElementById('board');
-  const rect = bw.getBoundingClientRect();
-  console.log('Board wrapper size:', rect.width, rect.height);
+    // check if a sample piece exists (HEAD first, fallback to GET)
+    async function pieceExists(url){
+      try{
+        const head = await fetch(url, { method: 'HEAD', cache: 'no-store', mode: 'cors' });
+        if (head.ok) return true;
+      }catch(e){
+        // HEAD may be disallowed; try GET but don't download whole if huge
+        try{
+          const r = await fetch(url, { method: 'GET', cache: 'no-store', mode: 'cors' });
+          return r.ok && (r.headers.get('content-type') || '').includes('image');
+        }catch(e2){
+          return false;
+        }
+      }
+      return false;
+    }
 
-  // create Chessboard
-  const cfg = {
-    draggable: true,
-    position: 'start',
-    orientation: document.getElementById('orientationSelect').value || 'white',
-    onDrop: function(source, target){
+    // choose pieceTheme url (custom or fallback)
+    async function choosePieceTheme(){
+      const testUrl = PIECE_BASE + 'wP.png';
+      try{
+        const ok = await pieceExists(testUrl);
+        if (ok) return PIECE_BASE + '{piece}.png';
+      }catch(e){ console.warn('piece check failed', e); }
+      return FALLBACK_THEME;
+    }
+
+    // create board, given chosen pieceTheme
+    function createBoard(pieceTheme){
+      // sanity: ensure Chessboard available
+      if (typeof Chessboard === 'undefined') throw new Error('Chessboard library missing');
+
+      const orientation = document.getElementById('orientationSelect').value || 'white';
+      board = Chessboard('board', {
+        draggable: true,
+        position: 'start',
+        orientation: orientation,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: pieceTheme
+      });
+    }
+
+    // main state & handlers
+    let game, board, pgnMoves = [], stepIndex = 0;
+
+    function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
+    function refreshMoves(){
+      const hist = game.history();
+      let html = '';
+      if (pgnMoves.length > 0){
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+        for (let i=0;i<pgnMoves.length;i++){
+          const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' : 'style="padding:6px;border-radius:6px;"';
+          html += `<div ${cls}>${pgnMoves[i]}</div>`;
+        }
+        html += '</div><hr>';
+      }
+      for (let i=0;i<hist.length;i+=2){
+        const no = Math.floor(i/2)+1;
+        html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${hist[i] || ''} ${hist[i+1] || ''}</div>`;
+      }
+      document.getElementById('movesList').innerHTML = html || '<div class="small">No moves yet.</div>';
+    }
+
+    function onDrop(source, target){
       const move = game.move({ from: source, to: target, promotion: 'q' });
       if (move === null) return 'snapback';
       pgnMoves = []; stepIndex = 0; updateFen(); refreshMoves();
-    },
-    onSnapEnd: function(){ board.position(game.fen()); },
-    pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
-  };
+    }
+    function onSnapEnd(){ board.position(game.fen()); }
 
-  board = Chessboard('board', cfg);
-}
+    // UI wiring (buttons)
+    function wireUI(){
+      document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
+      document.getElementById('flipBtn').onclick = () => board.flip();
+      document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves=[]; stepIndex=0; board.position('start'); updateFen(); refreshMoves(); };
+      document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
+      document.getElementById('orientationSelect').onchange = function(){ if (board && typeof board.destroy === 'function'){ board.destroy(); createBoard(currentPieceTheme); } };
+      document.getElementById('loadFenBtn').onclick = () => {
+        const txt = document.getElementById('pgnInput').value.trim(); if (!txt){ alert('Paste FEN first'); return; }
+        if (!game.load(txt)){ alert('Invalid FEN'); return; }
+        pgnMoves = []; stepIndex=0; board.position(game.fen()); updateFen(); refreshMoves();
+      };
+      document.getElementById('loadPgnBtn').onclick = () => {
+        const pgn = document.getElementById('pgnInput').value.trim(); if (!pgn){ alert('Paste PGN'); return; }
+        const tmp = new Chess(); let ok = true;
+        try { ok = tmp.load_pgn ? tmp.load_pgn(pgn) : tmp.loadPgn ? tmp.loadPgn(pgn) : tmp.load(pgn); } catch(e){ ok = false; }
+        if (!ok){ alert('Invalid PGN'); return; }
+        pgnMoves = tmp.history(); stepIndex=0; game.reset(); board.position('start'); updateFen(); refreshMoves();
+      };
+      document.getElementById('nextBtn').onclick = () => {
+        if (pgnMoves.length===0 || stepIndex>=pgnMoves.length) return;
+        const m = game.move(pgnMoves[stepIndex], { sloppy:true }); if (m===null){ alert('Could not apply move'); return; }
+        stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
+      };
+      document.getElementById('prevBtn').onclick = () => { if (pgnMoves.length===0 || stepIndex<=0) return; game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves(); };
+    }
 
-let game, board, pgnMoves=[], stepIndex=0;
+    // flow: load libs -> decide pieceTheme -> init board
+    let currentPieceTheme = FALLBACK_THEME;
 
-function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
-function refreshMoves(){
-  const hist = game.history();
-  let html = '';
-  for (let i=0;i<hist.length;i+=2){
-    const no = Math.floor(i/2)+1;
-    html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${hist[i]||''} ${hist[i+1]||''}</div>`;
-  }
-  document.getElementById('movesList').innerHTML = html || '<div>No moves yet.</div>';
-}
+    async function start(){
+      setStatus('Loading libraries...');
+      const okChess = await ensureChess();
+      if (!okChess){ setStatus('Failed to load Chess.js. Check console.', true); return; }
+      try{ await loadChessboard(); }catch(e){ setStatus('Failed to load Chessboard.js', true); console.error(e); return; }
 
-async function init(){
-  setStatus('Starting initialization...');
-  const okChess = await ensureChess();
-  if (!okChess){
-    setStatus('Failed to load Chess.js — open DevTools Console for details.', true);
-    return console.error('Chess.js failed to load');
-  }
-  await loadChessboard();
-  // now we have both libs
-  setStatus('Libraries loaded. Creating board...', false);
+      setStatus('Checking piece set (custom then fallback)...', false);
+      try{
+        currentPieceTheme = await choosePieceTheme();
+      }catch(e){
+        console.warn('choosePieceTheme error', e);
+        currentPieceTheme = FALLBACK_THEME;
+      }
 
-  // initialize game and board
-  game = new Chess();
-  createBoardInstance();
-  updateFen();
-  refreshMoves();
+      // initialize game + board
+      game = new Chess();
+      createBoard(currentPieceTheme);
+      updateFen();
+      refreshMoves();
+      wireUI();
+      setStatus('Ready (using piece theme: ' + (currentPieceTheme === FALLBACK_THEME ? 'wikipedia fallback' : 'cburnett') + ')', false);
+      console.log('Using pieceTheme:', currentPieceTheme);
+      window._iq4u = { game, board };
+    }
 
-  // UI button wiring
-  document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
-  document.getElementById('flipBtn').onclick = () => board.flip();
-  document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves=[]; stepIndex=0; board.position('start'); updateFen(); refreshMoves(); };
-  document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
-  document.getElementById('orientationSelect').onchange = function(){ board.destroy(); createBoardInstance(); };
-  document.getElementById('loadFenBtn').onclick = () => {
-    const txt = document.getElementById('pgnInput').value.trim(); if (!txt) { alert('Paste FEN first'); return; }
-    if (!game.load(txt)){ alert('Invalid FEN'); return; }
-    pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMoves();
-  };
-  document.getElementById('loadPgnBtn').onclick = () => {
-    const pgn = document.getElementById('pgnInput').value.trim(); if (!pgn){ alert('Paste PGN'); return; }
-    const tmp = new Chess(); let ok=true;
-    try { ok = tmp.load_pgn ? tmp.load_pgn(pgn) : tmp.loadPgn ? tmp.loadPgn(pgn) : tmp.load(pgn); } catch(e){ ok=false; }
-    if (!ok){ alert('Invalid PGN'); return; }
-    pgnMoves = tmp.history(); stepIndex=0; game.reset(); board.position('start'); updateFen(); refreshMoves();
-  };
-  document.getElementById('nextBtn').onclick = () => {
-    if (pgnMoves.length===0 || stepIndex>=pgnMoves.length) return;
-    const m = game.move(pgnMoves[stepIndex], { sloppy:true }); if (m===null){ alert('Could not apply move'); return; }
-    stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
-  };
-  document.getElementById('prevBtn').onclick = () => { if (pgnMoves.length===0 || stepIndex<=0) return; game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves(); };
-
-  setStatus('Board ready.', false);
-}
-
-window.addEventListener('load', init);
-</script>
+    // start on load
+    window.addEventListener('load', start);
+  })();
+  </script>
 </body>
 </html>
