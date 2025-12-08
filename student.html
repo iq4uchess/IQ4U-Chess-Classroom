@@ -3,27 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board (robust loader)</title>
+  <title>IQ4U — Student Board (local Chess.js)</title>
 
-  <!-- chessboard.js CSS (cdnjs recommended) -->
+  <!-- chessboard.js CSS (cdnjs) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
   <style>
     body{ font-family: Arial, sans-serif; margin:16px; background:#f6f7fb; color:#111; }
     .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
-    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer;}
-    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start;}
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
     #board{ width:400px; }
     .panel{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
     #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; }
     textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
-    .warn { background:#fff3cd; border:1px solid #ffeeba; padding:10px; border-radius:6px; color:#856404; margin-bottom:12px; }
-    .error { background:#f8d7da; border:1px solid #f5c6cb; padding:10px; border-radius:6px; color:#721c24; margin-bottom:12px; }
+    .errorBox{ background:#ffefef; border:1px solid #ffd6d6; color:#7a1f1f; padding:8px; border-radius:6px; margin-bottom:12px; display:none; }
     @media (max-width:900px){ .container{ grid-template-columns:1fr; } #board{ width:100%; } .controls{ justify-content:center; } }
   </style>
 </head>
 <body>
-  <div id="statusBox" class="warn" style="display:none"></div>
+
+  <div id="errorBox" class="errorBox"></div>
 
   <div class="controls">
     <button id="undoBtn">Undo</button>
@@ -70,200 +70,139 @@
       <div class="panel small">
         <strong>Notes</strong>
         <ul>
-          <li>This page will try multiple CDN sources if the first fails.</li>
-          <li>If all CDNs are blocked, self-host <code>chess.min.js</code> in your repo and update the path below (instructions show automatically).</li>
+          <li>Drag pieces — only legal moves allowed (Chess.js validates).</li>
+          <li>Load PGN then use Next/Previous to step through moves.</li>
         </ul>
       </div>
     </div>
   </div>
 
-  <!-- jQuery (needed by chessboard.js example code) -->
+  <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-  <!-- Chessboard.js (stable cdnjs build) -->
+  <!-- LOCAL Chess.js - loaded first from your uploaded file -->
+  <script src="js/libs/chess.min.js"></script>
+
+  <!-- Chessboard.js (cdnjs build) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
-  <!--
-    Robust dynamic loader for Chess.js (tries several CDNs)
-    It will try the providers in `candidates` sequentially.
-  -->
   <script>
+    // Quick runtime checks and visible error if something didn't load
+    const errorBox = document.getElementById('errorBox');
+    function showError(msg){
+      errorBox.style.display = 'block';
+      errorBox.textContent = msg;
+      console.error(msg);
+    }
+
+    if (typeof Chess === 'undefined') {
+      showError('Chess.js failed to load from local file: js/libs/chess.min.js. Please confirm the file exists at that path and is publicly accessible on GitHub Pages.');
+      // stop further execution
+      throw new Error('Chess.js not available');
+    }
+
+    if (typeof Chessboard === 'undefined') {
+      showError('Chessboard.js failed to load from CDN. Check network or try another browser.');
+      throw new Error('Chessboard.js not available');
+    }
+
+    // Main app
     (function(){
-      const statusBox = document.getElementById('statusBox');
-      function setStatus(type, msg, show=true) {
-        statusBox.className = type === 'error' ? 'error' : 'warn';
-        statusBox.textContent = msg;
-        statusBox.style.display = show ? 'block' : 'none';
+      const game = new Chess();
+      let board = null;
+      let pgnMoves = [];
+      let stepIndex = 0;
+      let orientation = document.getElementById('orientationSelect').value || 'white';
+
+      function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
+
+      function refreshMoves(){
+        const hist = game.history();
+        let html = '';
+        if (pgnMoves.length > 0){
+          html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+          for (let i=0;i<pgnMoves.length;i++){
+            const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' : 'style="padding:6px;border-radius:6px;"';
+            html += `<div ${cls}>${pgnMoves[i]}</div>`;
+          }
+          html += '</div><hr>';
+        }
+        for (let i = 0; i < hist.length; i += 2) {
+          const no = Math.floor(i/2) + 1;
+          const w = hist[i] || '';
+          const b = hist[i+1] || '';
+          html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${w} ${b}</div>`;
+        }
+        document.getElementById('movesList').innerHTML = html || '<div class="small">No moves yet.</div>';
       }
 
-      // candidate CDN URLs for UMD/global build of Chess.js (no ESM export)
-      const candidates = [
-        "https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.0/chess.min.js",
-        "https://unpkg.com/chess.js@0.13.0/chess.min.js",
-        "https://cdn.jsdelivr.net/npm/chess.js@0.13.0/chess.min.js",
-        // Add more fallback URLs here if you prefer
-      ];
-
-      // load script sequentially until one succeeds
-      function loadSequential(list, onLoaded, onAllFailed) {
-        if (!list || list.length === 0) { onAllFailed(); return; }
-        const url = list.shift();
-        console.log("Attempting to load Chess.js from", url);
-        const s = document.createElement('script');
-        s.src = url;
-        s.async = false;
-        s.onload = function() {
-          console.log("Loaded Chess.js from", url);
-          // quick sanity check
-          if (typeof Chess === 'function' || typeof Chess === 'object') {
-            onLoaded(url);
-          } else {
-            console.warn("Loaded file but Chess global not found:", url);
-            // try next
-            loadSequential(list, onLoaded, onAllFailed);
-          }
-        };
-        s.onerror = function(e) {
-          console.warn("Failed to load Chess.js from", url, e);
-          // try the next URL
-          loadSequential(list, onLoaded, onAllFailed);
-        };
-        document.head.appendChild(s);
+      function onDrop(source, target){
+        const move = game.move({ from: source, to: target, promotion: 'q' });
+        if (move === null) return 'snapback';
+        pgnMoves = []; stepIndex = 0;
+        updateFen(); refreshMoves();
       }
 
-      // after script loaded, initialize the chess UI; if fails, show helpful message
-      loadSequential(candidates.slice(), function(successUrl){
-        // success callback
-        setStatus('ok', 'Chess.js loaded from: ' + successUrl, false); // hide by default, but console log
-        initApp();
-      }, function(){
-        // all failed
-        const msg = "All CDN attempts to load Chess.js failed. If you are on a network with strict CSP/adblock, please self-host chess.min.js in your repo and update student.html to point to it. See instructions printed to console.";
-        console.error(msg);
-        setStatus('error', msg, true);
-        // show helpful instructions in console
-        console.group("IQ4U Chess.js fallback instructions");
-        console.log("1) Download chess.min.js (UMD/global) from a machine that can access the internet:");
-        console.log("   https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.0/chess.min.js");
-        console.log("2) Add the file to your GitHub repo (e.g. at /js/chess.min.js) and commit.");
-        console.log("3) Edit student.html script loader candidates list to include: '/js/chess.min.js' as the first entry.");
-        console.log("4) If you want me to produce a version pre-bundled with chess.min.js, tell me and I'll give the exact file text.");
-        console.groupEnd();
-      });
+      function onSnapEnd(){ board.position(game.fen()); }
 
-      // The application code (initializes Chessboard + Chess.js behaviors).
-      // This function is called after Chess.js has loaded successfully.
-      function initApp(){
-        // Safety checks for required globals
-        if (typeof Chess === 'undefined') {
-          setStatus('error', 'Chess.js loaded but Chess global is not present. See console.', true);
-          return;
-        }
-        if (typeof Chessboard === 'undefined') {
-          setStatus('error', 'Chessboard.js did not load. Check your network and extensions.', true);
-          return;
-        }
+      function initBoard(){
+        if (board && typeof board.destroy === 'function') board.destroy();
+        board = Chessboard('board', {
+          draggable: true,
+          position: 'start',
+          orientation: orientation,
+          onDrop: onDrop,
+          onSnapEnd: onSnapEnd,
+          pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
+        });
+        updateFen(); refreshMoves();
+      }
 
-        // Basic game/board state
-        const game = new Chess();
-        let board = null;
-        let pgnMoves = [];
-        let stepIndex = 0;
-        let orientation = document.getElementById('orientationSelect').value || 'white';
+      // Buttons
+      document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
+      document.getElementById('flipBtn').onclick = () => { board.flip(); };
+      document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves = []; stepIndex = 0; board.position('start'); updateFen(); refreshMoves(); };
+      document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
+      document.getElementById('orientationSelect').onchange = function(){ orientation = this.value; initBoard(); };
 
-        function updateFen(){ document.getElementById('fenDisplay').textContent = game.fen(); }
+      document.getElementById('loadFenBtn').onclick = () => {
+        const txt = document.getElementById('pgnInput').value.trim();
+        if (!txt) { alert('Paste a FEN in the textarea then click Load FEN'); return; }
+        const ok = game.load(txt);
+        if (!ok) { alert('Invalid FEN'); return; }
+        pgnMoves = []; stepIndex = 0; board.position(game.fen()); updateFen(); refreshMoves();
+      };
 
-        function refreshMoves(){
-          const hist = game.history();
-          let html = '';
-          if (pgnMoves.length>0){
-            html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
-            for (let i=0;i<pgnMoves.length;i++){
-              const cls = (i < stepIndex) ? 'style="padding:6px;border-radius:6px;background:#e6f0ff;font-weight:600;"' : 'style="padding:6px;border-radius:6px;"';
-              html += `<div ${cls}>${pgnMoves[i]}</div>`;
-            }
-            html += '</div><hr>';
-          }
-          for (let i=0;i<hist.length;i+=2){
-            const no = Math.floor(i/2)+1;
-            const w = hist[i] || '';
-            const b = hist[i+1] || '';
-            html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${w} ${b}</div>`;
-          }
-          document.getElementById('movesList').innerHTML = html || '<div class="small">No moves yet.</div>';
-        }
+      document.getElementById('loadPgnBtn').onclick = () => {
+        const pgn = document.getElementById('pgnInput').value.trim();
+        if (!pgn) { alert('Paste PGN then click Load PGN'); return; }
+        const tmp = new Chess();
+        let ok = true;
+        try {
+          if (typeof tmp.load_pgn === 'function') ok = tmp.load_pgn(pgn);
+          else if (typeof tmp.loadPgn === 'function') ok = tmp.loadPgn(pgn);
+          else ok = tmp.load(pgn);
+        } catch(e) { ok = false; }
+        if (!ok) { alert('Could not parse PGN. Make sure PGN is valid.'); return; }
+        pgnMoves = tmp.history().slice(); stepIndex = 0; game.reset(); board.position('start'); updateFen(); refreshMoves();
+      };
 
-        function onDrop(source, target){
-          const move = game.move({ from: source, to: target, promotion: 'q' });
-          if (move === null) return 'snapback';
-          pgnMoves = []; stepIndex = 0;
-          updateFen(); refreshMoves();
-        }
+      document.getElementById('nextBtn').onclick = () => {
+        if (pgnMoves.length === 0 || stepIndex >= pgnMoves.length) return;
+        const m = game.move(pgnMoves[stepIndex], { sloppy: true });
+        if (m === null) { alert('Failed to apply move: ' + pgnMoves[stepIndex]); return; }
+        stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
+      };
 
-        function onSnapEnd(){ board.position(game.fen()); }
+      document.getElementById('prevBtn').onclick = () => {
+        if (pgnMoves.length === 0 || stepIndex <= 0) return;
+        game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves();
+      };
 
-        function initBoard(){
-          if (board && typeof board.destroy === 'function') board.destroy();
-          board = Chessboard('board', {
-            draggable:true,
-            position:'start',
-            orientation: orientation,
-            onDrop: onDrop,
-            onSnapEnd: onSnapEnd,
-            pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
-          });
-          updateFen(); refreshMoves();
-        }
-
-        // Wire UI buttons
-        document.getElementById('undoBtn').onclick = () => { game.undo(); board.position(game.fen()); updateFen(); refreshMoves(); };
-        document.getElementById('flipBtn').onclick = () => { board.flip(); };
-        document.getElementById('resetBtn').onclick = () => { game.reset(); pgnMoves=[]; stepIndex=0; board.position('start'); updateFen(); refreshMoves(); };
-        document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value=''; };
-        document.getElementById('orientationSelect').onchange = function(){ orientation = this.value; initBoard(); };
-
-        document.getElementById('loadFenBtn').onclick = () => {
-          const txt = document.getElementById('pgnInput').value.trim();
-          if (!txt) { alert('Paste a FEN in the textarea then click Load FEN'); return; }
-          const ok = game.load(txt);
-          if (!ok) { alert('Invalid FEN'); return; }
-          pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMoves();
-        };
-
-        document.getElementById('loadPgnBtn').onclick = () => {
-          const pgn = document.getElementById('pgnInput').value.trim();
-          if (!pgn) { alert('Paste a PGN then click Load PGN'); return; }
-          const tmp = new Chess();
-          let ok = true;
-          try {
-            if (typeof tmp.load_pgn === 'function') ok = tmp.load_pgn(pgn);
-            else if (typeof tmp.loadPgn === 'function') ok = tmp.loadPgn(pgn);
-            else ok = tmp.load(pgn);
-          } catch(e){ ok = false; }
-          if (!ok) { alert('Could not parse PGN. Make sure PGN is valid.'); return; }
-          pgnMoves = tmp.history().slice(); stepIndex = 0; game.reset(); board.position('start'); updateFen(); refreshMoves();
-        };
-
-        document.getElementById('nextBtn').onclick = () => {
-          if (pgnMoves.length===0 || stepIndex>=pgnMoves.length) return;
-          const m = game.move(pgnMoves[stepIndex], { sloppy:true });
-          if (m===null){ alert('Failed to apply move: ' + pgnMoves[stepIndex]); return; }
-          stepIndex++; board.position(game.fen()); updateFen(); refreshMoves();
-        };
-
-        document.getElementById('prevBtn').onclick = () => {
-          if (pgnMoves.length===0 || stepIndex<=0) return;
-          game.undo(); stepIndex--; board.position(game.fen()); updateFen(); refreshMoves();
-        };
-
-        // initialize the UI now
-        initBoard();
-
-        // Expose for debugging
-        window._iq4u = { game, board, pgnMoves };
-        console.info("IQ4U board initialized. Chess.js version:", (Chess && Chess.version) || 'unknown');
-      } // initApp end
-
+      // Init board now
+      initBoard();
+      // Expose for debugging
+      window._iq4u = { game, board, pgnMoves };
     })();
   </script>
 </body>
