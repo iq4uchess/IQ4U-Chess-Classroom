@@ -74,7 +74,7 @@
   <!-- jQuery (optional) -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-  <!-- --- IMPORTANT: ensure chessboard.js is present BEFORE our app script --- -->
+  <!-- ensure chessboard.js is present BEFORE our app script -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
   <!-- =========================
@@ -119,12 +119,10 @@
     async function ensureChess(){
       if (typeof Chess !== 'undefined') return true;
       try{
-        // try dynamic import first (works if server serves proper module)
         const mod = await import(CHESS_URL + '?t=' + Date.now());
         const candidate = mod.default || mod.Chess || mod;
         if (candidate){ window.Chess = candidate; return true; }
       }catch(err){ /* ignore */ }
-      // fallback to script tag (synchronous load)
       return new Promise(resolve => {
         const s = document.createElement('script');
         s.src = CHESS_URL + '?t=' + Date.now();
@@ -175,7 +173,6 @@
         return 'snapback';
       }
 
-      // Compare against expected SAN at current index
       const expected = pgnMoves[stepIndex];
       if (expected){
         if (move.san !== expected){
@@ -205,7 +202,6 @@
       if (board && typeof board.destroy === 'function') {
         try { board.destroy(); } catch(e) {}
       }
-      // IMPORTANT: Chessboard global must exist here
       board = Chessboard('board', {
         draggable: true,
         position: game ? game.fen() : 'start',
@@ -216,27 +212,44 @@
       });
     }
 
-    // PGN -> SAN moves extraction using parser.pgn2json (preferred) with chess.js fallback
+    // ---------- SAFER PGN parsing ----------
+    // Try inline parser, but guard it heavily and silently fall back to the tokenizer if any error occurs.
     function extractMovesFromPGN(pgn){
-      try{
-        if (typeof parser !== 'undefined' && typeof parser.pgn2json === 'function'){
+      // Try inline parser but do not allow it to throw into console.
+      if (typeof parser !== 'undefined' && typeof parser.pgn2json === 'function') {
+        try {
+          // call parser inside try and only use result if it looks valid
           const jsonStr = parser.pgn2json(pgn);
-          const parsed = JSON.parse(jsonStr);
-          if (parsed && Array.isArray(parsed.moves) && parsed.moves.length>0){
-            return { moves: parsed.moves.filter(m=>typeof m==='string' && m.trim()), headers: parsed.str || {} };
+          if (typeof jsonStr === 'string' && jsonStr.length > 10) {
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed && Array.isArray(parsed.moves) && parsed.moves.length>0){
+                return { moves: parsed.moves.filter(m=>typeof m==='string' && m.trim()), headers: parsed.str || {} };
+              }
+            } catch(eJson) {
+              // parsing JSON failed — fall through to tokenizer
+            }
           }
+        } catch(eParser){
+          // swallow the parser error silently (do not log). fallback below.
         }
-      }catch(e){ console.warn('parser.pgn2json failed', e); }
+      }
 
-      try{
-        const tmp = new Chess();
-        let ok = false;
-        try { ok = typeof tmp.load_pgn === 'function' ? tmp.load_pgn(pgn) : tmp.load ? tmp.load(pgn) : false; } catch(e2){ ok = false; }
-        if (ok){
-          return { moves: tmp.history(), headers: {} };
+      // Fallback: try Chess.js load_pgn if available
+      if (typeof Chess !== 'undefined') {
+        try {
+          const tmp = new Chess();
+          let ok = false;
+          try { ok = typeof tmp.load_pgn === 'function' ? tmp.load_pgn(pgn) : (typeof tmp.load === 'function' ? tmp.load(pgn) : false); } catch(e2){ ok = false; }
+          if (ok){
+            return { moves: tmp.history(), headers: {} };
+          }
+        } catch(e) {
+          // ignore
         }
-      }catch(e){ console.warn('Chess.js fallback pgn load failed', e); }
+      }
 
+      // Final fallback: robust manual strip & tokenization (works for most PGNs)
       try{
         let s = pgn.replace(/\{[^}]*\}/g,' ');
         s = s.replace(/%[^\n]*\n/g,' ');
@@ -245,19 +258,23 @@
         s = s.replace(/\s+/g,' ').trim();
         const toks = s.split(' ').filter(t=> t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
         return { moves: toks, headers: {} };
-      }catch(e){ return { moves: [], headers: {} }; }
+      }catch(e){
+        return { moves: [], headers: {} };
+      }
     }
 
+    // set up puzzle: apply starting FEN if provided and prepare pgnMoves
     function preparePuzzleFromPGN(pgn){
       stopAutoplay();
       const result = extractMovesFromPGN(pgn);
       pgnMoves = result.moves || [];
       stepIndex = 0;
 
+      // If parser provided FEN header with SetUp=1, try to load it
       let startFen = null;
       if (result.headers && result.headers.FEN){
         startFen = result.headers.FEN;
-        if (result.headers.SetUp !== undefined && result.headers.SetUp !== '1') startFen = null;
+        if (result.headers.SetUp !== undefined && result.headers.SetUp !== '1') startFen = null; // only use FEN if SetUp=1
       }
 
       try{
@@ -270,7 +287,7 @@
       }
 
       updateFen();
-      refreshMovesUI();
+      refreshMovesUI(); // (hidden by default)
       chooseTheme().then(theme => {
         currentTheme = theme;
         createBoard(currentTheme);
@@ -281,7 +298,7 @@
     function scheduleAutoplayIfOpponentToMove(){
       stopAutoplay();
       const studentColor = 'w';
-      const speed = speedMsDefault;
+      const speed = Math.max(60, speedMsDefault);
 
       function step(){
         if (!game || stepIndex >= pgnMoves.length) { stopAutoplay(); return; }
@@ -314,6 +331,7 @@
 
     function stopAutoplay(){ if (autoplayTimer) { clearTimeout(autoplayTimer); autoplayTimer = null; } }
 
+    // UI wiring
     function wireUI(){
       document.getElementById('undoBtn').onclick = () => { if (!game) return; game.undo(); board.position(game.fen()); updateFen(); };
       document.getElementById('flipBtn').onclick = () => board.flip();
@@ -383,6 +401,7 @@
       };
     }
 
+    // boot
     window.addEventListener('load', async () => {
       const okChess = await ensureChess();
       if (!okChess){ console.error('Chess.js failed to load'); alert('Chess.js failed to load. See console.'); return; }
