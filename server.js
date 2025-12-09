@@ -22,8 +22,7 @@ const server = http.createServer(app);
 
 // socket.io attached to same HTTP server (no CORS headaches when client is served by this server)
 const io = new Server(server, {
-  // since client is same origin this isn't strictly necessary, but keep defaults
-  // pingInterval/pingTimeout can be tuned if needed
+  // default options fine for same-origin
 });
 
 const online = {}; // { socketId: { email } }
