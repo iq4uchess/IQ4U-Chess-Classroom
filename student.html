@@ -74,6 +74,9 @@
   <!-- jQuery (optional) -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
+  <!-- --- IMPORTANT: ensure chessboard.js is present BEFORE our app script --- -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+
   <!-- =========================
        INLINE PGN PARSER (1.3.7)
        This defines global `parser.pgn2json()`.
@@ -154,7 +157,6 @@
     function updateFen(){ if(game) fenDisplay.textContent = game.fen(); else fenDisplay.textContent = ''; }
 
     function refreshMovesUI(){
-      // Populate movesList with all moves (SAN) — used as "answer" only; hidden by default
       if (!pgnMoves || pgnMoves.length===0){ movesList.innerHTML = '<div class="small">No moves loaded.</div>'; return; }
       let html = '';
       for (let i=0;i<pgnMoves.length;i+=2){
@@ -167,7 +169,6 @@
     // chessboard.js callbacks
     function onDrop(source, target){
       if (!game) return 'snapback';
-      // try to make the move
       const move = game.move({ from: source, to: target, promotion: 'q' });
       if (move === null) {
         setMsg('Illegal move', 1200);
@@ -178,22 +179,18 @@
       const expected = pgnMoves[stepIndex];
       if (expected){
         if (move.san !== expected){
-          // wrong move: undo and snapback
           game.undo();
           setTimeout(()=> { board.position(game.fen()); }, 60);
           setMsg('Wrong move — that is not the solution', 1400);
           return 'snapback';
         } else {
-          // correct move by student
           stepIndex++;
           board.position(game.fen());
           updateFen();
           refreshMovesUI();
-          // after student move, autoplay opponent moves if any
           scheduleAutoplayIfOpponentToMove();
         }
       } else {
-        // no expected move (maybe puzzle finished) — accept but stop
         board.position(game.fen());
         updateFen();
       }
@@ -208,6 +205,7 @@
       if (board && typeof board.destroy === 'function') {
         try { board.destroy(); } catch(e) {}
       }
+      // IMPORTANT: Chessboard global must exist here
       board = Chessboard('board', {
         draggable: true,
         position: game ? game.fen() : 'start',
@@ -220,35 +218,25 @@
 
     // PGN -> SAN moves extraction using parser.pgn2json (preferred) with chess.js fallback
     function extractMovesFromPGN(pgn){
-      // 1) try parser.pgn2json
       try{
         if (typeof parser !== 'undefined' && typeof parser.pgn2json === 'function'){
           const jsonStr = parser.pgn2json(pgn);
           const parsed = JSON.parse(jsonStr);
-          // parsed.moves is array of SAN-like tokens (may include move numbers removed by parser)
           if (parsed && Array.isArray(parsed.moves) && parsed.moves.length>0){
             return { moves: parsed.moves.filter(m=>typeof m==='string' && m.trim()), headers: parsed.str || {} };
           }
         }
-      }catch(e){
-        console.warn('parser.pgn2json failed', e);
-      }
+      }catch(e){ console.warn('parser.pgn2json failed', e); }
 
-      // 2) fallback: try Chess.js to load_pgn
       try{
         const tmp = new Chess();
-        // try either load_pgn or load
         let ok = false;
-        try { ok = typeof tmp.load_pgn === 'function' ? tmp.load_pgn(pgn) : (typeof tmp.load === 'function' ? tmp.load(pgn) : false); } catch(e2){ ok = false; }
+        try { ok = typeof tmp.load_pgn === 'function' ? tmp.load_pgn(pgn) : tmp.load ? tmp.load(pgn) : false; } catch(e2){ ok = false; }
         if (ok){
           return { moves: tmp.history(), headers: {} };
         }
-      }catch(e){
-        console.warn('Chess.js fallback pgn load failed', e);
-      }
+      }catch(e){ console.warn('Chess.js fallback pgn load failed', e); }
 
-      // final fallback: naive strip and tokenization
-      // Strip comments and variations, remove tags, and return tokens (this is weaker)
       try{
         let s = pgn.replace(/\{[^}]*\}/g,' ');
         s = s.replace(/%[^\n]*\n/g,' ');
@@ -257,26 +245,21 @@
         s = s.replace(/\s+/g,' ').trim();
         const toks = s.split(' ').filter(t=> t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
         return { moves: toks, headers: {} };
-      }catch(e){
-        return { moves: [], headers: {} };
-      }
+      }catch(e){ return { moves: [], headers: {} }; }
     }
 
-    // set up puzzle: apply starting FEN if provided and prepare pgnMoves
     function preparePuzzleFromPGN(pgn){
       stopAutoplay();
       const result = extractMovesFromPGN(pgn);
       pgnMoves = result.moves || [];
       stepIndex = 0;
 
-      // If parser provided FEN header with SetUp=1, try to load it
       let startFen = null;
       if (result.headers && result.headers.FEN){
         startFen = result.headers.FEN;
-        if (result.headers.SetUp !== undefined && result.headers.SetUp !== '1') startFen = null; // only use FEN if SetUp=1
+        if (result.headers.SetUp !== undefined && result.headers.SetUp !== '1') startFen = null;
       }
 
-      // initialize game
       try{
         if (typeof Chess === 'undefined'){ setMsg('Chess.js not loaded. See console.', 0); movesList.style.display='block'; movesList.textContent = pgn; return; }
         game = startFen ? new Chess(startFen) : new Chess();
@@ -287,34 +270,25 @@
       }
 
       updateFen();
-      refreshMovesUI(); // (hidden by default)
-      // init board with piece theme and orientation
+      refreshMovesUI();
       chooseTheme().then(theme => {
         currentTheme = theme;
         createBoard(currentTheme);
-        // If FEN indicates black to move OR the first move in pgn is a black move (like "1... Bg4"),
-        // we should autoplay opponent moves until it becomes student's turn (student assumed to be White).
         scheduleAutoplayIfOpponentToMove();
       });
     }
 
-    // autoplay: apply opponent moves automatically while it is not student's turn (student = White)
     function scheduleAutoplayIfOpponentToMove(){
       stopAutoplay();
-      const studentColor = 'w'; // fixed: student is always White (no checkbox)
-      // while game exists and it's not White to move, apply moves automatically with delay
-      const speed = Math.max(60, parseInt(document.getElementById('speed') ? document.getElementById('speed').value : speedMsDefault, 10) || speedMsDefault);
+      const studentColor = 'w';
+      const speed = speedMsDefault;
 
       function step(){
-        // if puzzle finished or no move at index, stop
-        if (!game || stepIndex >= pgnMoves.length) { stopAutoplay(); setAllowedMoveForStudent(); return; }
-        // If it is student's turn, stop autoplay
-        if (game.turn() === studentColor) { stopAutoplay(); setAllowedMoveForStudent(); return; }
-        // Otherwise apply next move (opponent)
+        if (!game || stepIndex >= pgnMoves.length) { stopAutoplay(); return; }
+        if (game.turn() === studentColor) { stopAutoplay(); return; }
         const san = pgnMoves[stepIndex];
         const res = game.move(san, { sloppy: true });
         if (!res){
-          // invalid move in PGN: show notation and stop
           console.warn('Invalid PGN move at', stepIndex, san);
           movesList.style.display = 'block';
           setMsg('PGN contains invalid move. See notation.', 0);
@@ -324,35 +298,22 @@
         stepIndex++;
         if (board) board.position(game.fen());
         updateFen();
-        // continue until student's turn or moves exhausted
         if (stepIndex < pgnMoves.length && game.turn() !== studentColor){
           autoplayTimer = setTimeout(step, speed);
         } else {
-          setAllowedMoveForStudent();
           stopAutoplay();
         }
       }
 
-      // begin
       if (game.turn() !== studentColor && stepIndex < pgnMoves.length){
         autoplayTimer = setTimeout(step, speed);
       } else {
-        setAllowedMoveForStudent();
+        // no-op
       }
     }
 
     function stopAutoplay(){ if (autoplayTimer) { clearTimeout(autoplayTimer); autoplayTimer = null; } }
 
-    // set allowed moves for student: restrict so student can only play expected SAN at stepIndex
-    function setAllowedMoveForStudent(){
-      // chessboard.js does not provide per-square dest restriction like chessground.
-      // We'll enforce restriction in onDrop by rejecting wrong SAN moves (already implemented).
-      // To provide visual guidance we could highlight source square; for now, keep behavior simple.
-      // (Board remains draggable — onDrop will accept or snapback.)
-      // No extra code needed here for chessboard.js approach.
-    }
-
-    // UI wiring
     function wireUI(){
       document.getElementById('undoBtn').onclick = () => { if (!game) return; game.undo(); board.position(game.fen()); updateFen(); };
       document.getElementById('flipBtn').onclick = () => board.flip();
@@ -367,14 +328,12 @@
         pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMovesUI();
       };
 
-      // Load PGN: prepare puzzle and autoplay opponent moves automatically
       document.getElementById('loadPgnBtn').onclick = () => {
         const pgn = document.getElementById('pgnInput').value.trim();
         if (!pgn){ alert('Paste PGN'); return; }
         preparePuzzleFromPGN(pgn);
       };
 
-      // Show/hide answer
       document.getElementById('showAnswerBtn').onclick = function(){
         if (movesList.style.display === 'none' || movesList.style.display === '') {
           movesList.style.display = 'block';
@@ -385,13 +344,11 @@
         }
       };
 
-      // file upload: take first PGN in file
       document.getElementById('pgnFile').addEventListener('change', function(ev){
         const file = ev.target.files[0]; if(!file) return;
         const reader = new FileReader();
         reader.onload = function(e){
           const text = e.target.result;
-          // naive split by blank lines/events; we take first puzzle
           const parts = text.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
           const chosen = parts.length>0 ? parts[0] : text;
           document.getElementById('pgnInput').value = chosen;
@@ -401,7 +358,6 @@
       });
 
       document.getElementById('nextBtn').onclick = function(){
-        // apply next PGN move (regardless of side)
         if (!game || stepIndex >= pgnMoves.length) return;
         const san = pgnMoves[stepIndex];
         const res = game.move(san, { sloppy:true });
@@ -419,17 +375,14 @@
         updateFen();
       };
 
-      // orientation select
       document.getElementById('orientationSelect').onchange = function(){
         if (board) {
-          // re-create board with new orientation while preserving position
           const theme = currentTheme || FALLBACK_THEME;
           createBoard(theme);
         }
       };
     }
 
-    // boot sequence
     window.addEventListener('load', async () => {
       const okChess = await ensureChess();
       if (!okChess){ console.error('Chess.js failed to load'); alert('Chess.js failed to load. See console.'); return; }
@@ -441,11 +394,9 @@
       refreshMovesUI();
       wireUI();
 
-      // Auto-load if there's PGN text already in textarea
       const sample = document.getElementById('pgnInput').value.trim();
       if (sample) preparePuzzleFromPGN(sample);
 
-      // expose debug
       window._iq4u = { game, board, currentTheme, pgnMoves };
       console.log('IQ4U puzzle loaded. Piece theme:', currentTheme);
     });
