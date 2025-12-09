@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>IQ4U — Student Puzzle (centered top board + resizer)</title>
+  <title>IQ4U — Student Puzzle (centered top board + resizer) - FIXED MULTIPLAYER SYNC</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
@@ -163,7 +163,7 @@
   <!-- Inline PGN parser (unchanged) -->
   <script>
 /* @module Chess PGN Parser, @version 1.3.7 (same inline as before) */
-!function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
+!function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}return n}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
   </script>
 
   <!-- Main script (most logic preserved; socket.io parts replaced by Firebase RTDB below) -->
@@ -200,7 +200,7 @@
     const pairedBubble = document.getElementById('pairedBubble');
 
     // Set initial dropdown state: show "No Player" and disable challenge
-    onlinePlayersBottom.innerHTML = '<option value=\"\" disabled selected>No Player</option>';
+    onlinePlayersBottom.innerHTML = '<option value="" disabled selected>No Player</option>';
     challengeBtnBottom.disabled = true;
     challengeBtnBottom.setAttribute('aria-disabled', 'true');
 
@@ -217,8 +217,8 @@
 
     // multiplayer state (migrated to Firebase)
     let isPaired = false;
-    let myColor = null; // "white" or "black"
-    let myEmail = '';
+    let myColor = null; // 'white' or 'black' when paired
+    let pairedGameId = null;
 
     // puzzles state
     let puzzles = [];       // array of PGN strings
@@ -265,8 +265,20 @@
     // chessboard callbacks
     function onDrop(source, target){
       if(!game) return 'snapback';
+
+      // Enforce multiplayer permissions when paired
+      if(isPaired && myColor){
+        const piece = game.get(source);
+        if(!piece){ setMsg('No piece at source', 1000); return 'snapback'; }
+        const ourColorChar = (myColor === 'white' ? 'w' : 'b');
+        if(piece.color !== ourColorChar){ setMsg('That is not your piece', 1200); return 'snapback'; }
+        if(game.turn() !== ourColorChar){ setMsg('Not your turn', 1200); return 'snapback'; }
+      }
+
       const move = game.move({ from: source, to: target, promotion:'q' });
       if(move === null){ setMsg('Illegal move', 1200); return 'snapback'; }
+
+      // If this is a puzzle flow, verify expected SAN
       const expected = pgnMoves[stepIndex];
       if(expected){
         if(move.san !== expected){
@@ -281,6 +293,7 @@
           try{ if(isPaired && window.firebaseMultiplayer) window.firebaseMultiplayer.emitMove(game.fen()); }catch(e){}
         }
       } else {
+        // Normal multiplayer move: update board and emit
         board.position(game.fen()); fenDisplay.textContent = game.fen();
         if(isPaired && window.firebaseMultiplayer){
           try{ window.firebaseMultiplayer.emitMove(game.fen()); }catch(e){}
@@ -526,6 +539,26 @@
       const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 920;
       setBoardSize(initial);
       // Firebase multiplayer initialized below; does not auto-register until Join pressed
+
+      // Register a global receiver for firebase pairing events. Firebase code will call window._onFirebaseGameStart when a game starts.
+      window._onFirebaseGameStart = function(data){
+        try{
+          if(!data) return;
+          isPaired = true;
+          pairedGameId = data.gameId || null;
+          myColor = data.color || null; // 'white' or 'black'
+          // update UI
+          pairedBubble.style.display = 'inline-block';
+          multiplayStatus.textContent = 'Paired: You are ' + (myColor ? (myColor.charAt(0).toUpperCase() + myColor.slice(1)) : 'player');
+          // expose getters if firebaseMultiplayer exists
+          if(window.firebaseMultiplayer){
+            window.firebaseMultiplayer.getMyColor = ()=> myColor;
+            window.firebaseMultiplayer.getMyId = window.firebaseMultiplayer.getMyId || (()=>null);
+            window.firebaseMultiplayer.currentGameId = pairedGameId;
+          }
+        }catch(e){ console.warn('onFirebaseGameStart failed', e); }
+      };
+
     }
 
     boot();
@@ -554,9 +587,7 @@
         if(typeof game.load === 'function') game.load(newFen);
         if(board) board.position(newFen);
         fenDisplay.textContent = newFen;
-        if(isPaired && window.firebaseMultiplayer){
-          window.firebaseMultiplayer.emitMove(newFen);
-        }
+        // When we programmatically set a board from remote, we should not re-emit it.
       }catch(e){}
     };
 
@@ -642,7 +673,7 @@
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
       databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "iq4u-chess-classroom",
-      storageBucket: "iq4uchess-classroom.firebasestorage.app",
+      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
@@ -746,11 +777,17 @@
             isPairedLocal = true;
             pairedBubble.style.display = 'inline-block';
             multiplayStatus.textContent = 'Paired: You are Black';
+            // notify challenger via notifications
             db.ref('notifications/' + data.fromId + '/' + gameId).set({ type:'startGame', gameId, white: data.fromId, black: myId });
             challengesRef.child(myId).child(key).remove().catch(()=>{});
             // start watching moves for this game
             watchMoves(gameId);
             window.isPaired = true;
+
+            // Inform board code about pairing (this client is Black)
+            if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: gameId, color: 'black', myId: myId });
+            // expose getters
+            if(window.firebaseMultiplayer) window.firebaseMultiplayer.getMyColor = ()=> 'black';
           });
         } else {
           if(data.fromId){
@@ -766,9 +803,16 @@
           currentGameId = n.gameId;
           watchMoves(currentGameId);
           isPairedLocal = true;
-          if(n.white === myId) multiplayStatus.textContent = 'Paired: You are White';
-          else multiplayStatus.textContent = 'Paired: You are Black';
+          // Decide color for this client
+          const color = (n.white === myId) ? 'white' : ((n.black === myId) ? 'black' : null);
+          if(color) multiplayStatus.textContent = 'Paired: You are ' + (color.charAt(0).toUpperCase() + color.slice(1));
           pairedBubble.style.display = 'inline-block';
+
+          // Inform board code
+          if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: currentGameId, color: color, myId: myId });
+
+          // store currentGameId
+          currentGameId = n.gameId;
         }
         snap.ref.remove().catch(()=>{});
       });
@@ -784,10 +828,18 @@
         movesRef = db.ref('moves/' + gameId);
         movesRef.on('child_added', snap => {
           const m = snap.val();
-          if(m && m.fen){
-            if(typeof window.onBoardMove === 'function') window.onBoardMove(m.fen);
-          } else {
-            // fallback
+          if(!m) return;
+          // ignore moves emitted by ourselves
+          if(m.by && m.by === myId) return;
+          if(m.fen){
+            // safety: if the incoming fen equals our current fen, ignore
+            try{
+              if(typeof window.onBoardMove === 'function'){
+                // Optionally, you can check current board fen before applying
+                if(window.game && typeof window.game.fen === 'function' && window.game.fen() === m.fen) return;
+                window.onBoardMove(m.fen);
+              }
+            }catch(e){ console.warn('apply remote move failed', e); }
           }
         });
       }
@@ -822,7 +874,9 @@
         },
         getMyId: () => myId,
         getMyEmail: () => myEmail,
-        goOffline: goOffline
+        goOffline: goOffline,
+        // placeholders that the board can set or call
+        getMyColor: () => null
       };
 
       // cleanup
