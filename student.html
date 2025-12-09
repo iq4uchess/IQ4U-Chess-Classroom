@@ -3,427 +3,356 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U Student — PGN Loader (robust)</title>
+  <title>IQ4U — Student PGN Viewer (local parser)</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/chessground@8.2.0/dist/chessground.min.css">
+  <!-- Chessground CSS (local) -->
+  <link rel="stylesheet" href="js/libs/chessground.min.css">
 
   <style>
-    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:#f6f7fb; color:#222; margin:16px; }
+    :root { --bg:#f6f7fb; --card:#fff; --muted:#666; --brand:#0b2545; }
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); color:#222; margin:18px; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
     .wrap { display:flex; gap:20px; align-items:flex-start; }
-    .left { width:480px; }
-    .right { flex:1; min-width:360px; }
-    .board-box { background:white; padding:14px; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,40,0.06); }
-    .controls { margin-top:12px; display:flex; gap:8px; }
-    button { border:0; background:#0b2545; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; }
-    button.secondary { background:#2d4a6d; }
-    textarea { width:100%; min-height:140px; font-family: monospace; font-size:13px; padding:10px; border-radius:8px; border:1px solid #e3e7ef; box-sizing:border-box; }
-    .moves-box { background:white; padding:12px; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,40,0.04); min-height:220px; }
-    .move-list { max-height:360px; overflow:auto; padding:6px; font-family:inherit; }
-    .move-item { padding:6px 8px; border-radius:6px; display:inline-block; margin:4px; background:#f1f5f9; cursor:pointer; }
+    .left { width:520px; }
+    .card { background:var(--card); padding:14px; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,40,0.06); }
+    .controls { display:flex; gap:8px; margin-top:10px; align-items:center; }
+    button { border:0; padding:8px 12px; border-radius:8px; cursor:pointer; background:var(--brand); color:#fff; }
+    button.ghost { background:#2d4a6d; }
+    textarea { width:100%; min-height:140px; font-family: monospace; font-size:13px; padding:10px; border-radius:8px; border:1px solid #e6ecf3; box-sizing:border-box; }
+    .moves { margin-top:12px; padding:10px; background:var(--card); border-radius:10px; box-shadow:0 4px 14px rgba(20,20,40,0.04); min-height:160px; }
+    .move-item { display:inline-block; margin:6px 6px 0 0; padding:6px 8px; border-radius:6px; background:#f1f5f9; cursor:pointer; }
     .move-item.current { background:#cfe6ff; }
-    small.meta { display:block; margin-top:8px; color:#555; }
-    .finfo { margin-top:8px; color:#333; font-size:13px; }
-    .top-buttons { display:flex; gap:8px; justify-content:flex-end; margin-bottom:10px; }
+    .meta { margin-top:8px; color:var(--muted); font-size:13px; }
+    .small { font-size:13px; color:var(--muted); }
   </style>
 </head>
 <body>
 
-  <div class="top-buttons">
-    <button id="undoBtn" class="secondary">Undo</button>
-    <button id="prevBtn" class="secondary">Previous</button>
-    <button id="nextBtn" class="secondary">Next</button>
-    <button id="flipBtn">Flip</button>
+  <div class="top">
+    <div><strong>IQ4U — Student PGN Viewer</strong></div>
+    <div class="small">Local parser: <code>js/libs/chess-pgn-parser/pgn-parser.js</code></div>
   </div>
 
   <div class="wrap">
-    <div class="left board-box">
+    <div class="left card">
       <div id="board" style="width:100%;"></div>
 
-      <div class="controls" style="margin-top:12px;">
-        <label for="orientationSelect">Orientation:</label>
-        <select id="orientationSelect" style="margin-left:6px;">
+      <div class="controls">
+        <button id="undoBtn" class="ghost">Undo</button>
+        <button id="prevBtn" class="ghost">Previous</button>
+        <button id="nextBtn" class="ghost">Next</button>
+        <div style="flex:1"></div>
+        <label for="orientation">Orientation:</label>
+        <select id="orientation" style="margin-left:8px;">
           <option value="white">White</option>
           <option value="black">Black</option>
         </select>
-        <div style="flex:1"></div>
-        <button id="loadFenBtn" class="secondary">Load FEN</button>
+        <button id="flipBtn" style="margin-left:8px;">Flip</button>
       </div>
 
-      <div class="finfo">
-        <div><strong>FEN:</strong> <span id="fenText">loading...</span></div>
+      <div class="meta">
+        <div><strong>FEN:</strong> <span id="fenText">-</span></div>
         <div><strong>Turn:</strong> <span id="turnText">-</span></div>
       </div>
     </div>
 
-    <div class="right">
-      <div class="board-box" style="margin-bottom:12px;">
-        <div style="display:flex; gap:8px; align-items:flex-start;">
-          <div style="flex:1">
-            <label><strong>PGN / FEN Input</strong></label>
-            <textarea id="pgnTextarea" placeholder="Paste Lichess-style PGN or FEN here..."></textarea>
-          </div>
-          <div style="width:120px; display:flex; flex-direction:column; gap:8px;">
-            <button id="loadPgnBtn">Load PGN</button>
-            <button id="clearBtn" class="secondary">Clear</button>
-            <button id="resetBtn" class="secondary">Reset</button>
-          </div>
+    <div style="flex:1; min-width:380px;">
+      <div class="card">
+        <label><strong>Paste PGN (Lichess-style supported) or FEN</strong></label>
+        <textarea id="pgnInput" placeholder="Paste full Lichess-style PGN (tags, variations, % directives) or a single FEN line here..."></textarea>
+
+        <div class="controls" style="margin-top:10px;">
+          <button id="loadPgnBtn">Load PGN</button>
+          <button id="loadFenBtn" class="ghost">Load FEN</button>
+          <button id="clearBtn" class="ghost">Clear</button>
+          <div style="flex:1"></div>
+          <button id="resetBtn" class="ghost">Reset</button>
         </div>
       </div>
 
-      <div class="moves-box">
+      <div class="moves">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong>Moves</strong>
-          <small id="movesCount" style="color:#666">No moves yet.</small>
+          <small id="movesCount" class="small">No moves</small>
         </div>
-        <div id="moveList" class="move-list"></div>
+        <div id="movesList" style="margin-top:8px;"></div>
       </div>
 
     </div>
   </div>
 
-  <!-- Script loader + fallback -->
+  <!-- Local libraries (adjust paths if your repo uses different folders) -->
+  <!-- 1) Local chess.js (you said this exists in repo) -->
   <script>
-    // Utility to load a script and return a Promise
-    function loadScript(url, integrity=null, crossOrigin=null) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = url;
-        if (integrity) s.integrity = integrity;
-        if (crossOrigin) s.crossOrigin = crossOrigin;
-        s.onload = () => resolve(url);
-        s.onerror = (e) => reject(new Error('Failed to load ' + url));
-        document.head.appendChild(s);
+    // Attempt to load local chess.min.js dynamically. If it fails, fallback to cdnjs.
+    (function(){
+      function loadScript(src, onload, onerror){
+        const s = document.createElement('script'); s.src = src; s.onload = onload; s.onerror = onerror; document.head.appendChild(s);
+      }
+      // try local first
+      loadScript('js/libs/chess.min.js', function(){ console.log('Loaded local chess.min.js'); }, function(){
+        console.warn('Local chess.min.js failed, loading cdnjs fallback');
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.11.0/chess.min.js', function(){ console.log('Loaded chess.js from cdnjs'); }, function(){ console.error('chess.js failed to load from both local and cdnjs'); });
       });
-    }
-
-    // Try list of URLs in order until one succeeds
-    async function tryLoadAny(urls) {
-      let lastErr = null;
-      for (const u of urls) {
-        try {
-          await loadScript(u);
-          console.log('Loaded:', u);
-          return u;
-        } catch (e) {
-          console.warn(e);
-          lastErr = e;
-        }
-      }
-      throw lastErr;
-    }
-
-    // CDN candidates for each library (try multiple mirrors)
-    const pgnCandidates = [
-      'https://cdn.jsdelivr.net/npm/@mliebelt/pgn-parser@1.5.2/lib/pgn-parser.js',
-      'https://unpkg.com/@mliebelt/pgn-parser@1.5.2/lib/pgn-parser.js'
-    ];
-    const chessJsCandidates = [
-      'https://cdn.jsdelivr.net/npm/chess.js@1.0.0/chess.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js'
-    ];
-    const chessgroundCandidates = [
-      'https://unpkg.com/chessground@8.2.0/dist/chessground.min.js',
-      'https://cdn.jsdelivr.net/npm/chessground@8.2.0/dist/chessground.min.js'
-    ];
-
-    // Attempt loading libraries; if pgn-parser fails, we'll fallback to cleaner parser only.
-    (async function initLibs() {
-      let pgnLoaded = false, chessLoaded = false, cgLoaded = false;
-
-      // chess.js & chessground are essential for board. Try to load them first.
-      try {
-        await tryLoadAny(chessJsCandidates);
-        chessLoaded = true;
-      } catch (e) {
-        console.error('chess.js failed to load from all CDNs:', e);
-        alert('Warning: chess.js failed to load. The board may not work. Check console network tab.');
-      }
-
-      try {
-        await tryLoadAny(chessgroundCandidates);
-        cgLoaded = true;
-      } catch (e) {
-        console.error('Chessground failed to load from all CDNs:', e);
-        alert('Warning: Chessground failed to load. Check console network tab.');
-      }
-
-      // pgn-parser is optional — if it fails we'll use the cleaner fallback
-      try {
-        await tryLoadAny(pgnCandidates);
-        pgnLoaded = (typeof pgnParser !== 'undefined');
-      } catch (e) {
-        console.warn('pgn-parser not available; falling back to built-in cleaner. Error:', e);
-      }
-
-      // Now start the app (even if pgn-parser not loaded)
-      startApp({ pgnParserAvailable: pgnLoaded, chessAvailable: chessLoaded, cgAvailable: cgLoaded });
     })();
   </script>
 
-  <!-- Main app logic (keeps working even when pgn-parser is missing) -->
+  <!-- 2) Chessground (local) -->
+  <script src="js/libs/chessground.min.js"></script>
+
+  <!-- 3) Your full (non-minified) PGN parser (the file you pasted). 
+       Path per your message: js/libs/chess-pgn-parser/pgn-parser.js -->
+  <script src="js/libs/chess-pgn-parser/pgn-parser.js"></script>
+
   <script>
-    function startApp(opts) {
-      // Ensure required libs exist
-      if (!opts.chessAvailable || !opts.cgAvailable) {
-        console.error('Essential libs missing. chess.js or chessground not available:', opts);
-        document.getElementById('pgnTextarea').value = 'ERROR: chess.js or chessground failed to load from CDNs. See console network tab.\n\nFallback: you can download the library files and host them in your repo under /libs/ and update the HTML to load them locally.';
-        // still return to avoid runtime exceptions
+    // Wait until DOM + libraries ready. We'll poll for Chess and Chessground presence.
+    function whenReady(checkFn, callback, interval = 80, timeout = 5000) {
+      const start = Date.now();
+      (function wait() {
+        if (checkFn()) return callback();
+        if (Date.now() - start > timeout) return callback(new Error('timeout'));
+        setTimeout(wait, interval);
+      })();
+    }
+
+    whenReady(
+      function () {
+        return (typeof Chess !== 'undefined') && (typeof Chessground !== 'undefined');
+      },
+      function (err) {
+        if (err) {
+          console.error('Essential libs missing or timed out:', err);
+          // Inform user in page
+          document.getElementById('pgnInput').value = 'ERROR: chess.js or Chessground failed to initialize. Check console network tab and local file paths (js/libs/...).';
+          return;
+        }
+        // Start app
+        startApp();
       }
+    );
 
-      // cleaner as fallback if pgn-parser not present
-      function cleanLichessPGN(rawPgn) {
-        if (!rawPgn) return "";
+    function startApp() {
+      // chess.js game
+      const game = new Chess();
 
-        let pgn = rawPgn.replace(/\r\n/g, "\n");
-
-        // Collect tags (keep first occurrence)
-        const tagRegex = /^\s*\[([A-Za-z0-9_]+)\s+"([\s\S]*?)"\]\s*$/mg;
-        let tagMap = {};
-        let match;
-        while ((match = tagRegex.exec(pgn)) !== null) {
-          const name = match[1];
-          const fullTag = match[0].trim();
-          if (!(name in tagMap)) tagMap[name] = fullTag;
-        }
-        let header = Object.values(tagMap).join("\n");
-        if (header.length) header += "\n\n";
-
-        // Remove tags from body
-        pgn = pgn.replace(/\[([^\]]+)\]\s*/gs, " ");
-
-        // Remove [%…] directives
-        pgn = pgn.replace(/\[\%[^\]]*\]/g, " ");
-
-        // Convert variations ( ... ) to comments { ... }, loop to handle simple nesting
-        while (/\([^()]*\)/.test(pgn)) {
-          pgn = pgn.replace(/\(([^()]*)\)/g, function(_, inner) {
-            inner = inner.replace(/[{}]/g, "");
-            return "{ " + inner.trim() + " }";
-          });
-        }
-
-        // Remove NAGs like $123
-        pgn = pgn.replace(/\$\d+/g, " ");
-
-        pgn = pgn.replace(/\s+/g, " ").trim();
-
-        if (!/(?:\*|1-0|0-1|1\/2-1\/2)\s*$/.test(pgn)) {
-          pgn = pgn + " *";
-        }
-
-        return header + pgn;
-      }
-
-      // Initialize Chess.js game and Chessground (if available)
-      const ChessClass = (typeof Chess !== 'undefined') ? Chess : null;
-      const ChessgroundClass = (typeof Chessground !== 'undefined') ? Chessground : null;
-
-      const game = ChessClass ? new ChessClass() : { fen: ()=>'', turn: ()=>'w', reset: ()=>{}, load: ()=>false, move: ()=>false, history: ()=>[], undo: ()=>{} };
-      const cg = ChessgroundClass ? ChessgroundClass(document.getElementById('board'), {
-        fen: game.fen ? game.fen() : 'start',
-        movable: { free: false, color: 'both' },
+      // Chessground board
+      const cg = Chessground(document.getElementById('board'), {
+        fen: game.fen(),
         viewOnly: true,
+        movable: { free: false, color: 'both' },
         orientation: 'white',
         coordinates: true
-      }) : { set: ()=>{}, data: { orientation: 'white' } };
+      });
 
       // UI refs
-      const pgnTextarea = document.getElementById('pgnTextarea');
+      const pgnInput = document.getElementById('pgnInput');
       const loadPgnBtn = document.getElementById('loadPgnBtn');
+      const loadFenBtn = document.getElementById('loadFenBtn');
       const clearBtn = document.getElementById('clearBtn');
       const resetBtn = document.getElementById('resetBtn');
-      const moveListEl = document.getElementById('moveList');
-      const movesCountEl = document.getElementById('movesCount');
+      const movesList = document.getElementById('movesList');
+      const movesCount = document.getElementById('movesCount');
       const fenText = document.getElementById('fenText');
       const turnText = document.getElementById('turnText');
-      const loadFenBtn = document.getElementById('loadFenBtn');
-      const orientationSelect = document.getElementById('orientationSelect');
+      const orientation = document.getElementById('orientation');
+      const flipBtn = document.getElementById('flipBtn');
       const undoBtn = document.getElementById('undoBtn');
       const prevBtn = document.getElementById('prevBtn');
       const nextBtn = document.getElementById('nextBtn');
-      const flipBtn = document.getElementById('flipBtn');
 
-      let mainlineMoves = [];
-      let mainlineComments = [];
-      let currentIndex = 0;
+      // state
+      let mainlineMoves = [];       // SAN strings (ply sequence)
+      let mainlineComments = [];    // comments aligned by ply index
+      let currentPly = 0;           // number of plies applied (0..mainlineMoves.length)
 
+      // helpers
       function refreshInfo() {
-        try { fenText.textContent = game.fen(); } catch(e) { fenText.textContent = 'n/a'; }
-        try { turnText.textContent = game.turn() === 'w' ? 'White' : 'Black'; } catch(e) { turnText.textContent = '-'; }
+        fenText.textContent = game.fen();
+        try { turnText.textContent = game.turn() === 'w' ? 'White' : 'Black'; } catch(e){ turnText.textContent = '-'; }
       }
-      function renderBoard() {
-        try { cg.set({ fen: game.fen() }); } catch(e) {}
-        refreshInfo();
-      }
+      function renderBoard() { cg.set({ fen: game.fen() }); refreshInfo(); }
 
-      function buildMoveList() {
-        moveListEl.innerHTML = '';
+      function buildMoveListUI() {
+        movesList.innerHTML = '';
         if (!mainlineMoves.length) {
-          movesCountEl.textContent = 'No moves yet.';
+          movesCount.textContent = 'No moves';
           return;
         }
-        movesCountEl.textContent = mainlineMoves.length + ' moves';
-        mainlineMoves.forEach((san, i) => {
-          const moveNumber = Math.floor(i / 2) + 1;
-          const side = (i % 2 === 0) ? 'w' : 'b';
+        movesCount.textContent = mainlineMoves.length + ' moves';
+        mainlineMoves.forEach((san, idx) => {
+          const moveNumber = Math.floor(idx/2)+1;
+          const isWhite = (idx % 2 === 0);
           const token = document.createElement('span');
-          token.className = 'move-item' + (i === currentIndex - 1 ? ' current' : '');
-          token.title = mainlineComments[i] || '';
-          token.textContent = (side === 'w') ? (moveNumber + '. ' + san) : (san);
-          token.dataset.index = i + 1;
-          token.addEventListener('click', () => { jumpToPly(parseInt(token.dataset.index, 10)); });
-          moveListEl.appendChild(token);
-        });
-        highlightCurrent();
-      }
-
-      function highlightCurrent() {
-        const items = moveListEl.querySelectorAll('.move-item');
-        items.forEach(el => {
-          const idx = parseInt(el.dataset.index, 10);
-          if (idx === currentIndex) el.classList.add('current'); else el.classList.remove('current');
+          token.className = 'move-item' + ((idx+1) === currentPly ? ' current' : '');
+          token.dataset.ply = idx+1;
+          token.title = mainlineComments[idx] || '';
+          token.textContent = isWhite ? (moveNumber + '. ' + san) : san;
+          token.onclick = () => { jumpToPly(parseInt(token.dataset.ply,10)); };
+          movesList.appendChild(token);
         });
       }
 
       function jumpToPly(ply) {
-        if (!game.reset) return;
-        if (ply < 0) ply = 0;
-        if (ply > mainlineMoves.length) ply = mainlineMoves.length;
+        if (typeof game.reset !== 'function') return;
+        ply = Math.max(0, Math.min(ply, mainlineMoves.length));
         game.reset();
-        for (let i = 0; i < ply; i++) {
-          try { game.move(mainlineMoves[i], { sloppy: true }); } catch (e) { console.warn('apply move fail', mainlineMoves[i], e); break; }
+        for (let i=0;i<ply;i++){
+          try { game.move(mainlineMoves[i], { sloppy: true }); } catch(e){ console.warn('apply move failed', mainlineMoves[i], e); break; }
         }
-        currentIndex = ply;
+        currentPly = ply;
         renderBoard();
-        buildMoveList();
+        buildMoveListUI();
       }
 
-      function nextPly() { if (currentIndex < mainlineMoves.length) jumpToPly(currentIndex + 1); }
-      function prevPly() { if (currentIndex > 0) jumpToPly(currentIndex - 1); }
-      function undoLast() { try { game.undo(); currentIndex = game.history().length; renderBoard(); buildMoveList(); } catch(e){} }
+      function nextPly() { if (currentPly < mainlineMoves.length) jumpToPly(currentPly+1); }
+      function prevPly() { if (currentPly > 0) jumpToPly(currentPly-1); }
+      function undoLast() { try { game.undo(); currentPly = game.history().length; renderBoard(); buildMoveListUI(); } catch(e){} }
 
-      function resetBoard() { try { game.reset(); } catch(e){} mainlineMoves = []; mainlineComments = []; currentIndex = 0; renderBoard(); buildMoveList(); }
+      function resetAll() { game.reset(); mainlineMoves = []; mainlineComments = []; currentPly = 0; renderBoard(); buildMoveListUI(); }
 
-      // If pgnParser available, use it to extract mainline; otherwise fall back to cleaner
-      function extractMainlineWithParser(parsed) {
-        if (!parsed || !parsed.length) return { moves: [], comments: [] };
-        const g = parsed[0];
-        const moves = [];
-        const comments = [];
-        const topMoves = g.moves || [];
-        for (const m of topMoves) {
-          if (m.move || m.san) {
-            const san = m.move || m.san;
-            moves.push(san);
-            let c = '';
-            if (m.comment) c += m.comment + ' ';
-            if (m.after && m.after.comment) c += m.after.comment;
-            comments.push(c.trim());
-          }
+      // parser integration
+      function parseWithLocalParser(raw) {
+        // The parser you have exposes parser.pgn2json(str) and returns JSON string
+        if (typeof parser === 'undefined' || typeof parser.pgn2json !== 'function') {
+          throw new Error('Local parser not found (expected global "parser" with pgn2json)');
         }
-        return { moves, comments, headers: g.headers || g.tags || {} };
+        const jsonStr = parser.pgn2json(raw);
+        const parsed = JSON.parse(jsonStr);
+        return parsed;
       }
 
-      // load PGN text (tries pgn-parser if present, else cleaner)
-      function loadPgnText(pgnText) {
-        if (!pgnText || !pgnText.trim()) { alert('Paste a PGN or FEN first.'); return; }
+      // fallback basic cleaner (if parser missing or parse fails)
+      function cleanLichessPGN(raw) {
+        if (!raw) return "";
+        let pgn = raw.replace(/\r\n/g, "\n");
+        // collect tags
+        const tagRegex = /^\s*\[([A-Za-z0-9_]+)\s+"([\s\S]*?)"\]\s*$/mg;
+        let tagMap = {}; let match;
+        while ((match = tagRegex.exec(pgn)) !== null) { const name=match[1]; const full=match[0].trim(); if(!(name in tagMap)) tagMap[name]=full; }
+        let header = Object.values(tagMap).join("\n"); if (header) header += "\n\n";
+        // strip tags, directives, convert variations to comments
+        pgn = pgn.replace(/\[([^\]]+)\]\s*/gs, " ");
+        pgn = pgn.replace(/\[\%[^\]]*\]/g, " ");
+        while (/\([^()]*\)/.test(pgn)) { pgn = pgn.replace(/\(([^()]*)\)/g, function(_,inner){ inner=inner.replace(/[{}]/g,""); return "{ "+inner.trim()+" }"; }); }
+        pgn = pgn.replace(/\$\d+/g, " ");
+        pgn = pgn.replace(/\s+/g, " ").trim();
+        if (!/(?:\*|1-0|0-1|1\/2-1\/2)\s*$/.test(pgn)) pgn = pgn + " *";
+        return header + pgn;
+      }
 
-        // detect FEN-only candidate
-        const isFenOnly = /^[rnbqkpRNBQKP1-8]+\/.*\s(w|b)\s(-|K?Q?k?q?)\s(-|\d+)\s*\d+\s*\d*$/.test(pgnText.trim().split('\n')[0]);
+      // main loader: accepts raw PGN or FEN
+      function loadInput(raw) {
+        if (!raw || !raw.trim()) { alert('Paste PGN or FEN first'); return; }
+        const firstLine = raw.trim().split('\n')[0].trim();
+
+        // detect pure FEN candidate (common formats)
+        const fenRegex = /^[rnbqkpRNBQKP1-8]+\/.*\s(w|b)\s(-|[KQkq-]+)\s(-|\d+)\s*\d+\s*\d*$/;
+        const isFenOnly = fenRegex.test(firstLine);
+
         if (isFenOnly) {
-          try { game.load(pgnText.trim()); currentIndex = 0; mainlineMoves = []; mainlineComments = []; renderBoard(); buildMoveList(); return; } catch(e){}
-        }
-
-        if (typeof pgnParser !== 'undefined') {
           try {
-            const parsed = pgnParser.parse(pgnText, { startRule: 'games' });
-            const ex = extractMainlineWithParser(parsed);
-            mainlineMoves = ex.moves || [];
-            mainlineComments = ex.comments || [];
-            // headers handling (FEN start)
-            let headerMap = {};
-            if (Array.isArray(parsed[0].headers)) {
-              parsed[0].headers.forEach(h => { if (h.name) headerMap[h.name] = h.value; });
-            } else if (parsed[0].tags) headerMap = parsed[0].tags;
-            game.reset();
-            if (headerMap['FEN'] && headerMap['SetUp'] === '1') {
-              try { game.load(headerMap['FEN']); } catch(e){ console.warn('header FEN load fail', e); }
-            }
-            for (const san of mainlineMoves) {
-              try { game.move(san, { sloppy: true }); } catch(e) { console.warn('apply san fail', san, e); break; }
-            }
-            currentIndex = mainlineMoves.length;
-            renderBoard();
-            buildMoveList();
+            const ok = game.load(firstLine);
+            if (!ok) throw new Error('Invalid FEN');
+            mainlineMoves = []; mainlineComments = []; currentPly = 0; renderBoard(); buildMoveListUI();
             return;
-          } catch (e) {
-            console.warn('pgnParser parse failed; falling back to cleaner. Error:', e);
-          }
+          } catch (e) { console.warn('FEN load failed, will try PGN parsing', e); }
         }
 
-        // Fallback: clean and use chess.js load_pgn (best-effort)
-        const cleaned = cleanLichessPGN(pgnText);
+        // Try local parser first (parser.pgn2json)
         try {
-          const ok = game.load_pgn ? game.load_pgn(cleaned) : false;
-          if (!ok) {
-            // try chess.js load (some versions provide load)
-            if (game.load_pgn === undefined && game.load) {
-              try { game.load(cleaned); }
-              catch(e2){ console.warn('fallback load failed', e2); alert('PGN load failed even after cleaning. See console.'); return; }
-            } else {
-              alert('PGN loader returned failure — parser not available and cleaned PGN still rejected. See console.');
-              console.log('Cleaned PGN:', cleaned);
-              return;
-            }
+          const parsed = parseWithLocalParser(raw);
+          // parsed.str -> tags, parsed.moves -> array, parsed.annotations -> comments
+          const startFEN = parsed.str && parsed.str.FEN;
+          game.reset();
+          if (startFEN && parsed.str.SetUp === "1") {
+            try{ game.load(startFEN); } catch(e){ console.warn('header FEN load failed', e); }
           }
-          mainlineMoves = game.history();
-          mainlineComments = [];
-          currentIndex = mainlineMoves.length;
+          // sanitized moves (filter empty entries)
+          const moves = (parsed.moves || []).filter(m => typeof m === 'string' && m.trim().length>0);
+          // apply sequentially
+          for (const m of moves) {
+            try { game.move(m, { sloppy:true }); } catch(e){ console.warn('apply move fail', m, e); break; }
+          }
+          mainlineMoves = moves;
+          // map annotations into comments array
+          const comments = new Array(mainlineMoves.length).fill('');
+          if (parsed.annotations && Array.isArray(parsed.annotations)) {
+            parsed.annotations.forEach(a => {
+              const idx = (typeof a.moveCount === 'number') ? a.moveCount : 0;
+              if (idx >= 0 && idx < comments.length) {
+                comments[idx] = (comments[idx] ? (comments[idx] + ' ') : '') + (a.comment || '');
+              }
+            });
+          }
+          mainlineComments = comments;
+          currentPly = mainlineMoves.length;
           renderBoard();
-          buildMoveList();
+          buildMoveListUI();
+          console.log('Loaded PGN via local parser; tags:', parsed.str || {});
+          return;
         } catch (e) {
-          console.error('Final PGN load failed:', e);
-          alert('Failed to load PGN. See console for cleaned PGN and errors.');
-          console.log('Cleaned PGN:', cleaned);
+          console.warn('Local parser failed or not present:', e);
+        }
+
+        // Fallback: try cleaned PGN + chess.js loader
+        try {
+          const cleaned = cleanLichessPGN(raw);
+          if (typeof game.load_pgn === 'function') {
+            const ok = game.load_pgn(cleaned);
+            if (!ok) throw new Error('chess.js load_pgn returned false');
+            mainlineMoves = game.history() || [];
+            mainlineComments = [];
+            currentPly = mainlineMoves.length;
+            renderBoard();
+            buildMoveListUI();
+            console.log('Loaded PGN via chess.js.load_pgn fallback.');
+            return;
+          } else if (typeof game.load === 'function') {
+            // some chess.js builds provide load() that accepts PGN
+            try {
+              game.reset();
+              game.load(cleaned); // may throw
+              mainlineMoves = game.history() || [];
+              mainlineComments = [];
+              currentPly = mainlineMoves.length;
+              renderBoard();
+              buildMoveListUI();
+              console.log('Loaded PGN via chess.js.load fallback.');
+              return;
+            } catch (e2) { console.warn('chess.js.load fallback failed', e2); }
+          }
+          alert('Unable to parse PGN. Local parser missing or PGN malformed. See console for details.');
+          console.log('Cleaned PGN (for debugging):\n', cleaned);
+        } catch (finalErr) {
+          console.error('All PGN load attempts failed', finalErr);
+          alert('Failed to load PGN. See console for details.');
         }
       }
 
-      // UI wiring
-      loadPgnBtn.addEventListener('click', () => loadPgnText(pgnTextarea.value));
-      clearBtn.addEventListener('click', () => pgnTextarea.value = '');
-      resetBtn.addEventListener('click', ()=> { if (confirm('Reset board and clear moves?')) resetBoard(); });
+      // wire UI
+      loadPgnBtn.onclick = () => loadInput(pgnInput.value);
+      loadFenBtn.onclick = () => loadInput(pgnInput.value);
+      clearBtn.onclick = () => { pgnInput.value = ''; };
+      resetBtn.onclick = () => { if (confirm('Reset board and clear moves?')) resetAll(); };
+      nextBtn.onclick = nextPly;
+      prevBtn.onclick = prevPly;
+      undoBtn.onclick = undoLast;
+      flipBtn.onclick = () => {
+        const newO = (cg.data && cg.data.orientation === 'white') ? 'black' : 'white';
+        cg.set({ orientation: newO });
+        orientation.value = newO;
+      };
+      orientation.onchange = () => cg.set({ orientation: orientation.value });
 
-      loadFenBtn.addEventListener('click', () => {
-        const t = pgnTextarea.value.trim();
-        if (!t) { alert('Paste a FEN string into the textarea, then click Load FEN.'); return; }
-        try {
-          const fenCandidate = t.split('\n').find(line => /^[rnbqkpRNBQKP1-8\/]+ .*$/.test(line.trim()));
-          const fenToLoad = fenCandidate || t.trim();
-          const ok = game.load ? game.load(fenToLoad) : false;
-          if (!ok) { alert('Invalid FEN'); return; }
-          currentIndex = 0; mainlineMoves = []; mainlineComments = []; renderBoard(); buildMoveList();
-        } catch (e) { console.error('Load FEN error', e); alert('Failed to load FEN. See console.'); }
-      });
+      // init small UI state
+      renderBoard();
+      buildMoveListUI();
 
-      prevBtn.addEventListener('click', prevPly);
-      nextBtn.addEventListener('click', nextPly);
-      undoBtn.addEventListener('click', undoLast);
-      flipBtn.addEventListener('click', () => {
-        const o = cg.data.orientation === 'white' ? 'black' : 'white';
-        cg.set({ orientation: o });
-        orientationSelect.value = o;
-      });
-      orientationSelect.addEventListener('change', () => { cg.set({ orientation: orientationSelect.value }); });
+      // expose for debugging
+      window.iq4u = { game, cg, loadInput, mainlineMoves };
+      console.info('Student board started. parser present:', typeof parser !== 'undefined');
 
-      // init UI
-      resetBoard();
-
-      // expose for debug
-      window.iq4u = { game, cg, loadPgnText, mainlineMoves };
-
-      // helpful console log about what features are available
-      console.info('App started. pgn-parser available:', typeof pgnParser !== 'undefined');
-    }
+    } // end startApp
   </script>
 </body>
 </html>
