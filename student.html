@@ -6,6 +6,9 @@
   <title>IQ4U — Student Puzzle (centered top board + resizer)</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <!-- Socket.IO client -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
   <style>
     /* --- base styles (kept largely the same) --- */
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; }
@@ -46,6 +49,12 @@
       #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
       .resizer .range{ width:140px; }
     }
+
+    /* bottom multiplayer panel style */
+    .multiplayer-panel { margin-top: 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .multiplayer-panel input[type="text"] { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
+    .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
+    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
   </style>
 </head>
 <body>
@@ -113,6 +122,26 @@
     </div>
   </div>
 
+  <!-- New multiplayer panel moved to BOTTOM as requested -->
+  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label for="emailInputBottom" class="small">Your email:</label>
+      <input id="emailInputBottom" type="text" placeholder="example@gmail.com" />
+      <button id="joinBtnBottom">Join Online</button>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label class="small" for="onlinePlayersBottom">Online Players:</label>
+      <select id="onlinePlayersBottom"></select>
+      <button id="challengeBtnBottom">Challenge Player</button>
+    </div>
+
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+      <div id="multiplayStatus" class="muted">Not connected</div>
+      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
+    </div>
+  </div>
+
   <!-- jQuery (optional) and chessboard lib -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
@@ -148,6 +177,14 @@
     const fenDisplay = document.getElementById('fenDisplay');
     const msgEl = document.getElementById('msg');
 
+    // bottom multiplayer DOM
+    const emailInputBottom = document.getElementById('emailInputBottom');
+    const joinBtnBottom = document.getElementById('joinBtnBottom');
+    const onlinePlayersBottom = document.getElementById('onlinePlayersBottom');
+    const challengeBtnBottom = document.getElementById('challengeBtnBottom');
+    const multiplayStatus = document.getElementById('multiplayStatus');
+    const pairedBubble = document.getElementById('pairedBubble');
+
     // Resizer refs
     const boardWrapper = document.getElementById('board-wrapper');
     const boardSizeRange = document.getElementById('boardSizeRange');
@@ -158,6 +195,12 @@
 
     // state
     let game = null, board = null, pgnMoves = [], stepIndex = 0, currentTheme = FALLBACK_THEME;
+
+    // multiplayer state
+    let socket = null;
+    let isPaired = false;
+    let myColor = null; // "white" or "black"
+    let myEmail = '';
 
     // puzzles state: when multiple PGNs are present
     let puzzles = [];       // array of PGN strings
@@ -233,9 +276,16 @@
           stepIndex++; board.position(game.fen()); fenDisplay.textContent = game.fen(); refreshMovesUI();
           // after student's correct move, let autoplay opponent if any
           scheduleAutoplayIfOpponentToMove();
+          // if multiplayer and paired, emit new FEN to opponent
+          if(isPaired && socket && socket.connected){
+            try{ socket.emit('move', { fen: game.fen() }); }catch(e){}
+          }
         }
       } else {
         board.position(game.fen()); fenDisplay.textContent = game.fen();
+        if(isPaired && socket && socket.connected){
+          try{ socket.emit('move', { fen: game.fen() }); }catch(e){}
+        }
       }
     }
     function onSnapEnd(){ if(board) board.position(game.fen()); }
@@ -475,6 +525,24 @@
     presetMed.addEventListener('click', ()=> setBoardSize(720));
     presetLarge.addEventListener('click', ()=> setBoardSize(920));
 
+    // multiplayer event wiring (bottom UI)
+    joinBtnBottom.addEventListener('click', function(){
+      const email = emailInputBottom.value.trim();
+      if(!email) return alert('Enter email to join online');
+      myEmail = email;
+      if(!socket || !socket.connected) initSocket();
+      socket.emit('register', myEmail);
+      multiplayStatus.textContent = 'Connected as ' + myEmail;
+    });
+
+    challengeBtnBottom.addEventListener('click', function(){
+      const target = onlinePlayersBottom.value;
+      if(!target) return alert('Select a player to challenge');
+      if(!socket || !socket.connected) return alert('Not connected to server');
+      socket.emit('challenge', target);
+      multiplayStatus.textContent = 'Challenge sent...';
+    });
+
     // boot
     async function boot(){
       // ensure Chess.js
@@ -507,6 +575,9 @@
       // Initialize resizer default to current wrapper size (read CSS max-width or fallback)
       const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 920;
       setBoardSize(initial);
+
+      // initialize socket but do not auto-register — user clicks Join Online
+      initSocket();
     }
 
     boot();
@@ -528,9 +599,145 @@
       }, 150);
     });
 
+    /* ----------------------------
+       SOCKET.IO MULTIPLAYER LOGIC
+       ---------------------------- */
+    function initSocket(){
+      if(socket && socket.connected) return;
+      // change URL if your server is hosted elsewhere
+      socket = io("http://localhost:3000");
+
+      socket.on('connect', () => {
+        console.log('socket connected', socket.id);
+        multiplayStatus.textContent = 'Connected (not registered)';
+        // if user already entered email, auto-register
+        if(myEmail) { socket.emit('register', myEmail); multiplayStatus.textContent = 'Registered as ' + myEmail; }
+      });
+
+      // server sends object of online users { socketId: {email} }
+      socket.on('online', (users) => {
+        // repopulate dropdown; skip self
+        onlinePlayersBottom.innerHTML = '';
+        for(const id in users){
+          if(!users[id] || !users[id].email) continue;
+          if(socket && id === socket.id) continue;
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.text = users[id].email;
+          onlinePlayersBottom.appendChild(opt);
+        }
+      });
+
+      // someone challenged this client
+      socket.on('challengeRequest', (data) => {
+        const ok = confirm(data.email + ' challenges you. Accept?');
+        if(ok){
+          socket.emit('accept', data.fromId);
+          multiplayStatus.textContent = 'Accepted challenge. Waiting...';
+        } else {
+          // optionally emit decline if server supports it (not required here)
+        }
+      });
+
+      // challenge declined (optional)
+      socket.on('challenge_declined', ({ email }) => {
+        multiplayStatus.textContent = email + ' declined your challenge';
+      });
+
+      // start game - server sends who is white and black
+      socket.on('startGame', (data) => {
+        // server should send { white: socketId, black: socketId, /* optional initialFen */ }
+        if(!data) return;
+        isPaired = true;
+        pairedBubble.style.display = 'inline-block';
+        multiplayStatus.textContent = 'Paired: ' + (data.white === socket.id ? 'You are White' : 'You are Black');
+        myColor = (data.white === socket.id) ? 'white' : 'black';
+
+        // if server provided an initial FEN, load it; otherwise use current game
+        if(data.initialFen){
+          try{
+            if(game && typeof game.load === 'function'){
+              const ok = game.load(data.initialFen);
+              if(ok) {
+                if(board) board.position(game.fen());
+                fenDisplay.textContent = game.fen();
+              }
+            } else {
+              // fallback: set board position directly
+              if(board) board.position(data.initialFen);
+              fenDisplay.textContent = data.initialFen;
+            }
+          }catch(e){
+            console.warn('Failed load initial FEN from server', e);
+          }
+        }
+      });
+
+      // receive move - update board
+      socket.on('move', (data) => {
+        if(!data || !data.fen) return;
+        try{
+          if(!game) game = new Chess();
+          const ok = game.load(data.fen);
+          if(ok){
+            if(board) board.position(game.fen());
+            fenDisplay.textContent = game.fen();
+          } else {
+            // if load fails, try setting board position directly
+            if(board) board.position(data.fen);
+            fenDisplay.textContent = data.fen;
+          }
+        }catch(e){
+          // fallback
+          if(board) board.position(data.fen);
+          fenDisplay.textContent = data.fen;
+        }
+      });
+
+      socket.on('disconnect', () => {
+        multiplayStatus.textContent = 'Disconnected';
+        isPaired = false;
+        pairedBubble.style.display = 'none';
+      });
+    }
+
+    /* ----------------------------
+       Helper for external boards: call onBoardMove(newFen) when the local board changes
+       If you later replace chessboard.js with another board, call onBoardMove to emit moves
+       ---------------------------- */
+    window.onBoardMove = function(newFen){
+      try{
+        if(!newFen) return;
+        if(!game) game = new Chess();
+        // try to load fen into game
+        if(typeof game.load === 'function') game.load(newFen);
+        if(board) board.position(newFen);
+        fenDisplay.textContent = newFen;
+        // emit if paired
+        if(isPaired && socket && socket.connected){
+          socket.emit('move', { fen: newFen });
+        }
+      }catch(e){}
+    };
+
+    /* ----------------------------
+       Make sure we update partner when user clicks Reset/Load FEN etc.
+       ---------------------------- */
+    // when loading a FEN via your Load FEN button we already call game.load and set board.position
+    // but we also want to notify partner if paired — so intercept loadFenBtn and resetBtn were handled above.
+    loadFenBtn.addEventListener('click', function(){
+      // after performing load, if paired emit the new fen
+      setTimeout(()=> {
+        try{ if(isPaired && socket && socket.connected){ socket.emit('move', { fen: game.fen() }); } }catch(e){}
+      }, 120);
+    });
+    resetBtn.addEventListener('click', function(){
+      setTimeout(()=> {
+        try{ if(isPaired && socket && socket.connected){ socket.emit('move', { fen: game.fen() }); } }catch(e){}
+      }, 120);
+    });
+
   })();
   </script>
 </body>
 </html>
-
-
