@@ -8,7 +8,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     /* --- base styles (kept largely the same) --- */
-    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; }
+    html,body{
+      overscroll-behavior-y: contain; /* prevent pull-to-refresh propagation */
+    }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
 
@@ -26,6 +29,14 @@
 
     /* board wrapper flexible with a max-width; can be adjusted via JS */
     #board-wrapper{ width:100%; max-width:920px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; }
+    /* Prevent touch gestures & accidental selection when on board */
+    #board-wrapper, #board {
+      touch-action: none;                /* disable default touch behaviors on the board */
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      user-select: none;
+      -ms-touch-action: none;
+    }
     /* board fills wrapper width and keeps square aspect ratio */
     #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
 
@@ -52,6 +63,12 @@
     .multiplayer-panel input[type="text"] { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
     .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
+
+    /* make buttons a little bigger on touch devices */
+    @media (pointer: coarse) {
+      button { padding:10px 14px; font-size:15px; }
+      .resizer .range { touch-action: pan-x; } /* allow horizontal drag on the slider */
+    }
   </style>
 </head>
 <body>
@@ -555,6 +572,58 @@
       }, 120);
     });
 
+    // --- NEW: touch handling to prevent mobile browser refresh while dragging pieces ---
+    (function installTouchGuards(){
+      let touchStartedOnBoard = false;
+
+      // mark when a touch starts inside #board
+      boardWrapper.addEventListener('touchstart', function tstart(e){
+        // if more than 1 finger, ignore (let browser handle)
+        if(e.touches && e.touches.length > 1) return;
+        touchStartedOnBoard = true;
+        // We don't call preventDefault here: we want to allow slidable interactions like slider.
+        // The touchmove handler below will prevent scroll if touch started inside board.
+      }, { passive: true });
+
+      // prevent default scrolling while moving finger on board (must be passive:false)
+      boardWrapper.addEventListener('touchmove', function tmove(e){
+        if(touchStartedOnBoard){
+          // prevent page scroll / pull-to-refresh while dragging on board
+          e.preventDefault();
+          // Note: this will not stop the chessboard library handling piece dragging
+        }
+      }, { passive: false });
+
+      // clear flag on touchend/cancel
+      boardWrapper.addEventListener('touchend', function tend(e){
+        touchStartedOnBoard = false;
+      }, { passive: true });
+      boardWrapper.addEventListener('touchcancel', function tc(e){
+        touchStartedOnBoard = false;
+      }, { passive: true });
+
+      // also guard pointer events (for browsers using pointer events)
+      boardWrapper.addEventListener('pointerdown', function pd(e){
+        // only intercept touch pointers (not mouse)
+        if(e.pointerType === 'touch'){
+          // prevent gestures that might start on long-press
+          // do not preventDefault here to not block click entirely; chessboard will handle pointer events
+          // but ensure the page doesn't overscroll while pointer is on board by adding class
+          boardWrapper.classList.add('pointer-touch-active');
+        }
+      }, { passive: true });
+
+      boardWrapper.addEventListener('pointerup', function pu(e){
+        if(e.pointerType === 'touch'){
+          boardWrapper.classList.remove('pointer-touch-active');
+        }
+      }, { passive: true });
+    })();
+
+    // cleanup before unload (best-effort)
+    window.addEventListener('pagehide', ()=> { try{ /* nothing to do now */ }catch(e){} });
+
+    // When loading a FEN or resetting, notify partner if paired (already wired above)
   })();
   </script>
 
@@ -573,7 +642,7 @@
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
       databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "iq4u-chess-classroom",
-      storageBucket: "iq4u-chess-classroom.firebasestorage.app",
+      storageBucket: "iq4uchess-classroom.firebasestorage.app",
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
