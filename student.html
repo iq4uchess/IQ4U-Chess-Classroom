@@ -3,36 +3,75 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>IQ4U — Student Puzzle (fixed loader)</title>
+  <title>IQ4U — Student Puzzle (centered top board + resizer)</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
+    /* --- base styles (kept largely the same) --- */
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; }
-    .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
+
     .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); }
-    #board-wrapper{ width:420px; height:420px; display:flex; align-items:center; justify-content:center; }
-    #board{ width:400px; height:400px; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; }
-    #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; display:none; }
-    textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
+
     .small{ font-size:13px; color:#555; }
     .muted{ color:#666; font-size:13px; }
     .info{ margin-top:8px; font-size:13px; color:#444; }
-    @media (max-width:900px){ .container{ grid-template-columns:1fr; } #board-wrapper{ width:100%; } #board{ width:100%; height:80vw; max-height:420px; } .controls{ justify-content:center; } }
+
+    /* --- TOP BOARD SECTION (spans entire grid and centers content) --- */
+    .board-top{ grid-column: 1 / -1; display:flex; flex-direction:column; align-items:center; gap:12px; }
+
+    /* controls centered above the board */
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; }
+
+    /* board wrapper flexible with a max-width; can be adjusted via JS */
+    #board-wrapper{ width:100%; max-width:920px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; }
+    /* board fills wrapper width and keeps square aspect ratio */
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
+
+    /* Resizer UI */
+    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; }
+    .resizer .range{ width:260px; }
+    .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
+
+    /* keep the original right/left panel sizing below the board unchanged */
+    #movesList{ min-height:220px; max-height:300px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff; display:none; }
+
+    textarea{ width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; }
+
+    @media (max-width:900px){
+      .container{ grid-template-columns:1fr; }
+      /* for small screens, keep board-top spanning full width and padding handled naturally */
+      #board-wrapper{ max-width:100%; }
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
+      .resizer .range{ width:140px; }
+    }
   </style>
 </head>
 <body>
-  <div class="controls">
-    <button id="undoBtn">Undo</button>
-    <button id="prevBtn">Previous</button>
-    <button id="nextBtn">Next</button>
-    <button id="flipBtn">Flip</button>
-  </div>
 
-  <div class="container">
-    <div class="panel">
+  <!-- TOP BOARD SECTION (spans both columns) -->
+  <div class="board-top">
+    <div class="controls" aria-hidden="false">
+      <button id="undoBtn">Undo</button>
+      <button id="prevBtn">Previous</button>
+      <button id="nextBtn">Next</button>
+      <button id="flipBtn">Flip</button>
+
+      <!-- Resizer UI (added) -->
+      <div style="width:18px;"></div><!-- small gap -->
+      <div class="resizer" aria-label="Board resizer controls">
+        <button id="presetSmall" title="Small">S</button>
+        <button id="presetMed" title="Medium">M</button>
+        <button id="presetLarge" title="Large">L</button>
+        <input id="boardSizeRange" class="range" type="range" min="240" max="1200" step="10" value="920" aria-label="Board size">
+        <small id="boardSizeLabel">920px</small>
+      </div>
+    </div>
+
+    <div class="panel" style="width:100%; max-width:920px;">
       <div id="board-wrapper"><div id="board" aria-label="Chessboard container"></div></div>
+
       <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
         <div>Orientation:
           <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
@@ -41,7 +80,10 @@
       </div>
       <div class="info" id="msg" aria-live="polite"></div>
     </div>
+  </div>
 
+  <!-- BELOW: original two-column layout preserved (panels are same size as before) -->
+  <div class="container" style="margin-top:18px;">
     <div style="display:flex; flex-direction:column; gap:12px;">
       <div class="panel">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -61,7 +103,9 @@
           </div>
         </div>
       </div>
+    </div>
 
+    <div style="display:flex; flex-direction:column; gap:12px;">
       <div class="panel">
         <strong>Moves (hidden by default)</strong>
         <div id="movesList"></div>
@@ -69,7 +113,7 @@
     </div>
   </div>
 
-  <!-- jQuery (optional) -->
+  <!-- jQuery (optional) and chessboard lib -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
@@ -79,6 +123,7 @@
 !function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
   </script>
 
+  <!-- Main script (keeps your logic intact, only layout/CSS changed above) -->
   <script>
   (function(){
     // keep your CHESS_URL (unchanged)
@@ -102,6 +147,14 @@
     const movesList = document.getElementById('movesList');
     const fenDisplay = document.getElementById('fenDisplay');
     const msgEl = document.getElementById('msg');
+
+    // Resizer refs
+    const boardWrapper = document.getElementById('board-wrapper');
+    const boardSizeRange = document.getElementById('boardSizeRange');
+    const boardSizeLabel = document.getElementById('boardSizeLabel');
+    const presetSmall = document.getElementById('presetSmall');
+    const presetMed = document.getElementById('presetMed');
+    const presetLarge = document.getElementById('presetLarge');
 
     // state
     let game = null, board = null, pgnMoves = [], stepIndex = 0, currentTheme = FALLBACK_THEME;
@@ -190,6 +243,7 @@
     function createBoard(theme){
       const orientation = orientationSelect.value || 'white';
       if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
+      // chessboard-js reads the element size; #board is flexible in CSS now
       board = Chessboard('board', {
         draggable: true,
         position: game ? game.fen() : 'start',
@@ -198,6 +252,27 @@
         onSnapEnd: onSnapEnd,
         pieceTheme: theme
       });
+    }
+
+    // new: setBoardSize(px) - adjusts board-wrapper max-width and triggers resize
+    function setBoardSize(px){
+      if(!px || isNaN(px)) return;
+      const clamped = Math.max(240, Math.min(1200, Number(px)));
+      boardWrapper.style.maxWidth = clamped + 'px';
+      boardSizeRange.value = clamped;
+      boardSizeLabel.textContent = clamped + 'px';
+      // If chessboard-js supports resize(), prefer that; otherwise recreate the board
+      try{
+        if(board && typeof board.resize === 'function'){
+          board.resize();
+        } else {
+          // recreate to force correct sizing
+          createBoard(currentTheme);
+        }
+      }catch(e){
+        // fallback recreate
+        createBoard(currentTheme);
+      }
     }
 
     // PGN extraction — use parser if available but fallback safely
@@ -392,6 +467,14 @@
     flipBtn.onclick = ()=> { if(board) board.flip(); };
     orientationSelect.onchange = ()=> { if(board) createBoard(currentTheme); };
 
+    // Resizer event wiring
+    boardSizeRange.addEventListener('input', (e)=> {
+      setBoardSize(e.target.value);
+    });
+    presetSmall.addEventListener('click', ()=> setBoardSize(360));
+    presetMed.addEventListener('click', ()=> setBoardSize(720));
+    presetLarge.addEventListener('click', ()=> setBoardSize(920));
+
     // boot
     async function boot(){
       // ensure Chess.js
@@ -420,10 +503,34 @@
       refreshMovesUI();
       setMsg('', 0);
       console.log('Boot complete. Using piece theme:', currentTheme);
+
+      // Initialize resizer default to current wrapper size (read CSS max-width or fallback)
+      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 920;
+      setBoardSize(initial);
     }
 
     boot();
+
+    // Recreate / resize board on window resize to ensure chessboard-js picks up new element size
+    let resizeTimer = null;
+    window.addEventListener('resize', ()=> {
+      if(resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(()=> {
+        try{
+          if(board && typeof board.resize === 'function'){
+            board.resize();
+          } else {
+            createBoard(currentTheme);
+          }
+        }catch(e){
+          createBoard(currentTheme);
+        }
+      }, 150);
+    });
+
   })();
   </script>
 </body>
 </html>
+
+
