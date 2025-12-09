@@ -6,9 +6,6 @@
   <title>IQ4U — Student Puzzle (centered top board + resizer)</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
-  <!-- Socket.IO client -->
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-
   <style>
     /* --- base styles (kept largely the same) --- */
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; }
@@ -152,20 +149,13 @@
 !function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
   </script>
 
-  <!-- Main script (full, unchanged logic; only SERVER line set to location.origin and initSocket robust) -->
+  <!-- Main script (most logic preserved; socket.io parts replaced by Firebase RTDB below) -->
   <script>
   (function(){
     // keep your CHESS_URL (unchanged)
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
-
-    /* -------------- NETWORK CONFIG -------------- */
-    // Connect to the same origin that served this page (safe: no CORS/mixed-content)
-    const SERVER = location.origin;   // <-- important
-    /* -------------------------------------------- */
-
-    console.log("Connecting to socket server at:", SERVER);
 
     // DOM refs
     const pgnInput = document.getElementById('pgnInput');
@@ -208,26 +198,22 @@
     // state
     let game = null, board = null, pgnMoves = [], stepIndex = 0, currentTheme = FALLBACK_THEME;
 
-    // multiplayer state
-    let socket = null;
+    // multiplayer state (migrated to Firebase)
     let isPaired = false;
     let myColor = null; // "white" or "black"
     let myEmail = '';
 
-    // puzzles state: when multiple PGNs are present
+    // puzzles state
     let puzzles = [];       // array of PGN strings
     let puzzleIndex = 0;    // index into puzzles[]
 
     function setMsg(t, ms){ msgEl.textContent = t||''; if(ms>0) setTimeout(()=>{ if(msgEl.textContent===t) msgEl.textContent=''; }, ms); }
 
-    // Robust helpers (fixed newline handling and safer operations)
+    // Robust helpers (same as before)
     function stripCommentsAndVariations(raw){
       if(!raw || typeof raw !== 'string') return '';
-      // Remove curly-brace comments
       let s = raw.replace(/\{[^}]*\}/g, ' ');
-      // Remove percent-comments
       s = s.replace(/%[^\n]*\n/g, ' ');
-      // Remove parenthesis variations (non-greedy; repeated until none left)
       while(/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, ' ');
       return s;
     }
@@ -242,23 +228,11 @@
 
     function extractSANMoves(pgnClean){
       if(!pgnClean || typeof pgnClean !== 'string') return [];
-      // remove tag pairs like [Event "..."]
       let body = pgnClean.replace(/\[[^\]]*\]/g, ' ');
-      // collapse whitespace
       body = body.replace(/\s+/g,' ').trim();
       if(!body) return [];
       const tokens = body.split(' ').filter(t => t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
       return tokens;
-    }
-
-    function splitPGNs(raw){
-      if(!raw || typeof raw !== 'string') return [];
-      // Try split by [Event occurrences first
-      const events = raw.split(/\n(?=\[Event\s)/);
-      const cleaned = events.map(e => e.trim()).filter(Boolean);
-      if(cleaned.length>1) return cleaned;
-      // Otherwise split by two or more newlines
-      return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
     }
 
     function refreshMovesUI(){
@@ -276,7 +250,6 @@
       if(!game) return 'snapback';
       const move = game.move({ from: source, to: target, promotion:'q' });
       if(move === null){ setMsg('Illegal move', 1200); return 'snapback'; }
-      // enforce expected move if exists
       const expected = pgnMoves[stepIndex];
       if(expected){
         if(move.san !== expected){
@@ -286,17 +259,14 @@
           return 'snapback';
         } else {
           stepIndex++; board.position(game.fen()); fenDisplay.textContent = game.fen(); refreshMovesUI();
-          // after student's correct move, let autoplay opponent if any
           scheduleAutoplayIfOpponentToMove();
-          // if multiplayer and paired, emit new FEN to opponent
-          if(isPaired && socket && socket.connected){
-            try{ socket.emit('move', { fen: game.fen() }); }catch(e){}
-          }
+          // emit via firebase when paired
+          try{ if(isPaired && window.firebaseMultiplayer) window.firebaseMultiplayer.emitMove(game.fen()); }catch(e){}
         }
       } else {
         board.position(game.fen()); fenDisplay.textContent = game.fen();
-        if(isPaired && socket && socket.connected){
-          try{ socket.emit('move', { fen: game.fen() }); }catch(e){}
+        if(isPaired && window.firebaseMultiplayer){
+          try{ window.firebaseMultiplayer.emitMove(game.fen()); }catch(e){}
         }
       }
     }
@@ -305,7 +275,6 @@
     function createBoard(theme){
       const orientation = orientationSelect.value || 'white';
       if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
-      // chessboard-js reads the element size; #board is flexible in CSS now
       board = Chessboard('board', {
         draggable: true,
         position: game ? game.fen() : 'start',
@@ -323,23 +292,19 @@
       boardWrapper.style.maxWidth = clamped + 'px';
       boardSizeRange.value = clamped;
       boardSizeLabel.textContent = clamped + 'px';
-      // If chessboard-js supports resize(), prefer that; otherwise recreate the board
       try{
         if(board && typeof board.resize === 'function'){
           board.resize();
         } else {
-          // recreate to force correct sizing
           createBoard(currentTheme);
         }
       }catch(e){
-        // fallback recreate
         createBoard(currentTheme);
       }
     }
 
     // PGN extraction — use parser if available but fallback safely
     function extractMovesFromPGN(pgn){
-      // try inline parser
       if(typeof parser !== 'undefined' && typeof parser.pgn2json === 'function'){
         try{
           const jsonStr = parser.pgn2json(pgn);
@@ -350,24 +315,19 @@
             }
           }
         }catch(e){
-          // swallow and fallback
           console.warn('parser.pgn2json failed, falling back', e);
         }
       }
-      // fallback naive clean
       const cleaned = stripCommentsAndVariations(pgn);
       const tokens = extractSANMoves(cleaned);
       return { moves: tokens, headers: {} };
     }
 
-    // prepare puzzle
     function preparePuzzleFromPGN(pgn){
       try{ stopAutoplay(); }catch(e){}
       if(!pgn || typeof pgn !== 'string'){ setMsg('No PGN provided', 1200); return; }
-      console.log('preparePuzzleFromPGN: received PGN (first 200 chars):', pgn.slice(0,200).replace(/\n/g,' '));
       const res = extractMovesFromPGN(pgn);
       pgnMoves = res.moves || []; stepIndex = 0;
-      // try FEN header
       const fen = (res.headers && res.headers.FEN) ? res.headers.FEN : extractLastFEN(pgn);
       try{
         if(typeof Chess === 'undefined'){ setMsg('Chess.js not loaded (check console)',0); movesList.style.display='block'; movesList.textContent = pgn; return; }
@@ -375,7 +335,7 @@
       }catch(e){
         console.error('Failed to init Chess:', e); setMsg('Chess engine error',0); return;
       }
-      fenDisplay.textContent = game.fen(); refreshMovesUI(); // hidden by default
+      fenDisplay.textContent = game.fen(); refreshMovesUI();
       chooseTheme().then(theme => { currentTheme = theme; createBoard(currentTheme); scheduleAutoplayIfOpponentToMove(); });
     }
 
@@ -399,10 +359,7 @@
     }
     function stopAutoplay(){ if(autoplayTimer) clearTimeout(autoplayTimer); autoplayTimer = null; }
 
-    function setAllowedMoveForStudent(){
-      // chessboard.js has no per-square restriction; enforcement happens in onDrop (snapback)
-      // This function kept for parity and future UI hints.
-    }
+    function setAllowedMoveForStudent(){}
 
     // piece-theme detection
     async function pieceExists(url){
@@ -425,7 +382,6 @@
       reader.onload = function(e){
         const text = e.target.result;
         const parts = splitPGNs(text);
-        // populate puzzles[] with detected parts; default to first part in textarea
         if(parts && parts.length>0){
           puzzles = parts.slice();
           puzzleIndex = 0;
@@ -436,12 +392,10 @@
           puzzleIndex = 0;
           pgnInput.value = text;
         }
-        console.log('Uploaded .pgn file — parts:', puzzles.length);
       };
       reader.readAsText(file,'utf-8');
     });
 
-    // helpers: split by [Event] or blank lines
     function splitPGNs(raw){
       if(!raw || typeof raw !== 'string') return [];
       const byEvent = raw.split(/\n(?=\[Event\s)/g).map(s=>s.trim()).filter(Boolean);
@@ -452,9 +406,7 @@
     // UI wiring
     loadPgnBtn.addEventListener('click', function(){
       const txt = pgnInput.value.trim();
-      console.log('Load PGN clicked. Text len:', txt.length);
       if(!txt){ setMsg('Paste or upload a PGN first', 1500); return; }
-
       const parts = splitPGNs(txt);
       if(parts && parts.length>1){
         puzzles = parts.slice();
@@ -468,7 +420,6 @@
       }
     });
 
-    // other UI
     showAnswerBtn.onclick = function(){
       if(movesList.style.display === 'none' || movesList.style.display === ''){ movesList.style.display='block'; this.textContent='Hide answer'; } else { movesList.style.display='none'; this.textContent='Show answer'; }
     };
@@ -478,10 +429,6 @@
       try{ if(!game) game = new Chess(); const ok = game.load(txt); if(!ok){ alert('Invalid FEN'); return; } stepIndex=0; pgnMoves=[]; if(board) board.position(game.fen()); fenDisplay.textContent=game.fen(); }catch(e){ alert('Invalid FEN'); }
     };
     resetBtn.onclick = ()=> { if(!game) game = new Chess(); else game.reset(); stepIndex=0; pgnMoves=[]; if(board) board.position(game.fen()); fenDisplay.textContent = game.fen(); refreshMovesUI(); setMsg('Reset',900); };
-
-    // NEXT / PREV behaviour:
-    // - If multiple puzzles are loaded (puzzles.length > 1), Next/Prev switches puzzles.
-    // - Otherwise, Next/Prev advances/rewinds moves as before.
 
     nextBtn.onclick = ()=> {
       if(puzzles && puzzles.length > 1){
@@ -495,7 +442,6 @@
         }
         return;
       }
-      // single puzzle -> advance move
       if(!game || stepIndex>=pgnMoves.length) return;
       const san = pgnMoves[stepIndex];
       const r = game.move(san, { sloppy:true });
@@ -517,7 +463,6 @@
         }
         return;
       }
-      // single puzzle -> previous move
       if(!game || stepIndex<=0) return;
       game.undo();
       stepIndex = Math.max(0, stepIndex-1);
@@ -537,48 +482,14 @@
     presetMed.addEventListener('click', ()=> setBoardSize(720));
     presetLarge.addEventListener('click', ()=> setBoardSize(920));
 
-    // multiplayer event wiring (bottom UI)
-    // Join handler updated to register only after socket connected (reliable)
-    joinBtnBottom.addEventListener('click', function(){
-      const email = emailInputBottom.value.trim();
-      if(!email) return alert('Enter email to join online');
-      myEmail = email;
-
-      // ensure socket initialized (initSocket will auto-register if myEmail is set)
-      if(!socket){
-        initSocket();
-        multiplayStatus.textContent = 'Connecting...';
-        return;
-      }
-      if(!socket.connected){
-        initSocket();
-        multiplayStatus.textContent = 'Connecting...';
-        return;
-      }
-
-      // socket connected -> register now
-      socket.emit('register', myEmail);
-      multiplayStatus.textContent = 'Connected as ' + myEmail;
-    });
-
-    challengeBtnBottom.addEventListener('click', function(){
-      const target = onlinePlayersBottom.value;
-      if(!target) return alert('Select a player to challenge');
-      if(!socket || !socket.connected) return alert('Not connected to server');
-      socket.emit('challenge', target);
-      multiplayStatus.textContent = 'Challenge sent...';
-    });
-
-    // boot
+    // Boot sequence: loads Chess.js and initial board
     async function boot(){
-      // ensure Chess.js
       if(typeof Chess === 'undefined'){
         try{
-          // try dynamic import then fallback to script tag (like your previous logic)
           const mod = await import(CHESS_URL + '?t=' + Date.now());
           const candidate = mod.default || mod.Chess || mod;
           if(candidate) window.Chess = candidate;
-        }catch(e){ /* ignore */ }
+        }catch(e){}
         if(typeof Chess === 'undefined'){
           var s = document.createElement('script'); s.src = CHESS_URL + '?t=' + Date.now(); s.async=false;
           s.onload = ()=> { console.info('Chess.js loaded via script tag'); };
@@ -587,7 +498,6 @@
         }
       }
 
-      // after libs load (or attempted), initialize
       try{
         currentTheme = await chooseTheme();
       }catch(e){ currentTheme = FALLBACK_THEME; }
@@ -596,19 +506,13 @@
       fenDisplay.textContent = game.fen();
       refreshMovesUI();
       setMsg('', 0);
-      console.log('Boot complete. Using piece theme:', currentTheme);
-
-      // Initialize resizer default to current wrapper size (read CSS max-width or fallback)
       const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 920;
       setBoardSize(initial);
-
-      // initialize socket but do not auto-register — user clicks Join Online
-      initSocket();
+      // Firebase multiplayer initialized below; does not auto-register until Join pressed
     }
 
     boot();
 
-    // Recreate / resize board on window resize to ensure chessboard-js picks up new element size
     let resizeTimer = null;
     window.addEventListener('resize', ()=> {
       if(resizeTimer) clearTimeout(resizeTimer);
@@ -625,198 +529,254 @@
       }, 150);
     });
 
-    /* ----------------------------
-       SOCKET.IO MULTIPLAYER LOGIC (robust)
-       ---------------------------- */
-    function initSocket(){
-      if(socket && socket.connected) return;
-
-      console.log("Attempting socket connect to", SERVER);
-
-      // Try polling first (more robust in proxied envs), then websocket.
-      socket = io(SERVER, {
-        transports: ['polling','websocket'],
-        reconnectionAttempts: 6,
-        timeout: 20000, // handshake timeout
-        reconnectionDelayMax: 5000
-      });
-
-      socket.on('connect', () => {
-        console.log('socket connected', socket.id, 'transport', socket.io.engine.transport.name);
-        multiplayStatus.textContent = 'Connected (not registered)';
-        // auto-register if the user entered email already
-        if(myEmail){
-          socket.emit('register', myEmail);
-          multiplayStatus.textContent = 'Registered as ' + myEmail;
+    // Expose a simple helper for external code to update board and notify partner
+    window.onBoardMove = function(newFen){
+      try{
+        if(!newFen) return;
+        if(!game) game = new Chess();
+        if(typeof game.load === 'function') game.load(newFen);
+        if(board) board.position(newFen);
+        fenDisplay.textContent = newFen;
+        if(isPaired && window.firebaseMultiplayer){
+          window.firebaseMultiplayer.emitMove(newFen);
         }
-      });
+      }catch(e){}
+    };
 
-      socket.on('connect_error', (err) => {
-        console.error('connect_error', err);
-        multiplayStatus.textContent = 'Connect error: ' + (err && err.message ? err.message : 'timeout');
-        if(err && err.message && err.message.indexOf('timeout') !== -1){
-          multiplayStatus.textContent += ' — Is the server running? Run `node server.js` and forward port 3000.';
-          console.warn('If you are running in Codespaces/preview, ensure port 3000 is forwarded and server is running inside the environment.');
-        }
-      });
+    // When loading a FEN or resetting, notify partner if paired
+    loadFenBtn.addEventListener('click', function(){
+      setTimeout(()=> {
+        try{ if(isPaired && window.firebaseMultiplayer){ window.firebaseMultiplayer.emitMove(game.fen()); } }catch(e){}
+      }, 120);
+    });
+    resetBtn.addEventListener('click', function(){
+      setTimeout(()=> {
+        try{ if(isPaired && window.firebaseMultiplayer){ window.firebaseMultiplayer.emitMove(game.fen()); } }catch(e){}
+      }, 120);
+    });
 
-      socket.on('disconnect', (reason) => {
-        console.log('socket disconnected', reason);
-        multiplayStatus.textContent = 'Disconnected';
-        isPaired = false;
-        pairedBubble.style.display = 'none';
-      });
+  })();
+  </script>
 
-      // Robust online handler: accepts map or array; shows "No Player" when none
-      socket.on('online', (users) => {
-        console.log('<< socket.on:online payload >>', users);
+  <!-- ===========================
+       FIREBASE REALTIME DATABASE
+       INSERTED CONFIG (from user)
+       =========================== -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <script>
+  (function(){
+    // ======= YOUR FIREBASE CONFIG (cleaned) =======
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4u-chess-classroom.firebasestorage.app",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
+    };
+    // ==============================================
+
+    if(FIREBASE_CONFIG){
+      firebase.initializeApp(FIREBASE_CONFIG);
+      const db = firebase.database();
+
+      // DOM refs (already defined above)
+      const joinBtnBottom = document.getElementById('joinBtnBottom');
+      const emailInputBottom = document.getElementById('emailInputBottom');
+      const onlinePlayersBottom = document.getElementById('onlinePlayersBottom');
+      const challengeBtnBottom = document.getElementById('challengeBtnBottom');
+      const multiplayStatus = document.getElementById('multiplayStatus');
+      const pairedBubble = document.getElementById('pairedBubble');
+
+      let myId = (sessionStorage.getItem('iq4u_clientId')) ? sessionStorage.getItem('iq4u_clientId') : ('c_' + Math.random().toString(36).slice(2,10));
+      sessionStorage.setItem('iq4u_clientId', myId);
+      let myEmail = '';
+      let currentGameId = null;
+      let isPairedLocal = false;
+      let presenceTimer = null;
+
+      const onlineRef = db.ref('online');
+      const challengesRef = db.ref('challenges');
+      const gamesRef = db.ref('games');
+      let movesRef = null;
+
+      function goOnline(email){
+        myEmail = email || ('anon-'+myId);
+        const node = onlineRef.child(myId);
+        node.set({ email: myEmail, ts: firebase.database.ServerValue.TIMESTAMP })
+          .then(()=> {
+            multiplayStatus.textContent = 'Connected as ' + myEmail;
+          })
+          .catch(err => multiplayStatus.textContent = 'Presence write error');
+        node.onDisconnect().remove();
+        if(presenceTimer) clearInterval(presenceTimer);
+        presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
+      }
+
+      function goOffline(){
+        if(presenceTimer) clearInterval(presenceTimer);
+        onlineRef.child(myId).remove().catch(()=>{});
+        multiplayStatus.textContent = 'Not connected';
+      }
+
+      onlineRef.on('value', snap => {
+        const v = snap.val() || {};
         onlinePlayersBottom.innerHTML = '';
-        const list = [];
-        if (Array.isArray(users)) {
-          for (const u of users) {
-            if (!u) continue;
-            const id = u.id || u.socketId || u.socket;
-            const email = u.email || u.emailAddress || u.name || '(no email)';
-            list.push({ id, email });
-          }
-        } else if (users && typeof users === 'object') {
-          for (const id in users) {
-            if (!users[id]) continue;
-            const email = users[id].email || users[id].emailAddress || users[id].username || '(no email)';
-            list.push({ id, email });
-          }
-        }
-
-        let added = 0;
-        for (const item of list) {
-          if (!item || !item.id) continue;
-          if (socket && item.id === socket.id) continue; // skip self
+        let count = 0;
+        for(const id in v){
+          if(!v.hasOwnProperty(id)) continue;
+          if(id === myId) continue;
           const opt = document.createElement('option');
-          opt.value = item.id;
-          opt.textContent = item.email;
+          opt.value = id;
+          opt.textContent = v[id].email || id;
           onlinePlayersBottom.appendChild(opt);
-          added++;
+          count++;
         }
-
-        if (added === 0) {
+        if(count === 0){
           const opt = document.createElement('option');
           opt.value = '';
           opt.disabled = true;
           opt.selected = true;
           opt.textContent = 'No Player';
           onlinePlayersBottom.appendChild(opt);
-
           challengeBtnBottom.disabled = true;
-          challengeBtnBottom.setAttribute('aria-disabled', 'true');
         } else {
           challengeBtnBottom.disabled = false;
-          challengeBtnBottom.removeAttribute('aria-disabled');
         }
       });
 
-      // someone challenged this client
-      socket.on('challengeRequest', (data) => {
-        const ok = confirm((data.email || 'Player') + ' challenges you. Accept?');
-        if(ok){
-          socket.emit('accept', data.fromId);
-          multiplayStatus.textContent = 'Accepted challenge. Waiting...';
-        }
-      });
+      function sendChallengeTo(targetId){
+        if(!targetId) return;
+        const ch = challengesRef.child(targetId).push();
+        ch.set({
+          fromId: myId,
+          fromEmail: myEmail,
+          ts: firebase.database.ServerValue.TIMESTAMP
+        }).then(()=> {
+          multiplayStatus.textContent = 'Challenge sent';
+          setTimeout(()=> ch.remove().catch(()=>{}), 60_000);
+        }).catch(err => multiplayStatus.textContent = 'Challenge send failed');
+      }
 
-      // challenge declined (optional)
-      socket.on('challenge_declined', ({ email }) => {
-        multiplayStatus.textContent = email + ' declined your challenge';
-      });
-
-      // start game - server sends who is white and black
-      socket.on('startGame', (data) => {
-        // server should send { white: socketId, black: socketId, /* optional initialFen */ }
+      challengesRef.child(myId).on('child_added', snap => {
+        const data = snap.val();
+        const key = snap.key;
         if(!data) return;
-        isPaired = true;
-        pairedBubble.style.display = 'inline-block';
-        multiplayStatus.textContent = 'Paired: ' + (data.white === socket.id ? 'You are White' : 'You are Black');
-        myColor = (data.white === socket.id) ? 'white' : 'black';
-
-        // if server provided an initial FEN, load it; otherwise use current game
-        if(data.initialFen){
-          try{
-            if(game && typeof game.load === 'function'){
-              const ok = game.load(data.initialFen);
-              if(ok) {
-                if(board) board.position(game.fen());
-                fenDisplay.textContent = game.fen();
-              }
-            } else {
-              // fallback: set board position directly
-              if(board) board.position(data.initialFen);
-              fenDisplay.textContent = data.initialFen;
-            }
-          }catch(e){
-            console.warn('Failed load initial FEN from server', e);
+        const fromEmail = data.fromEmail || data.fromId;
+        const accept = confirm(`${fromEmail} challenges you. Accept?`);
+        if(accept){
+          const gameNode = gamesRef.push();
+          const gameId = gameNode.key;
+          const gameData = { white: data.fromId, black: myId, createdAt: firebase.database.ServerValue.TIMESTAMP };
+          gameNode.set(gameData).then(()=>{
+            movesRef = db.ref('moves/' + gameId);
+            currentGameId = gameId;
+            isPairedLocal = true;
+            pairedBubble.style.display = 'inline-block';
+            multiplayStatus.textContent = 'Paired: You are Black';
+            db.ref('notifications/' + data.fromId + '/' + gameId).set({ type:'startGame', gameId, white: data.fromId, black: myId });
+            challengesRef.child(myId).child(key).remove().catch(()=>{});
+            // start watching moves for this game
+            watchMoves(gameId);
+            window.isPaired = true;
+          });
+        } else {
+          if(data.fromId){
+            db.ref('challengeDeclined/' + data.fromId + '/' + myId).set({ email: myEmail, ts: firebase.database.ServerValue.TIMESTAMP });
           }
+          challengesRef.child(myId).child(key).remove().catch(()=>{});
         }
       });
 
-      // receive move - update board
-      socket.on('move', (data) => {
-        if(!data || !data.fen) return;
-        try{
-          if(!game) game = new Chess();
-          const ok = game.load(data.fen);
-          if(ok){
-            if(board) board.position(game.fen());
-            fenDisplay.textContent = game.fen();
+      db.ref('notifications/' + myId).on('child_added', snap => {
+        const n = snap.val(); if(!n) return;
+        if(n.type === 'startGame' && n.gameId){
+          currentGameId = n.gameId;
+          watchMoves(currentGameId);
+          isPairedLocal = true;
+          if(n.white === myId) multiplayStatus.textContent = 'Paired: You are White';
+          else multiplayStatus.textContent = 'Paired: You are Black';
+          pairedBubble.style.display = 'inline-block';
+        }
+        snap.ref.remove().catch(()=>{});
+      });
+
+      db.ref('challengeDeclined/' + myId).on('child_added', snap => {
+        const d = snap.val(); if(!d) return;
+        multiplayStatus.textContent = (d.email || 'Player') + ' declined your challenge';
+        snap.ref.remove().catch(()=>{});
+      });
+
+      function watchMoves(gameId){
+        if(!gameId) return;
+        movesRef = db.ref('moves/' + gameId);
+        movesRef.on('child_added', snap => {
+          const m = snap.val();
+          if(m && m.fen){
+            if(typeof window.onBoardMove === 'function') window.onBoardMove(m.fen);
           } else {
-            // if load fails, try setting board position directly
-            if(board) board.position(data.fen);
-            fenDisplay.textContent = data.fen;
+            // fallback
           }
-        }catch(e){
-          // fallback
-          if(board) board.position(data.fen);
-          fenDisplay.textContent = data.fen;
-        }
+        });
+      }
+
+      function emitMoveForGame(gameId, fen){
+        if(!gameId || !fen) return;
+        const node = db.ref('moves/' + gameId).push();
+        node.set({ fen: fen, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{});
+      }
+
+      joinBtnBottom.addEventListener('click', function(){
+        const email = (emailInputBottom.value || '').trim();
+        if(!email) return alert('Enter email to join online');
+        goOnline(email);
       });
 
-    } // end initSocket
+      challengeBtnBottom.addEventListener('click', function(){
+        const target = onlinePlayersBottom.value;
+        if(!target) return alert('Select a player');
+        sendChallengeTo(target);
+      });
 
-    /* ----------------------------
-       Helper for external boards: call onBoardMove(newFen) when the local board changes
-       If you later replace chessboard.js with another board, call onBoardMove to emit moves
-       ---------------------------- */
-    window.onBoardMove = function(newFen){
-      try{
-        if(!newFen) return;
-        if(!game) game = new Chess();
-        // try to load fen into game
-        if(typeof game.load === 'function') game.load(newFen);
-        if(board) board.position(newFen);
-        fenDisplay.textContent = newFen;
-        // emit if paired
-        if(isPaired && socket && socket.connected){
-          socket.emit('move', { fen: newFen });
-        }
-      }catch(e){}
-    };
+      // expose API used by board code
+      window.firebaseMultiplayer = {
+        emitMove: function(fen){
+          if(!currentGameId) return console.warn('Not in game');
+          emitMoveForGame(currentGameId, fen);
+        },
+        startWatchingGame: function(gameId){
+          currentGameId = gameId;
+          watchMoves(gameId);
+        },
+        getMyId: () => myId,
+        getMyEmail: () => myEmail,
+        goOffline: goOffline
+      };
 
-    /* ----------------------------
-       Make sure we update partner when user clicks Reset/Load FEN etc.
-       ---------------------------- */
-    // when loading a FEN via your Load FEN button we already call game.load and set board.position
-    // but we also want to notify partner if paired — so intercept loadFenBtn and resetBtn were handled above.
-    loadFenBtn.addEventListener('click', function(){
-      // after performing load, if paired emit the new fen
-      setTimeout(()=> {
-        try{ if(isPaired && socket && socket.connected){ socket.emit('move', { fen: game.fen() }); } }catch(e){}
-      }, 120);
-    });
-    resetBtn.addEventListener('click', function(){
-      setTimeout(()=> {
-        try{ if(isPaired && socket && socket.connected){ socket.emit('move', { fen: game.fen() }); } }catch(e){}
-      }, 120);
-    });
+      // cleanup
+      window.addEventListener('beforeunload', ()=> { try{ goOffline(); }catch(e){} });
+
+    } else {
+      // FIREBASE_CONFIG missing: wire Join button to show friendly message
+      joinBtnBottom.addEventListener('click', function(){ alert('Firebase not configured. Paste your Firebase config into this HTML file.'); });
+      challengeBtnBottom.addEventListener('click', function(){ alert('Firebase not configured.'); });
+    }
 
   })();
   </script>
+
+  <!-- Optional lightweight debug overlay injection (no UI changes) -->
+  <script>
+  (function(){
+    if(window.__IQ4U_injection_done) return;
+    window.__IQ4U_injection_done = true;
+    // Minimal console hint to open debug overlay if needed (Shift+D)
+    console.info('If you want a debug overlay, ask me to inject it — it will not change UI.');
+  })();
+  </script>
+
 </body>
 </html>
