@@ -2,14 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Board</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IQ4U — Student Puzzle (fixed loader)</title>
 
-  <!-- Chessboard CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
-
   <style>
-    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:16px; background:#f6f7fb; color:#111; }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; }
     .controls{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; }
@@ -73,135 +71,121 @@
 
   <!-- jQuery (optional) -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-  <!-- ensure chessboard.js is present BEFORE our app script -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
-  <!-- =========================
-       INLINE PGN PARSER (1.3.7)
-       This defines global `parser.pgn2json()`.
-       ========================= -->
+  <!-- Inline PGN parser (unchanged) -->
   <script>
-/* @module Chess PGN Parser, @version 1.3.7, @copyright Aditya D.S. 2020, @license MIT */
+/* @module Chess PGN Parser, @version 1.3.7 (same inline as before) */
 !function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
   </script>
-  <!-- End inline parser -->
 
   <script>
   (function(){
-    // -------------------------
-    // Keep your original CHESS_URL and piece-theme logic unchanged.
-    // -------------------------
+    // keep your CHESS_URL (unchanged)
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-    // helpers to fetch/check piece file
-    async function pieceExists(url){
-      try{
-        const h = await fetch(url, { method:'HEAD', cache:'no-store', mode:'cors' });
-        if (h.ok) return true;
-      }catch(e){
-        try{
-          const r = await fetch(url + '?t=' + Date.now(), { method:'GET', cache:'no-store', mode:'cors' });
-          return r.ok && ((r.headers.get('content-type')||'').includes('image') || (r.headers.get('content-type')||'').includes('svg'));
-        }catch(e2){ return false; }
-      }
-      return false;
-    }
-
-    async function chooseTheme(){
-      const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
-      try{ const ok = await pieceExists(test); return ok ? CUSTOM_PIECE_THEME : FALLBACK_THEME; }catch(e){ return FALLBACK_THEME; }
-    }
-
-    // ensure Chess.js is present (as your old code did)
-    async function ensureChess(){
-      if (typeof Chess !== 'undefined') return true;
-      try{
-        const mod = await import(CHESS_URL + '?t=' + Date.now());
-        const candidate = mod.default || mod.Chess || mod;
-        if (candidate){ window.Chess = candidate; return true; }
-      }catch(err){ /* ignore */ }
-      return new Promise(resolve => {
-        const s = document.createElement('script');
-        s.src = CHESS_URL + '?t=' + Date.now();
-        s.async = false;
-        s.onload = () => resolve(typeof Chess !== 'undefined');
-        s.onerror = () => resolve(false);
-        document.head.appendChild(s);
-      });
-    }
-
-    // application state
-    let currentTheme = FALLBACK_THEME;
-    let game = null;
-    let board = null;
-    let pgnMoves = [];   // moves in SAN order (mainline)
-    let stepIndex = 0;   // next move index to apply
-    let autoplayTimer = null;
-    const speedMsDefault = 900;
-
     // DOM refs
-    const fenDisplay = document.getElementById('fenDisplay');
+    const pgnInput = document.getElementById('pgnInput');
+    const pgnFile = document.getElementById('pgnFile');
+    const loadPgnBtn = document.getElementById('loadPgnBtn');
+    const showAnswerBtn = document.getElementById('showAnswerBtn');
+    const clearPgnBtn = document.getElementById('clearPgn');
+    const loadFenBtn = document.getElementById('loadFenBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const flipBtn = document.getElementById('flipBtn');
+    const orientationSelect = document.getElementById('orientationSelect');
     const movesList = document.getElementById('movesList');
+    const fenDisplay = document.getElementById('fenDisplay');
     const msgEl = document.getElementById('msg');
 
-    function setMsg(t, ms){
-      msgEl.textContent = t || '';
-      if (ms && ms>0) setTimeout(()=>{ if(msgEl.textContent===t) msgEl.textContent=''; }, ms);
+    // state
+    let game = null, board = null, pgnMoves = [], stepIndex = 0, currentTheme = FALLBACK_THEME;
+
+    function setMsg(t, ms){ msgEl.textContent = t||''; if(ms>0) setTimeout(()=>{ if(msgEl.textContent===t) msgEl.textContent=''; }, ms); }
+
+    // Robust helpers (fixed newline handling and safer operations)
+    function stripCommentsAndVariations(raw){
+      if(!raw || typeof raw !== 'string') return '';
+      // Remove curly-brace comments
+      let s = raw.replace(/\{[^}]*\}/g, ' ');
+      // Remove percent-comments
+      s = s.replace(/%[^\n]*\n/g, ' ');
+      // Remove parenthesis variations (non-greedy; repeated until none left)
+      while(/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, ' ');
+      return s;
     }
 
-    function updateFen(){ if(game) fenDisplay.textContent = game.fen(); else fenDisplay.textContent = ''; }
+    function extractLastFEN(raw){
+      if(!raw || typeof raw !== 'string') return null;
+      const re = /\[FEN\s+"([^"]+)"\]/g;
+      let m, last=null;
+      while((m=re.exec(raw))!==null) last = m[1];
+      return last;
+    }
+
+    function extractSANMoves(pgnClean){
+      if(!pgnClean || typeof pgnClean !== 'string') return [];
+      // remove tag pairs like [Event "..."]
+      let body = pgnClean.replace(/\[[^\]]*\]/g, ' ');
+      // collapse whitespace
+      body = body.replace(/\s+/g,' ').trim();
+      if(!body) return [];
+      const tokens = body.split(' ').filter(t => t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
+      return tokens;
+    }
+
+    function splitPGNs(raw){
+      if(!raw || typeof raw !== 'string') return [];
+      // Try split by [Event occurrences first
+      const events = raw.split(/\n(?=\[Event\s)/);
+      const cleaned = events.map(e => e.trim()).filter(Boolean);
+      if(cleaned.length>1) return cleaned;
+      // Otherwise split by two or more newlines
+      return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+    }
 
     function refreshMovesUI(){
-      if (!pgnMoves || pgnMoves.length===0){ movesList.innerHTML = '<div class="small">No moves loaded.</div>'; return; }
-      let html = '';
-      for (let i=0;i<pgnMoves.length;i+=2){
+      if(!pgnMoves || pgnMoves.length===0){ movesList.innerHTML = '<div class="small">No moves loaded.</div>'; return; }
+      let html='';
+      for(let i=0;i<pgnMoves.length;i+=2){
         const no = Math.floor(i/2)+1;
         html += `<div style="padding:6px;border-radius:6px;"><strong>${no}.</strong> ${pgnMoves[i]||''} ${pgnMoves[i+1]||''}</div>`;
       }
       movesList.innerHTML = html;
     }
 
-    // chessboard.js callbacks
+    // chessboard callbacks
     function onDrop(source, target){
-      if (!game) return 'snapback';
-      const move = game.move({ from: source, to: target, promotion: 'q' });
-      if (move === null) {
-        setMsg('Illegal move', 1200);
-        return 'snapback';
-      }
-
+      if(!game) return 'snapback';
+      const move = game.move({ from: source, to: target, promotion:'q' });
+      if(move === null){ setMsg('Illegal move', 1200); return 'snapback'; }
+      // enforce expected move if exists
       const expected = pgnMoves[stepIndex];
-      if (expected){
-        if (move.san !== expected){
+      if(expected){
+        if(move.san !== expected){
           game.undo();
-          setTimeout(()=> { board.position(game.fen()); }, 60);
-          setMsg('Wrong move — that is not the solution', 1400);
+          setTimeout(()=> board.position(game.fen()), 60);
+          setMsg('Wrong move — not the expected solution', 1400);
           return 'snapback';
         } else {
-          stepIndex++;
-          board.position(game.fen());
-          updateFen();
-          refreshMovesUI();
+          stepIndex++; board.position(game.fen()); fenDisplay.textContent = game.fen(); refreshMovesUI();
+          // after student's correct move, let autoplay opponent if any
           scheduleAutoplayIfOpponentToMove();
         }
       } else {
-        board.position(game.fen());
-        updateFen();
+        board.position(game.fen()); fenDisplay.textContent = game.fen();
       }
     }
-
-    function onSnapEnd(){
-      if (board) board.position(game.fen());
-    }
+    function onSnapEnd(){ if(board) board.position(game.fen()); }
 
     function createBoard(theme){
-      const orientation = document.getElementById('orientationSelect').value || 'white';
-      if (board && typeof board.destroy === 'function') {
-        try { board.destroy(); } catch(e) {}
-      }
+      const orientation = orientationSelect.value || 'white';
+      if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
       board = Chessboard('board', {
         draggable: true,
         position: game ? game.fen() : 'start',
@@ -212,213 +196,168 @@
       });
     }
 
-    // ---------- SAFER PGN parsing ----------
-    // Try inline parser, but guard it heavily and silently fall back to the tokenizer if any error occurs.
+    // PGN extraction — use parser if available but fallback safely
     function extractMovesFromPGN(pgn){
-      // Try inline parser but do not allow it to throw into console.
-      if (typeof parser !== 'undefined' && typeof parser.pgn2json === 'function') {
-        try {
-          // call parser inside try and only use result if it looks valid
+      // try inline parser
+      if(typeof parser !== 'undefined' && typeof parser.pgn2json === 'function'){
+        try{
           const jsonStr = parser.pgn2json(pgn);
-          if (typeof jsonStr === 'string' && jsonStr.length > 10) {
-            try {
-              const parsed = JSON.parse(jsonStr);
-              if (parsed && Array.isArray(parsed.moves) && parsed.moves.length>0){
-                return { moves: parsed.moves.filter(m=>typeof m==='string' && m.trim()), headers: parsed.str || {} };
-              }
-            } catch(eJson) {
-              // parsing JSON failed — fall through to tokenizer
+          if(typeof jsonStr === 'string' && jsonStr.length>10){
+            const parsed = JSON.parse(jsonStr);
+            if(parsed && Array.isArray(parsed.moves) && parsed.moves.length>0){
+              return { moves: parsed.moves.filter(m=>typeof m==='string'&&m.trim()), headers: parsed.str||{} };
             }
           }
-        } catch(eParser){
-          // swallow the parser error silently (do not log). fallback below.
+        }catch(e){
+          // swallow and fallback
+          console.warn('parser.pgn2json failed, falling back', e);
         }
       }
-
-      // Fallback: try Chess.js load_pgn if available
-      if (typeof Chess !== 'undefined') {
-        try {
-          const tmp = new Chess();
-          let ok = false;
-          try { ok = typeof tmp.load_pgn === 'function' ? tmp.load_pgn(pgn) : (typeof tmp.load === 'function' ? tmp.load(pgn) : false); } catch(e2){ ok = false; }
-          if (ok){
-            return { moves: tmp.history(), headers: {} };
-          }
-        } catch(e) {
-          // ignore
-        }
-      }
-
-      // Final fallback: robust manual strip & tokenization (works for most PGNs)
-      try{
-        let s = pgn.replace(/\{[^}]*\}/g,' ');
-        s = s.replace(/%[^\n]*\n/g,' ');
-        while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g,' ');
-        s = s.replace(/\[[^\]]*\]/g,' ');
-        s = s.replace(/\s+/g,' ').trim();
-        const toks = s.split(' ').filter(t=> t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
-        return { moves: toks, headers: {} };
-      }catch(e){
-        return { moves: [], headers: {} };
-      }
+      // fallback naive clean
+      const cleaned = stripCommentsAndVariations(pgn);
+      const tokens = extractSANMoves(cleaned);
+      return { moves: tokens, headers: {} };
     }
 
-    // set up puzzle: apply starting FEN if provided and prepare pgnMoves
+    // prepare puzzle
     function preparePuzzleFromPGN(pgn){
-      stopAutoplay();
-      const result = extractMovesFromPGN(pgn);
-      pgnMoves = result.moves || [];
-      stepIndex = 0;
-
-      // If parser provided FEN header with SetUp=1, try to load it
-      let startFen = null;
-      if (result.headers && result.headers.FEN){
-        startFen = result.headers.FEN;
-        if (result.headers.SetUp !== undefined && result.headers.SetUp !== '1') startFen = null; // only use FEN if SetUp=1
-      }
-
+      try{ stopAutoplay(); }catch(e){}
+      if(!pgn || typeof pgn !== 'string'){ setMsg('No PGN provided', 1200); return; }
+      console.log('preparePuzzleFromPGN: received PGN (first 200 chars):', pgn.slice(0,200).replace(/\n/g,' '));
+      const res = extractMovesFromPGN(pgn);
+      pgnMoves = res.moves || []; stepIndex = 0;
+      // try FEN header
+      const fen = (res.headers && res.headers.FEN) ? res.headers.FEN : extractLastFEN(pgn);
       try{
-        if (typeof Chess === 'undefined'){ setMsg('Chess.js not loaded. See console.', 0); movesList.style.display='block'; movesList.textContent = pgn; return; }
-        game = startFen ? new Chess(startFen) : new Chess();
+        if(typeof Chess === 'undefined'){ setMsg('Chess.js not loaded (check console)',0); movesList.style.display='block'; movesList.textContent = pgn; return; }
+        game = fen ? new Chess(fen) : new Chess();
       }catch(e){
-        console.error('Failed to construct Chess:', e);
-        setMsg('Chess engine error. See console.', 0);
-        return;
+        console.error('Failed to init Chess:', e); setMsg('Chess engine error',0); return;
       }
-
-      updateFen();
-      refreshMovesUI(); // (hidden by default)
-      chooseTheme().then(theme => {
-        currentTheme = theme;
-        createBoard(currentTheme);
-        scheduleAutoplayIfOpponentToMove();
-      });
+      fenDisplay.textContent = game.fen(); refreshMovesUI(); // hidden by default
+      chooseTheme().then(theme => { currentTheme = theme; createBoard(currentTheme); scheduleAutoplayIfOpponentToMove(); });
     }
 
+    // autoplay opponent moves while it's opponent turn (student is White)
+    let autoplayTimer = null;
     function scheduleAutoplayIfOpponentToMove(){
-      stopAutoplay();
+      try{ if(autoplayTimer) { clearTimeout(autoplayTimer); autoplayTimer = null; } }catch(e){}
       const studentColor = 'w';
-      const speed = Math.max(60, speedMsDefault);
-
+      const speed = 900;
       function step(){
-        if (!game || stepIndex >= pgnMoves.length) { stopAutoplay(); return; }
-        if (game.turn() === studentColor) { stopAutoplay(); return; }
+        if(!game || stepIndex >= pgnMoves.length){ clearTimeout(autoplayTimer); autoplayTimer=null; return; }
+        if(game.turn() === studentColor){ clearTimeout(autoplayTimer); autoplayTimer=null; return; }
         const san = pgnMoves[stepIndex];
-        const res = game.move(san, { sloppy: true });
-        if (!res){
-          console.warn('Invalid PGN move at', stepIndex, san);
-          movesList.style.display = 'block';
-          setMsg('PGN contains invalid move. See notation.', 0);
-          stopAutoplay();
-          return;
-        }
+        const r = game.move(san, { sloppy:true });
+        if(!r){ console.warn('Invalid PGN move at', stepIndex, san); movesList.style.display='block'; setMsg('PGN invalid — see notation',0); clearTimeout(autoplayTimer); autoplayTimer=null; return; }
         stepIndex++;
-        if (board) board.position(game.fen());
-        updateFen();
-        if (stepIndex < pgnMoves.length && game.turn() !== studentColor){
-          autoplayTimer = setTimeout(step, speed);
-        } else {
-          stopAutoplay();
-        }
+        if(board) board.position(game.fen()); fenDisplay.textContent = game.fen();
+        if(stepIndex < pgnMoves.length && game.turn() !== studentColor) autoplayTimer = setTimeout(step, speed);
       }
+      if(game && game.turn() !== studentColor) autoplayTimer = setTimeout(step, speed); else setAllowedMoveForStudent();
+    }
+    function stopAutoplay(){ if(autoplayTimer) clearTimeout(autoplayTimer); autoplayTimer = null; }
 
-      if (game.turn() !== studentColor && stepIndex < pgnMoves.length){
-        autoplayTimer = setTimeout(step, speed);
-      } else {
-        // no-op
-      }
+    function setAllowedMoveForStudent(){
+      // chessboard.js has no per-square restriction; enforcement happens in onDrop (snapback)
+      // This function kept for parity and future UI hints.
     }
 
-    function stopAutoplay(){ if (autoplayTimer) { clearTimeout(autoplayTimer); autoplayTimer = null; } }
+    // piece-theme detection
+    async function pieceExists(url){
+      try{
+        const res = await fetch(url, { method:'HEAD', cache:'no-store', mode:'cors' });
+        return res.ok;
+      }catch(e){
+        return false;
+      }
+    }
+    async function chooseTheme(){
+      const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
+      try{ const ok = await pieceExists(test); return ok ? CUSTOM_PIECE_THEME : FALLBACK_THEME; }catch(e){ return FALLBACK_THEME; }
+    }
+
+    // file upload handling
+    pgnFile.addEventListener('change', function(ev){
+      const file = ev.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e){
+        const text = e.target.result;
+        const parts = splitPGNs(text);
+        // Use the first chunk as default
+        if(parts && parts.length>0){
+          pgnInput.value = parts[0];
+        } else {
+          pgnInput.value = text;
+        }
+        console.log('Uploaded .pgn file — parts:', parts.length);
+      };
+      reader.readAsText(file,'utf-8');
+    });
+
+    // helpers: split by [Event] or blank lines
+    function splitPGNs(raw){
+      if(!raw || typeof raw !== 'string') return [];
+      const byEvent = raw.split(/\n(?=\[Event\s)/g).map(s=>s.trim()).filter(Boolean);
+      if(byEvent.length>1) return byEvent;
+      return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+    }
 
     // UI wiring
-    function wireUI(){
-      document.getElementById('undoBtn').onclick = () => { if (!game) return; game.undo(); board.position(game.fen()); updateFen(); };
-      document.getElementById('flipBtn').onclick = () => board.flip();
-      document.getElementById('resetBtn').onclick = () => { if (!game) { game = new Chess(); } else { game.reset(); } pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMovesUI(); setMsg('Reset', 900); };
-      document.getElementById('clearPgn').onclick = () => { document.getElementById('pgnInput').value = ''; };
-      document.getElementById('loadFenBtn').onclick = () => {
-        const txt = document.getElementById('pgnInput').value.trim();
-        if (!txt){ alert('Paste FEN first'); return; }
-        if (!game) game = new Chess();
-        const ok = game.load(txt);
-        if (!ok){ alert('Invalid FEN'); return; }
-        pgnMoves=[]; stepIndex=0; board.position(game.fen()); updateFen(); refreshMovesUI();
-      };
+    loadPgnBtn.addEventListener('click', function(){
+      const txt = pgnInput.value.trim();
+      console.log('Load PGN clicked. Text len:', txt.length);
+      if(!txt){ setMsg('Paste or upload a PGN first', 1500); return; }
+      preparePuzzleFromPGN(txt);
+    });
 
-      document.getElementById('loadPgnBtn').onclick = () => {
-        const pgn = document.getElementById('pgnInput').value.trim();
-        if (!pgn){ alert('Paste PGN'); return; }
-        preparePuzzleFromPGN(pgn);
-      };
-
-      document.getElementById('showAnswerBtn').onclick = function(){
-        if (movesList.style.display === 'none' || movesList.style.display === '') {
-          movesList.style.display = 'block';
-          this.textContent = 'Hide answer';
-        } else {
-          movesList.style.display = 'none';
-          this.textContent = 'Show answer';
-        }
-      };
-
-      document.getElementById('pgnFile').addEventListener('change', function(ev){
-        const file = ev.target.files[0]; if(!file) return;
-        const reader = new FileReader();
-        reader.onload = function(e){
-          const text = e.target.result;
-          const parts = text.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
-          const chosen = parts.length>0 ? parts[0] : text;
-          document.getElementById('pgnInput').value = chosen;
-          preparePuzzleFromPGN(chosen);
-        };
-        reader.readAsText(file,'utf-8');
-      });
-
-      document.getElementById('nextBtn').onclick = function(){
-        if (!game || stepIndex >= pgnMoves.length) return;
-        const san = pgnMoves[stepIndex];
-        const res = game.move(san, { sloppy:true });
-        if (!res){ alert('Invalid PGN move'); return; }
-        stepIndex++;
-        board.position(game.fen());
-        updateFen();
-      };
-
-      document.getElementById('prevBtn').onclick = function(){
-        if (!game || stepIndex<=0) return;
-        game.undo();
-        stepIndex = Math.max(0, stepIndex-1);
-        board.position(game.fen());
-        updateFen();
-      };
-
-      document.getElementById('orientationSelect').onchange = function(){
-        if (board) {
-          const theme = currentTheme || FALLBACK_THEME;
-          createBoard(theme);
-        }
-      };
-    }
+    // other UI
+    showAnswerBtn.onclick = function(){
+      if(movesList.style.display === 'none' || movesList.style.display === ''){ movesList.style.display='block'; this.textContent='Hide answer'; } else { movesList.style.display='none'; this.textContent='Show answer'; }
+    };
+    clearPgnBtn.onclick = ()=>{ pgnInput.value=''; };
+    loadFenBtn.onclick = ()=> {
+      const txt = pgnInput.value.trim(); if(!txt){ alert('Paste FEN first'); return; }
+      try{ if(!game) game = new Chess(); const ok = game.load(txt); if(!ok){ alert('Invalid FEN'); return; } stepIndex=0; pgnMoves=[]; if(board) board.position(game.fen()); fenDisplay.textContent=game.fen(); }catch(e){ alert('Invalid FEN'); }
+    };
+    resetBtn.onclick = ()=> { if(!game) game = new Chess(); else game.reset(); stepIndex=0; pgnMoves=[]; if(board) board.position(game.fen()); fenDisplay.textContent = game.fen(); refreshMovesUI(); setMsg('Reset',900); };
+    nextBtn.onclick = ()=> { if(!game || stepIndex>=pgnMoves.length) return; const san = pgnMoves[stepIndex]; const r = game.move(san, { sloppy:true }); if(!r){ alert('Invalid PGN move'); return; } stepIndex++; if(board) board.position(game.fen()); fenDisplay.textContent = game.fen(); };
+    prevBtn.onclick = ()=> { if(!game || stepIndex<=0) return; game.undo(); stepIndex = Math.max(0, stepIndex-1); if(board) board.position(game.fen()); fenDisplay.textContent = game.fen(); };
+    undoBtn.onclick = ()=> { if(!game) return; game.undo(); if(board) board.position(game.fen()); fenDisplay.textContent = game.fen(); };
+    flipBtn.onclick = ()=> { if(board) board.flip(); };
+    orientationSelect.onchange = ()=> { if(board) createBoard(currentTheme); };
 
     // boot
-    window.addEventListener('load', async () => {
-      const okChess = await ensureChess();
-      if (!okChess){ console.error('Chess.js failed to load'); alert('Chess.js failed to load. See console.'); return; }
+    async function boot(){
+      // ensure Chess.js
+      if(typeof Chess === 'undefined'){
+        try{
+          // try dynamic import then fallback to script tag (like your previous logic)
+          const mod = await import(CHESS_URL + '?t=' + Date.now());
+          const candidate = mod.default || mod.Chess || mod;
+          if(candidate) window.Chess = candidate;
+        }catch(e){ /* ignore */ }
+        if(typeof Chess === 'undefined'){
+          var s = document.createElement('script'); s.src = CHESS_URL + '?t=' + Date.now(); s.async=false;
+          s.onload = ()=> { console.info('Chess.js loaded via script tag'); };
+          s.onerror = ()=> { console.warn('Chess.js failed to load from CHESS_URL'); setMsg('Chess.js failed to load — check console', 0); };
+          document.head.appendChild(s);
+        }
+      }
 
-      currentTheme = await chooseTheme();
+      // after libs load (or attempted), initialize
+      try{
+        currentTheme = await chooseTheme();
+      }catch(e){ currentTheme = FALLBACK_THEME; }
       game = new Chess();
       createBoard(currentTheme);
-      updateFen();
+      fenDisplay.textContent = game.fen();
       refreshMovesUI();
-      wireUI();
+      setMsg('', 0);
+      console.log('Boot complete. Using piece theme:', currentTheme);
+    }
 
-      const sample = document.getElementById('pgnInput').value.trim();
-      if (sample) preparePuzzleFromPGN(sample);
-
-      window._iq4u = { game, board, currentTheme, pgnMoves };
-      console.log('IQ4U puzzle loaded. Piece theme:', currentTheme);
-    });
+    boot();
   })();
   </script>
 </body>
