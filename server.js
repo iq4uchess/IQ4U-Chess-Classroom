@@ -1,33 +1,47 @@
 // server.js
-// Minimal Socket.IO server that keeps an "online" map and broadcasts updates.
+// Serve static site and run Socket.IO on same origin.
 // Node 16+ recommended.
 
+const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
+const root = path.join(__dirname); // serve files from IQ4U-Chess-Classroom
+
+// Serve static files (student.html, assets, libs)
+app.use(express.static(root));
+
+// Optional: simple index redirect to student.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(root, 'student.html'));
+});
+
 const server = http.createServer(app);
 
-// Allow all origins for testing. For production, set a specific origin.
+// socket.io attached to same HTTP server (no CORS headaches when client is served by this server)
 const io = new Server(server, {
-  cors: { origin: '*' }
+  // since client is same origin this isn't strictly necessary, but keep defaults
+  // pingInterval/pingTimeout can be tuned if needed
 });
 
 const online = {}; // { socketId: { email } }
 
 io.on('connection', (socket) => {
-  console.log('socket connected', socket.id);
+  // Print some handshake info for debugging
+  console.log('socket connected', socket.id, 'from', socket.handshake.address, 'transport', socket.conn.transport.name);
 
-  // register the user's email
+  // Register user email
   socket.on('register', (email) => {
-    console.log('register', socket.id, email);
-    online[socket.id] = { email: String(email || '').slice(0,128) };
-    // broadcast the current online map to everyone
+    const safeEmail = String(email || '').slice(0, 128);
+    online[socket.id] = { email: safeEmail };
+    console.log('register', socket.id, safeEmail);
+    // Broadcast full online map to everyone
     io.emit('online', online);
   });
 
-  // challenge another player by socket id
+  // Challenge another player
   socket.on('challenge', (targetId) => {
     console.log('challenge', socket.id, '->', targetId);
     const fromEmail = online[socket.id] && online[socket.id].email;
@@ -39,27 +53,32 @@ io.on('connection', (socket) => {
     }
   });
 
-  // accept a challenge
+  // Accept a challenge
   socket.on('accept', (fromId) => {
     console.log('accept', socket.id, 'from', fromId);
-    // simple pairing: send startGame to both
+    // pair the two players (simple pairing — white = challenger)
     const white = fromId;
     const black = socket.id;
     io.to(white).emit('startGame', { white, black });
     io.to(black).emit('startGame', { white, black });
   });
 
-  // move forwarded to others
+  // Relay moves to others (simple broadcast; in production you'd narrow to paired partner)
   socket.on('move', (data) => {
+    // you may add validation here. For now, broadcast to others.
     socket.broadcast.emit('move', data);
   });
 
-  socket.on('disconnect', () => {
-    console.log('disconnect', socket.id);
+  // cleanup on disconnect
+  socket.on('disconnect', (reason) => {
+    console.log('disconnect', socket.id, reason);
     delete online[socket.id];
     io.emit('online', online);
   });
 });
 
+// Start HTTP+Socket server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Socket server listening on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Socket server & static files listening on http://0.0.0.0:${PORT}`);
+});
