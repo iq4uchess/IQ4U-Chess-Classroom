@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -17,7 +17,6 @@
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
     .board-top{ grid-column: 1 / -1; display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; }
     .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
-    /* default board wrapper now 570px */
     #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; }
     #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
     #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
@@ -39,15 +38,10 @@
     .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
     @media (pointer: coarse) { button { padding:10px 14px; font-size:15px; } .resizer .range { touch-action: pan-x; } }
-
-    /* Highlight last move squares */
     .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
-
-    /* Promotion modal */
     .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
     .promote-modal .row{ display:flex; gap:8px; align-items:center; justify-content:center; }
     .promote-modal button{ min-width:44px; min-height:44px; font-weight:700; }
-
     .readonly-note{ color:#444; font-size:13px; margin-left:8px; }
   </style>
 </head>
@@ -55,7 +49,6 @@
 
   <!-- TOP BOARD SECTION -->
   <div class="board-top">
-    <!-- controls row: buttons centered -->
     <div class="controls" aria-hidden="false">
       <button id="undoBtn">Undo</button>
       <button id="prevBtn">Previous</button>
@@ -64,7 +57,6 @@
       <button id="resignBtn" title="Resign / Reset" style="background:#8b0f0f;">Resign</button>
     </div>
 
-    <!-- resizer row moved below controls and centered -->
     <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
       <input id="boardSizeRange" class="range" type="range" min="240" max="1200" step="10" value="570" aria-label="Board size">
       <small id="boardSizeLabel">570px</small>
@@ -78,7 +70,6 @@
           Orientation:
           <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
         </div>
-        <!-- FEN display intentionally removed as requested -->
       </div>
       <div class="info" id="msg" aria-live="polite"></div>
     </div>
@@ -103,20 +94,36 @@
             <button id="loadFenBtn">Load FEN</button>
             <button id="resetBtn">Reset</button>
           </div>
+
+          <!-- Mode selector -->
+          <div style="margin-top:12px; display:flex; gap:12px; align-items:center; justify-content:center;">
+            <label style="display:flex; gap:6px; align-items:center;">
+              <input type="radio" name="mode" value="game" id="modeGame" checked> <span class="small">Game Mode</span>
+            </label>
+            <label style="display:flex; gap:6px; align-items:center;">
+              <input type="radio" name="mode" value="puzzle" id="modePuzzle"> <span class="small">Puzzle Mode</span>
+            </label>
+            <span style="font-size:13px; color:#666;">(Puzzle Mode hides multiplayer)</span>
+          </div>
+
         </div>
       </div>
     </div>
 
     <div style="display:flex; flex-direction:column; gap:12px;">
-      <div class="panel">
-        <strong>Moves (hidden by default)</strong>
-        <div id="movesList"></div>
+      <div class="panel" id="rightPanel">
+        <strong id="rightPanelTitle">Options</strong>
+        <div id="rightPanelBody" style="margin-top:8px;">
+          <div id="modeInfo" style="font-size:13px; color:#444;">
+            Select <strong>Game Mode</strong> to play online or locally. Select <strong>Puzzle Mode</strong> to load a PGN puzzle and step through the solution.
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- multiplayer panel -->
-  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;">
+  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;" id="multiplayerPanel">
     <div style="display:flex; gap:8px; align-items:center;">
       <label for="emailInputBottom" class="small">Your email:</label>
       <input id="emailInputBottom" type="text" placeholder="example@gmail.com" />
@@ -152,8 +159,11 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
-  <!-- PGN parser -->
-  <script>/* same parser omitted for brevity in this response - included in file */</script>
+  <!-- PGN parser: integrated (user provided minified) -->
+  <script>
+/* @module Chess PGN Parser, @version 1.3.7, @copyright Aditya D.S. 2020, @license MIT */
+!function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
+  </script>
 
   <script>
   (function(){
@@ -168,7 +178,29 @@
     const orientationSelect = document.getElementById('orientationSelect');
     const msgEl = document.getElementById('msg');
     const promoteModal = document.getElementById('promoteModal');
+
+    // control strip
+    const undoBtn = document.getElementById('undoBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const flipBtn = document.getElementById('flipBtn');
     const resignBtn = document.getElementById('resignBtn');
+
+    // PGN controls
+    const loadPgnBtn = document.getElementById('loadPgnBtn');
+    const showAnswerBtn = document.getElementById('showAnswerBtn');
+    const pgnInput = document.getElementById('pgnInput');
+    const pgnFile = document.getElementById('pgnFile');
+    const clearPgn = document.getElementById('clearPgn');
+    const loadFenBtn = document.getElementById('loadFenBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    // mode controls
+    const modeGame = document.getElementById('modeGame');
+    const modePuzzle = document.getElementById('modePuzzle');
+    const multiplayerPanel = document.getElementById('multiplayerPanel');
+    const rightPanelTitle = document.getElementById('rightPanelTitle');
+    const rightPanelBody = document.getElementById('rightPanelBody');
 
     // multiplayer UI
     const emailInputBottom = document.getElementById('emailInputBottom');
@@ -185,6 +217,12 @@
     let isPaired = false, myColor = null, pairedGameId = null, isSpectator = false;
     let lastHighlighted = [];
 
+    // puzzle/PGN state
+    let movesHistory = [];      // array of SAN moves (strings)
+    let currentMoveIndex = 0;   // number of moves currently applied (0..movesHistory.length)
+    let autoplayTimer = null;
+    let puzzleInitialFen = null; // <-- store initial FEN when puzzle provides one
+
     function setMsg(t, ms){ msgEl.textContent = t||''; if(ms>0) setTimeout(()=>{ if(msgEl.textContent===t) msgEl.textContent=''; }, ms); }
 
     async function chooseTheme(){
@@ -199,9 +237,33 @@
       setTimeout(()=> clearHighlights(), 3500);
     }
 
+    // wait for Chess to be available (tries import then fallback)
+    async function ensureChessLoaded(){
+      if(typeof Chess !== 'undefined') return Promise.resolve();
+      // attempt dynamic import
+      try{
+        const mod = await import(CHESS_URL + '?t=' + Date.now());
+        window.Chess = mod.default || mod.Chess || mod;
+      }catch(e){
+        // ignore
+      }
+      if(typeof Chess !== 'undefined') return Promise.resolve();
+      return new Promise((resolve)=>{
+        // fallback: inject script and wait
+        const s = document.createElement('script');
+        s.src = CHESS_URL + '?t=' + Date.now();
+        s.async = true;
+        s.onload = ()=> { setTimeout(()=>resolve(),10); }; // tiny delay
+        s.onerror = ()=> { console.warn('Failed to load chess.min.js'); resolve(); };
+        document.head.appendChild(s);
+      });
+    }
+
     function createBoard(theme){
       const orientation = (isPaired && myColor==='black') ? 'black' : orientationSelect.value || 'white';
       if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
+      // ensure game exists
+      if(typeof game === 'undefined' || game===null) game = new Chess();
       board = Chessboard('board', {
         draggable: !isSpectator,
         position: game ? game.fen() : 'start',
@@ -210,6 +272,8 @@
         onSnapEnd: onSnapEnd,
         pieceTheme: theme
       });
+      // defensive extra: ensure position set
+      try{ if(board && typeof board.position === 'function') board.position(game.fen()); }catch(e){ console.warn('board.position error on createBoard', e); }
     }
 
     function onSnapEnd(){ if(board) board.position(game.fen()); }
@@ -276,25 +340,341 @@
       }catch(e){ console.warn('onBoardMove failed', e); }
     };
 
-    // set board size
+    // -------- PGN/puzzle helpers ----------
+    function applyMovesUpTo(n){
+      if(!game) game = new Chess();
+      // If puzzleInitialFen is set, load that instead of reset to standard start
+      if(puzzleInitialFen){
+        try{
+          if(typeof game.load === 'function'){
+            game.load(puzzleInitialFen);
+          } else {
+            // some chess.js versions accept new Chess(fen)
+            game = new Chess(puzzleInitialFen);
+          }
+        }catch(e){
+          console.warn('Failed to load puzzleInitialFen, falling back to reset', e);
+          game.reset();
+        }
+      } else {
+        game.reset();
+      }
+
+      for(let i=0;i<n && i<movesHistory.length;i++){
+        const san = movesHistory[i];
+        const mv = game.move(san);
+        if(!mv){
+          console.warn('Failed to apply move', san, i);
+          break;
+        }
+      }
+      if(board && typeof board.position === 'function') board.position(game.fen());
+    }
+
+    /**
+     * Robust PGN loader for Puzzle Mode:
+     * - Reads parser output headers and uses FEN header (if present) as initial position.
+     * - Validates tokens against a temp chess instance initialized with the initial FEN (if available).
+     */
+    function loadPGNText(pgnText){
+      if(!pgnText || !pgnText.trim()){ setMsg('No PGN provided',1200); return; }
+
+      // stop autoplay if running
+      if(autoplayTimer){ clearInterval(autoplayTimer); autoplayTimer = null; }
+
+      // GAME MODE: try chess.js native loader first (preserve original behavior)
+      if(!modePuzzle.checked){
+        let tmp = new Chess();
+        let used = false;
+        try{
+          if(typeof tmp.load_pgn === 'function'){
+            tmp.load_pgn(pgnText);
+            movesHistory = tmp.history();
+            currentMoveIndex = movesHistory.length;
+            game = new Chess();
+            for(let i=0;i<movesHistory.length;i++) game.move(movesHistory[i]);
+            if(board) board.position(game.fen());
+            setMsg('PGN loaded into game (Game Mode)',1400);
+            used = true;
+          } else if(typeof tmp.loadPgn === 'function'){
+            tmp.loadPgn(pgnText);
+            movesHistory = tmp.history();
+            currentMoveIndex = movesHistory.length;
+            game = new Chess();
+            for(let i=0;i<movesHistory.length;i++) game.move(movesHistory[i]);
+            if(board) board.position(game.fen());
+            setMsg('PGN loaded into game (Game Mode)',1400);
+            used = true;
+          }
+        }catch(e){
+          used = false;
+        }
+        if(!used){
+          setMsg('PGN parsing for Game Mode is not available. Switch to Puzzle Mode to use parser.',2000);
+        }
+        return;
+      }
+
+      // PUZZLE MODE: use integrated parser + header-aware validation
+      try{
+        const parsed = JSON.parse(parser.pgn2json(pgnText));
+        if(!parsed.moves || parsed.moves.length===0){ setMsg('No moves found in PGN',1400); return; }
+
+        console.log('Parsed PGN moves (raw):', parsed.moves);
+        console.log('Parsed PGN headers:', parsed.str||{});
+
+        // determine initial FEN from headers if present
+        let initialFen = null;
+        try{
+          const hdr = parsed.str || {};
+          if(hdr['FEN']) initialFen = hdr['FEN'];
+          else if(hdr.FEN) initialFen = hdr.FEN;
+          if(hdr['SetUp'] === '1' && !initialFen){
+            if(hdr['fen']) initialFen = hdr['fen'];
+          }
+        }catch(e){}
+        if(initialFen) console.log('Using initial FEN from PGN header:', initialFen);
+
+        // Validate tokens by applying them sequentially to a temporary Chess instance.
+        // If initialFen is present, use it as the starting position for validation.
+        const tmp = (initialFen && typeof Chess !== 'undefined') ? new Chess() : new Chess();
+        if(initialFen && typeof tmp.load === 'function'){
+          try{ tmp.load(initialFen); }catch(e){ console.warn('tmp.load(initialFen) failed', e); }
+        } else if(initialFen){
+          try{ tmp = new Chess(initialFen); }catch(e){}
+        }
+
+        const accepted = [];
+        const skipped = [];
+        for(let i=0;i<parsed.moves.length;i++){
+          const token = parsed.moves[i];
+          if(!token || typeof token !== 'string') { skipped.push({ token, reason: 'empty' }); continue; }
+
+          const t = token.trim();
+          if(t.length === 0) { skipped.push({ token: t, reason: 'empty' }); continue; }
+          if(t.startsWith('[') || t.startsWith('"') || t === '*' || /^\d+\.$/.test(t) || /^\d+-\d+$/.test(t) ){ skipped.push({ token: t, reason: 'header/marker' }); continue; }
+
+          // Try to apply token as SAN on tmp game
+          try{
+            const mv = tmp.move(t);
+            if(mv){
+              accepted.push(t);
+            } else {
+              skipped.push({ token: t, reason: 'illegal at this position' });
+            }
+          }catch(e){
+            skipped.push({ token: t, reason: 'exception', err: String(e) });
+          }
+        }
+
+        console.log('Accepted SANs (count):', accepted.length, accepted.slice(0,40));
+        console.log('Skipped tokens (sample):', skipped.slice(0,40));
+
+        if(accepted.length === 0){
+          setMsg('Parser produced no valid SAN moves (check PGN).',2000);
+          return;
+        }
+
+        // commit cleaned move list to main state and set initial position for real game
+        movesHistory = accepted.slice();
+        currentMoveIndex = 0;
+        puzzleInitialFen = initialFen || null;
+
+        (async ()=>{
+          if(typeof Chess === 'undefined') await ensureChessLoaded();
+
+          // initialize game with puzzleInitialFen (if any)
+          try{
+            game = new Chess();
+            if(puzzleInitialFen && typeof game.load === 'function'){
+              game.load(puzzleInitialFen);
+            } else if(puzzleInitialFen){
+              game = new Chess(puzzleInitialFen);
+            }
+          }catch(e){
+            console.warn('Failed to initialize game with puzzleInitialFen, falling back to standard start', e);
+            game = new Chess();
+            puzzleInitialFen = null;
+          }
+
+          // apply zero moves (show starting puzzle position)
+          applyMovesUpTo(0);
+
+          // Force board updates (immediate + tick + short delay)
+          try{ if(board && typeof board.position === 'function'){ board.position(game.fen()); console.log('Applied FEN:', game.fen()); } }catch(e){ console.warn('board.position failed immediate', e); }
+          try{ createBoard(currentTheme); }catch(e){}
+          setTimeout(()=>{
+            try{ if(board && typeof board.position === 'function'){ board.position(game.fen()); console.log('Applied FEN (tick):', game.fen()); } }catch(e){ console.warn('board.position failed tick', e); }
+          },0);
+          setTimeout(()=>{
+            try{ if(board && typeof board.position === 'function'){ board.position(game.fen()); console.log('Applied FEN (delay):', game.fen()); } }catch(e){ console.warn('board.position failed delay', e); }
+          },50);
+
+          setMsg('PGN loaded (parser) — puzzle ready',1400);
+        })();
+
+      }catch(e){
+        console.warn('PGN parse error', e);
+        setMsg('Invalid PGN (parse error)',1600);
+      }
+    }
+
+    // autoplay answer function
+    function autoplaySolution(){
+      if(movesHistory.length === 0){ setMsg('No moves to show',1200); return; }
+      if(autoplayTimer) clearInterval(autoplayTimer);
+      currentMoveIndex = 0;
+
+      // initialize game to initial position (if present)
+      if(!game) game = new Chess();
+      if(puzzleInitialFen){
+        try{ if(typeof game.load === 'function') game.load(puzzleInitialFen); else game = new Chess(puzzleInitialFen); }catch(e){ console.warn('autoplay: failed to load puzzleInitialFen', e); game.reset(); }
+      } else {
+        game.reset();
+      }
+
+      if(board) board.position(game.fen());
+      autoplayTimer = setInterval(()=>{
+        if(currentMoveIndex >= movesHistory.length){ clearInterval(autoplayTimer); autoplayTimer = null; return; }
+        const san = movesHistory[currentMoveIndex];
+        const mv = game.move(san);
+        if(!mv){
+          console.warn('autoplay failed at', san, currentMoveIndex);
+          clearInterval(autoplayTimer); autoplayTimer = null; return;
+        }
+        if(board) board.position(game.fen());
+        currentMoveIndex++;
+      }, 650);
+    }
+
+    // -------- UI handlers ----------
+    undoBtn.addEventListener('click', ()=>{
+      try{
+        const mv = game.undo();
+        if(mv) { if(board) board.position(game.fen()); setMsg('Undid move',900); }
+        if(movesHistory.length > 0){
+          const hist = game.history();
+          currentMoveIndex = hist.length;
+        }
+      }catch(e){ console.warn(e); }
+    });
+
+    prevBtn.addEventListener('click', ()=>{
+      if(movesHistory.length === 0) { setMsg('No moves loaded',1000); return; }
+      if(currentMoveIndex <= 0) { setMsg('At start',800); return; }
+      currentMoveIndex = Math.max(0, currentMoveIndex - 1);
+      applyMovesUpTo(currentMoveIndex);
+    });
+
+    nextBtn.addEventListener('click', ()=>{
+      if(movesHistory.length === 0) { setMsg('No moves loaded',1000); return; }
+      if(currentMoveIndex >= movesHistory.length) { setMsg('At end',800); return; }
+      currentMoveIndex = Math.min(movesHistory.length, currentMoveIndex + 1);
+      applyMovesUpTo(currentMoveIndex);
+    });
+
+    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); });
+
+    resignBtn.addEventListener('click', ()=>{
+      if(!game) return;
+      // reset to start position and clear pairing
+      game.reset();
+      puzzleInitialFen = null;
+      if(board) board.position('start');
+      clearHighlights();
+      setMsg('You resigned — game reset',1500);
+      try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null }); } }catch(e){ console.warn('resign notify failed', e); }
+      isPaired = false; myColor = null; pairedGameId = null; isSpectator = false;
+      pairedBubble.style.display='none';
+      multiplayStatus.textContent = 'Not connected';
+      readonlyNote.style.display = 'none';
+      try{ localStorage.removeItem('iq4u_last_game'); localStorage.removeItem('iq4u_last_color'); }catch(e){}
+      createBoard(currentTheme);
+    });
+
+    // PGN controls
+    loadPgnBtn.addEventListener('click', ()=>{
+      const txt = pgnInput.value || '';
+      if(autoplayTimer){ clearInterval(autoplayTimer); autoplayTimer = null; }
+      loadPGNText(txt);
+    });
+
+    showAnswerBtn.addEventListener('click', ()=>{
+      if(movesHistory.length === 0){ setMsg('No PGN/puzzle loaded',1200); return; }
+      autoplaySolution();
+    });
+
+    pgnFile.addEventListener('change', (ev)=>{
+      const f = ev.target.files && ev.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = function(e){ const text = e.target.result || ''; pgnInput.value = text; setMsg('File loaded into textarea',1000); };
+      reader.readAsText(f);
+    });
+
+    clearPgn.addEventListener('click', ()=>{ pgnInput.value = ''; setMsg('Cleared',800); });
+
+    loadFenBtn.addEventListener('click', ()=>{
+      const val = pgnInput.value || '';
+      try{
+        const ok = game.load(val.trim());
+        if(ok === false){ setMsg('Invalid FEN',1400); return; }
+      }catch(e){
+        try{ game.load(val.trim()); }catch(ex){ setMsg('Invalid FEN',1400); return; }
+      }
+      if(board) board.position(game.fen());
+      movesHistory = [];
+      currentMoveIndex = 0;
+      puzzleInitialFen = null;
+      setMsg('FEN loaded',1100);
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      if(autoplayTimer) { clearInterval(autoplayTimer); autoplayTimer = null; }
+      movesHistory = [];
+      currentMoveIndex = 0;
+      puzzleInitialFen = null;
+      game.reset();
+      if(board) board.position('start');
+      setMsg('Reset to start',900);
+    });
+
+    // mode switching: hide multiplayer in puzzle mode
+    function applyMode(){
+      if(modePuzzle.checked){
+        multiplayerPanel.style.display = 'none';
+        rightPanelTitle.textContent = 'Puzzle Mode';
+        rightPanelBody.innerHTML = '<div style="font-size:13px;color:#444;">Puzzle mode: load a PGN and step through moves using Previous / Next, or press Show answer to autoplay the solution.</div>';
+        isSpectator = false;
+        createBoard(currentTheme);
+      } else {
+        multiplayerPanel.style.display = '';
+        rightPanelTitle.textContent = 'Game Mode';
+        rightPanelBody.innerHTML = '<div style="font-size:13px;color:#444;">Game mode: play locally or join online using the multiplayer panel below.</div>';
+        createBoard(currentTheme);
+      }
+    }
+    modeGame.addEventListener('change', applyMode);
+    modePuzzle.addEventListener('change', applyMode);
+
+    // resizer and orientation
+    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
+    orientationSelect.addEventListener('change', ()=> createBoard(currentTheme));
+
     function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } }
 
-    // boot
+    // ---- boot ----
     async function boot(){
-      // load chess.js if needed
-      if(typeof Chess === 'undefined'){
-        try{ const mod = await import(CHESS_URL + '?t=' + Date.now()); window.Chess = mod.default || mod.Chess || mod; }catch(e){}
-        if(typeof Chess === 'undefined'){ var s=document.createElement('script'); s.src=CHESS_URL+'?t='+Date.now(); s.async=false; document.head.appendChild(s); }
-      }
+      await ensureChessLoaded();
       currentTheme = await chooseTheme();
       game = new Chess();
-      isSpectator = false; // default until joined
+      isSpectator = false;
       createBoard(currentTheme);
 
-      // restore last game if present (reconnect recovery)
+      // restore last game (if any)
       const lastGame = localStorage.getItem('iq4u_last_game');
       const lastColor = localStorage.getItem('iq4u_last_color');
-      if(lastGame){ // instruct firebase module to attach when ready
+      if(lastGame){
         const tryAttach = () => {
           if(window.firebaseMultiplayer && typeof window.firebaseMultiplayer.startWatchingGame === 'function'){
             window.firebaseMultiplayer.startWatchingGame(lastGame);
@@ -313,51 +693,105 @@
         let tries=0; const t = setInterval(()=>{ tries++; if(tryAttach() || tries>20) clearInterval(t); }, 400);
       }
 
-      // initial size: read from #board-wrapper (we set it via CSS to 570px)
       const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 570;
       setBoardSize(initial);
+
+      applyMode();
     }
     boot();
 
-    // UI wiring
-    document.getElementById('flipBtn').addEventListener('click', ()=>{ if(board) board.flip(); });
-    orientationSelect.onchange = ()=> { if(board) createBoard(currentTheme); };
-    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
-
-    // Resign handler: reset board locally + notify opponent if possible
-    resignBtn.addEventListener('click', ()=>{
-      if(!game) return;
-      game.reset();
-      if(board) board.position('start');
-      clearHighlights();
-      setMsg('You resigned — game reset',1500);
-
+    // expose some API for firebase module
+    window._onFirebaseGameStart = function(data){
       try{
-        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){
-          window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null });
-        }
-      }catch(e){ console.warn('resign notify failed', e); }
-
-      isPaired = false;
-      myColor = null;
-      pairedGameId = null;
-      isSpectator = false;
-      pairedBubble.style.display='none';
-      multiplayStatus.textContent = 'Not connected';
-      readonlyNote.style.display = 'none';
-      try{ localStorage.removeItem('iq4u_last_game'); localStorage.removeItem('iq4u_last_color'); }catch(e){}
-      createBoard(currentTheme);
-    });
-
-    // other UI and firebase code (unchanged)...
-    // omitted here for brevity in this snippet — include your existing firebase and PGN logic as before.
+        if(!data) return;
+        isPaired = true;
+        pairedGameId = data.gameId || null;
+        if(data.forceSpectator) { myColor = null; isSpectator = true; }
+        else myColor = data.color || null;
+        isSpectator = (myColor===null);
+        pairedBubble.style.display = 'inline-block';
+        multiplayStatus.textContent = 'Paired: ' + (myColor ? ('You are ' + myColor.charAt(0).toUpperCase()+myColor.slice(1)) : 'Spectator');
+        readonlyNote.style.display = isSpectator ? 'inline-block' : 'none';
+        try{ localStorage.setItem('iq4u_last_game', pairedGameId || ''); if(myColor) localStorage.setItem('iq4u_last_color', myColor); else localStorage.removeItem('iq4u_last_color'); }catch(e){}
+        if(window.firebaseMultiplayer) window.firebaseMultiplayer.getMyColor = ()=> myColor;
+        createBoard(currentTheme);
+      }catch(e){ console.warn('onFirebaseGameStart error', e); }
+    };
 
     window.game = game;
 
   })();
   </script>
 
-  <!-- FIREBASE code should remain unchanged; include the same blocks you already have below -->
-  <!-- ... -->
+  <!-- FIREBASE (same config as before) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script>
+  (function(){
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
+    };
+    if(FIREBASE_CONFIG){
+      firebase.initializeApp(FIREBASE_CONFIG);
+      const db = firebase.database();
+      const onlineRef = db.ref('online');
+      const challengesRef = db.ref('challenges');
+      const gamesRef = db.ref('games');
+      let movesRef = null;
+
+      let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
+      sessionStorage.setItem('iq4u_clientId', myId);
+      let myEmail = '';
+      let currentGameId = null;
+      let presenceTimer = null;
+
+      function goOnline(email){ myEmail = email || ('anon-'+myId); const node = onlineRef.child(myId); node.set({ email: myEmail, ts: firebase.database.ServerValue.TIMESTAMP }).then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; }).catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; }); node.onDisconnect().remove(); if(presenceTimer) clearInterval(presenceTimer); presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000); }
+      function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
+
+      // populate online list
+      const onlinePlayersBottom = document.getElementById('onlinePlayersBottom');
+      onlineRef.on('value', snap=>{ const v = snap.val()||{}; onlinePlayersBottom.innerHTML=''; let count=0; for(const id in v){ if(!v.hasOwnProperty(id)) continue; if(id===myId) continue; const opt = document.createElement('option'); opt.value=id; opt.textContent = v[id].email||id; onlinePlayersBottom.appendChild(opt); count++; } if(count===0){ const opt = document.createElement('option'); opt.value=''; opt.disabled=true; opt.selected=true; opt.textContent='No Player'; onlinePlayersBottom.appendChild(opt); document.getElementById('challengeBtnBottom').disabled=true; } else document.getElementById('challengeBtnBottom').disabled=false; });
+
+      function sendChallengeTo(targetId){ if(!targetId) return; const ch = challengesRef.child(targetId).push(); ch.set({ fromId: myId, fromEmail: myEmail, ts: firebase.database.ServerValue.TIMESTAMP }).then(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge sent'; setTimeout(()=> ch.remove().catch(()=>{}), 60_000); }).catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge failed'; }); }
+
+      // handle incoming challenge
+      challengesRef.child(myId).on('child_added', snap=>{ const data = snap.val(); const key = snap.key; if(!data) return; const fromEmail = data.fromEmail||data.fromId; const accept = confirm(fromEmail + ' challenges you. Accept?'); if(accept){ const gameNode = gamesRef.push(); const gameId = gameNode.key; const gameData = { white: data.fromId, black: myId, createdAt: firebase.database.ServerValue.TIMESTAMP }; gameNode.set(gameData).then(()=>{ movesRef = db.ref('moves/'+gameId); currentGameId = gameId; document.getElementById('pairedBubble').style.display='inline-block'; document.getElementById('multiplayStatus').textContent = 'Paired: You are Black'; db.ref('notifications/'+data.fromId+'/'+gameId).set({ type:'startGame', gameId, white: data.fromId, black: myId }); challengesRef.child(myId).child(key).remove().catch(()=>{}); watchMoves(gameId); window.isPaired = true;
+              if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: gameId, color: 'black', myId: myId });
+              try{ localStorage.setItem('iq4u_last_game', gameId); localStorage.setItem('iq4u_last_color','black'); }catch(e){}
+            }); } else { if(data.fromId) db.ref('challengeDeclined/'+data.fromId+'/'+myId).set({ email: myEmail, ts: firebase.database.ServerValue.TIMESTAMP }); challengesRef.child(myId).child(key).remove().catch(()=>{}); } });
+
+      // notifications (challenger receives)
+      db.ref('notifications/'+myId).on('child_added', snap=>{ const n = snap.val(); if(!n) return; if(n.type==='startGame' && n.gameId){ currentGameId = n.gameId; watchMoves(currentGameId); document.getElementById('pairedBubble').style.display='inline-block'; const color = (n.white===myId)?'white':((n.black===myId)?'black':null); if(color) document.getElementById('multiplayStatus').textContent = 'Paired: You are ' + (color.charAt(0).toUpperCase()+color.slice(1)); if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: currentGameId, color: color, myId: myId }); try{ localStorage.setItem('iq4u_last_game', currentGameId); if(color) localStorage.setItem('iq4u_last_color', color); }catch(e){} }
+          snap.ref.remove().catch(()=>{}); });
+
+      db.ref('challengeDeclined/'+myId).on('child_added', snap=>{ const d = snap.val(); if(!d) return; document.getElementById('multiplayStatus').textContent = (d.email||'Player') + ' declined your challenge'; snap.ref.remove().catch(()=>{}); });
+
+      function watchMoves(gameId){ if(!gameId) return; movesRef = db.ref('moves/'+gameId); movesRef.on('child_added', snap=>{ const m = snap.val(); if(!m) return; if(m.by && m.by===myId) return; if(m.payload){ try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); } } else if(m.fen){ try{ if(typeof window.onBoardMove === 'function') window.onBoardMove({ fen: m.fen, move: m.move||null }); }catch(e){} } if(m.payload && m.payload.type === 'resign'){ try{ if(window.game){ window.game.reset(); } if(window.board){ window.board.position('start'); } if(document.getElementById('pairedBubble')) document.getElementById('pairedBubble').style.display='none'; if(document.getElementById('multiplayStatus')) document.getElementById('multiplayStatus').textContent = 'Opponent resigned / game ended'; try{ localStorage.removeItem('iq4u_last_game'); localStorage.removeItem('iq4u_last_color'); }catch(e){} }catch(e){} } }); }
+
+      function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
+
+      document.getElementById('joinBtnBottom').addEventListener('click', function(){ const email = (document.getElementById('emailInputBottom').value||'').trim(); if(!email) return alert('Enter email to join online'); const asSpect = document.getElementById('spectatorToggle').checked; goOnline(email); });
+
+      document.getElementById('challengeBtnBottom').addEventListener('click', function(){ const target = document.getElementById('onlinePlayersBottom').value; if(!target) return alert('Select a player'); sendChallengeTo(target); });
+
+      window.firebaseMultiplayer = {
+        emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
+        startWatchingGame: function(gameId){ currentGameId = gameId; watchMoves(gameId); },
+        getMyId: () => myId,
+        getMyEmail: () => myEmail,
+        goOffline: goOffline,
+        getMyColor: () => null
+      };
+
+      window.addEventListener('beforeunload', ()=>{ try{ goOffline(); }catch(e){} });
+    }
+  })();
+  </script>
 </body>
 </html>
