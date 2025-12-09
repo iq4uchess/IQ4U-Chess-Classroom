@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>IQ4U — Student Puzzle</title>
+  <title>IQ4U — Student Puzzle (robust loader)</title>
 
+  <!-- original CSS (keep) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.0.0/assets/chessground.base.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.0.0/assets/chessground.css">
-  <script src="https://cdn.jsdelivr.net/npm/chessground@8.0.0/dist/chessground.min.js"></script>
 
-  <!-- Chess.js global build -->
+  <!-- original script tags (kept in place) -->
+  <script src="https://cdn.jsdelivr.net/npm/chessground@8.0.0/dist/chessground.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0-beta.2/chess.js"></script>
 
   <!-- Firebase compat (Realtime DB listener kept) -->
@@ -20,15 +21,12 @@
     body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:12px;background:#f7f8fb}
     .wrap{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:18px}
     .panel{background:#fff;padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(20,20,40,0.06)}
-    /* board area — explicit height so board renders visibly */
-    #board{width:100%; max-width:760px; height:540px; margin:0 auto; background:linear-gradient(180deg,#f8fbff 0,#ffffff 100%); border-radius:6px; box-shadow: 0 2px 6px rgba(20,20,40,0.04)}
+    #board{width:100%; max-width:760px; height:540px; margin:0 auto; background:linear-gradient(180deg,#f8fbff 0,#ffffff 100%); border-radius:6px}
     textarea{width:100%;height:180px;font-family:monospace;font-size:13px}
     .muted{color:#666;font-size:13px}
     #notation{white-space:pre-wrap;font-family:monospace;font-size:13px;max-height:300px;overflow:auto;border:1px solid #eee;padding:8px}
     .small{font-size:13px;color:#444}
     #msg{color:#a33;font-weight:600;margin-top:6px}
-    .row{display:flex;gap:8px;align-items:center}
-    .controls{display:flex;gap:8px;align-items:center}
   </style>
 </head>
 <body>
@@ -48,8 +46,6 @@
         <input type="file" id="pgnFile" accept=".pgn,text/plain">
         <button id="clearBtn">Clear</button>
       </div>
-
-      <!-- removed: select puzzle from uploaded file -->
 
       <div style="margin-top:8px">
         <label class="small">Paste PGN (single puzzle) — textarea will be used if no upload selected:</label>
@@ -87,209 +83,161 @@
   </div>
 
   <script>
-  // --- helpers (trimmed + robust) ---
-  function stripCommentsAndVariations(raw){
-    var s = (raw||'');
-    s = s.replace(/\{[^}]*\}/g,' ');
-    s = s.replace(/%[^\n]*\n/g,' ');
-    while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g,' ');
-    return s;
-  }
-
-  function extractLastFEN(raw){
-    var re = /\[FEN\s+"([^"]+)"\]/g; var m; var last=null;
-    while((m=re.exec(raw))!==null) last=m[1];
-    return last;
-  }
-
-  function extractSANMoves(cleaned){
-    var body = cleaned.replace(/\[[^\]]*\]/g,' ');
-    body = body.replace(/\s+/g,' ').trim();
-    var tokens = body.split(' ').filter(function(t){ return t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*'; });
-    return tokens;
-  }
-
-  function splitPGNs(raw){
-    var regex = /(\[Event[\s\S]*?)(?=(\n\[Event|\n\s*$))/g; var found=[]; var m;
-    while((m=regex.exec(raw))!==null) found.push(m[1].trim());
-    if(found.length===0) return raw.split(/\n\s*\n/).map(function(s){return s.trim();}).filter(Boolean);
-    return found;
-  }
-
-  // --- DOM refs ---
-  var pgnText = document.getElementById('pgnText');
-  var pgnFile = document.getElementById('pgnFile');
-  var loadBtn = document.getElementById('loadBtn');
-  var showBtn = document.getElementById('showBtn');
-  var pauseBtn = document.getElementById('pauseBtn');
-  var resetBtn = document.getElementById('resetBtn');
-  var prevBtn = document.getElementById('prevBtn');
-  var nextBtn = document.getElementById('nextBtn');
-  var speedInput = document.getElementById('speed');
-  var notationDiv = document.getElementById('notation');
-  var fenText = document.getElementById('fenText');
-  var turnText = document.getElementById('turnText');
-  var msgDiv = document.getElementById('msg');
-
-  var game = null, cg = null, moves = [], currentMoveIndex = 0, autoplayTimer = null;
-
-  // --- Firebase (kept) ---
-  var firebaseConfig = {
-    apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
-    authDomain: "iq4u-chess-classroom.firebaseapp.com",
-    databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "iq4u-chess-classroom",
-    storageBucket: "iq4u-chess-classroom.firebasestorage.app",
-    messagingSenderId: "833620718306",
-    appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
-  };
-  if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(firebaseConfig);
-  var db = firebase.database();
-  var remotePath = '/classrooms/room1/currentPuzzle', lastRemoteTs = 0;
-
-  function isLikelyPGN(s){ if(!s || typeof s!=='string') return false; return /\b1\./.test(s) || /\[FEN\s+"/.test(s) || s.trim().split(/\s+/).length > 4; }
-  db.ref(remotePath).on('value', function(snap){
-    var val = snap.val(); if(!val) return; var pgn=null; var ts=Date.now();
-    if(typeof val === 'string') pgn = val;
-    else if(val.pgn && typeof val.pgn === 'string'){ pgn = val.pgn; ts = val.ts || Date.now(); }
-    else return;
-    if(ts <= lastRemoteTs) return;
-    if(!isLikelyPGN(pgn)) return;
-    lastRemoteTs = ts;
-    try { prepareFromPGNString(pgn); } catch(e){ console.error(e); }
-  });
-
-  // --- Chessground init ---
-  function initChessground(fen, orientation){
-    if(cg) cg.destroy();
-    cg = Chessground(document.getElementById('board'), {
-      fen: fen || 'start',
-      orientation: orientation || 'white',
-      movable: { color: 'white', dests: {}, showDests: true, events: { after: onUserMove } },
-      draggable: { enabled: true },
-      coordinates: true
+  // ---------- Robust loader ----------
+  function loadScript(url){
+    return new Promise(function(resolve,reject){
+      var s = document.createElement('script'); s.src = url; s.async = true;
+      s.onload = function(){ console.info('Loaded script:', url); resolve(url); };
+      s.onerror = function(){ console.warn('Failed to load script:', url); reject(new Error('Failed to load '+url)); };
+      document.head.appendChild(s);
     });
   }
 
-  function updateTurnText(){ if(!game){ turnText.textContent='-'; return; } turnText.textContent = game.turn() === 'w' ? 'White' : 'Black'; }
-
-  function expectedMoveObjAtIndex(idx){
-    if(!game) return null;
-    var legal = game.moves({ verbose:true });
-    var expectedSAN = moves[idx];
-    if(!expectedSAN) return null;
-    for(var i=0;i<legal.length;i++) if(legal[i].san === expectedSAN) return legal[i];
-    return null;
+  function tryLoadList(urls){
+    return new Promise(function(resolve,reject){
+      var i = 0;
+      function next(){
+        if(i>=urls.length){ reject(new Error('All URLs failed: ' + urls.join(', '))); return; }
+        loadScript(urls[i]).then(resolve).catch(function(){ i++; next(); });
+      }
+      next();
+    });
   }
 
-  function setAllowedMoveForStudent(){
-    if(!cg) return;
-    if(!game){ cg.set({ movable: { color:'white', dests: {} } }); return; }
-    // Default behavior: restrict to correct move (clean UX). If you want to allow all moves, set allowAll = true.
-    var allowAll = false;
-    if(allowAll){
-      var dests = {}, legal = game.moves({ verbose:true });
-      for(var i=0;i<legal.length;i++){ var mv = legal[i]; if(!dests[mv.from]) dests[mv.from] = []; if(dests[mv.from].indexOf(mv.to) === -1) dests[mv.from].push(mv.to); }
-      cg.set({ movable: { color:'white', dests: dests } });
-      return;
+  var chessgroundFallbacks = [
+    'https://cdn.jsdelivr.net/npm/chessground@8.0.0/dist/chessground.min.js',
+    'https://unpkg.com/chessground@8.0.0/dist/chessground.min.js'
+  ];
+  var chessjsFallbacks = [
+    'https://cdn.jsdelivr.net/npm/chess.js@1.0.0-beta.2/chess.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js',
+    'https://raw.githubusercontent.com/jhlywa/chess.js/master/dist/chess.js'
+  ];
+
+  function ensureLibs(){
+    return new Promise(function(resolve){
+      var promises = [];
+      if(typeof Chessground !== 'undefined') promises.push(Promise.resolve('already')); else promises.push(tryLoadList(chessgroundFallbacks).catch(function(e){ console.warn(e); }));
+      if(typeof Chess !== 'undefined') promises.push(Promise.resolve('already')); else promises.push(tryLoadList(chessjsFallbacks).catch(function(e){ console.warn(e); }));
+
+      Promise.all(promises).then(function(){
+        setTimeout(function(){
+          if(typeof Chess === 'undefined' || typeof Chessground === 'undefined') resolve(false); else resolve(true);
+        }, 50);
+      }).catch(function(){
+        setTimeout(function(){
+          if(typeof Chess === 'undefined' || typeof Chessground === 'undefined') resolve(false); else resolve(true);
+        }, 50);
+      });
+    });
+  }
+
+  ensureLibs().then(function(ok){
+    if(!ok){
+      console.error('Libraries failed to load: Chess or Chessground not available');
+      document.getElementById('msg').textContent = 'Error: Chess libraries failed to load. See console for attempted URLs.';
     }
-    // restrict to expected move if possible (player must play the move in PGN)
-    var exp = expectedMoveObjAtIndex(currentMoveIndex);
-    if(!exp){ cg.set({ movable:{ color:'white', dests:{} } }); notationDiv.hidden = false; msgDiv.textContent='Cannot find expected move — showing notation'; setTimeout(function(){ msgDiv.textContent=''; },2000); return; }
-    var d = {}; d[exp.from] = [exp.to];
-    cg.set({ movable: { color:'white', dests: d } });
-  }
+    runApp(); // run app anyway — prepareFromPGNString will show notation if Chess is missing
+  });
 
-  function onUserMove(orig, dest){
-    if(!game){ msgDiv.textContent='No puzzle loaded'; setTimeout(function(){ msgDiv.textContent=''; },1200); if(cg) cg.set({ fen:'start' }); return; }
-    var attempted = game.move({ from: orig, to: dest, promotion:'q' });
-    if(!attempted){ msgDiv.textContent='Illegal move'; setTimeout(function(){ msgDiv.textContent=''; },1200); if(cg) cg.set({ fen: game.fen() }); return; }
-    var expected = moves[currentMoveIndex];
-    if(attempted.san !== expected){ game.undo(); if(cg) cg.set({ fen: game.fen() }); msgDiv.textContent='Wrong move — try again'; setTimeout(function(){ msgDiv.textContent=''; },1400); setAllowedMoveForStudent(); return; }
-    currentMoveIndex++;
-    if(cg) cg.set({ fen: game.fen() });
-    updateTurnText();
-    setTimeout(function(){ setAllowedMoveForStudent(); if(currentMoveIndex < moves.length) autoplayStep(); },250);
-  }
-
-  function autoplayStep(){
-    if(!game) return;
-    if(currentMoveIndex >= moves.length) return;
-    var san = moves[currentMoveIndex];
-    var res = game.move(san, { sloppy:true });
-    if(!res){ notationDiv.hidden=false; msgDiv.textContent='Invalid PGN move'; return; }
-    currentMoveIndex++;
-    if(cg) cg.set({ fen: game.fen() });
-    updateTurnText();
-    if(currentMoveIndex < moves.length) setTimeout(autoplayStep, Math.max(60, parseInt(speedInput.value || '900',10)));
-    else setAllowedMoveForStudent();
-  }
-
-  function prepareFromPGNString(pgn){
-    var lastFen = extractLastFEN(pgn);
-    var cleaned = stripCommentsAndVariations(pgn);
-    var sanMoves = extractSANMoves(cleaned);
-    moves = sanMoves || [];
-    currentMoveIndex = 0;
-
-    try {
-      if(typeof Chess === 'undefined') throw new Error('Chess library not available');
-      game = lastFen ? new Chess(lastFen) : new Chess();
-    } catch(e){
-      console.error(e);
-      msgDiv.textContent = 'Error: Chess.js not loaded. See console.';
-      notationDiv.hidden = false;
-      notationDiv.textContent = cleaned;
-      return;
+  // ---------- Main app (runs after loader attempts) ----------
+  function runApp(){
+    // helper functions
+    function stripCommentsAndVariations(raw){
+      var s = (raw||'');
+      s = s.replace(/\{[^}]*\}/g,' ');
+      s = s.replace(/%[^\n]*\n/g,' ');
+      while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g,' ');
+      return s;
+    }
+    function extractLastFEN(raw){
+      var re = /\[FEN\s+"([^"]+)"\]/g; var m; var last=null;
+      while((m=re.exec(raw))!==null) last=m[1];
+      return last;
+    }
+    function extractSANMoves(cleaned){
+      var body = cleaned.replace(/\[[^\]]*\]/g,' ');
+      body = body.replace(/\s+/g,' ').trim();
+      var tokens = body.split(' ').filter(function(t){ return t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*'; });
+      return tokens;
+    }
+    function splitPGNs(raw){
+      var regex = /(\[Event[\s\S]*?)(?=(\n\[Event|\n\s*$))/g; var found=[]; var m;
+      while((m=regex.exec(raw))!==null) found.push(m[1].trim());
+      if(found.length===0) return raw.split(/\n\s*\n/).map(function(s){return s.trim();}).filter(Boolean);
+      return found;
     }
 
-    fenText.textContent = game.fen();
-    notationDiv.textContent = moves.join(' ');
-    notationDiv.hidden = true;
+    // DOM refs
+    var pgnText = document.getElementById('pgnText');
+    var pgnFile = document.getElementById('pgnFile');
+    var loadBtn = document.getElementById('loadBtn');
+    var showBtn = document.getElementById('showBtn');
+    var pauseBtn = document.getElementById('pauseBtn');
+    var resetBtn = document.getElementById('resetBtn');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+    var speedInput = document.getElementById('speed');
+    var notationDiv = document.getElementById('notation');
+    var fenText = document.getElementById('fenText');
+    var turnText = document.getElementById('turnText');
+    var msgDiv = document.getElementById('msg');
 
-    // orientation default: white bottom (no student-as-black option per request)
-    initChessground(game.fen(), 'white');
-    updateTurnText();
-    setAllowedMoveForStudent();
+    var game = null, cg = null, moves = [], currentMoveIndex = 0, autoplayTimer = null;
 
-    // If the PGN expects black to move first in the FEN, run autoplay for initial opponent half-moves:
-    if(game.turn && game.turn() === 'b' && currentMoveIndex < moves.length) autoplayStep();
-  }
-
-  // file upload: take first PGN found in file
-  pgnFile.addEventListener('change', function(ev){
-    var file = ev.target.files[0]; if(!file) return;
-    var reader = new FileReader();
-    reader.onload = function(e){
-      var text = e.target.result;
-      var parts = splitPGNs(text);
-      var chosen = parts && parts.length>0 ? parts[0] : text;
-      pgnText.value = chosen;
-      prepareFromPGNString(chosen);
+    // firebase config (kept)
+    var firebaseConfig = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4u-chess-classroom.firebasestorage.app",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
-    reader.readAsText(file,'utf-8');
-  });
+    if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    var db = firebase.database(); var remotePath='/classrooms/room1/currentPuzzle'; var lastRemoteTs=0;
 
-  loadBtn.addEventListener('click', function(){ prepareFromPGNString(pgnText.value); });
-  pauseBtn.addEventListener('click', function(){ /* optional pause: kept simple */ });
-  resetBtn.addEventListener('click', function(){
-    currentMoveIndex = 0;
-    if(game){
-      var startFen = extractLastFEN(pgnText.value) || game.fen();
-      try{ game.load(startFen); } catch(e){ try{ game.reset(); } catch(e){} }
-      if(cg) cg.set({ fen: game.fen() });
-      fenText.textContent = game ? game.fen() : 'start';
-      setAllowedMoveForStudent();
+    function isLikelyPGN(s){ if(!s || typeof s!=='string') return false; return /\b1\./.test(s) || /\[FEN\s+"/.test(s) || s.trim().split(/\s+/).length>4; }
+    db.ref(remotePath).on('value', function(snap){ var val=snap.val(); if(!val) return; var pgn=null; var ts=Date.now(); if(typeof val==='string') pgn=val; else if(val.pgn&&typeof val.pgn==='string'){ pgn=val.pgn; ts=val.ts||Date.now(); } else return; if(ts<=lastRemoteTs) return; if(!isLikelyPGN(pgn)) return; lastRemoteTs=ts; try{ prepareFromPGNString(pgn); }catch(e){ console.error(e); } });
+
+    function initChessground(fen, orientation){
+      if(typeof Chessground === 'undefined'){ console.warn('Chessground not available'); return; }
+      if(cg) cg.destroy();
+      cg = Chessground(document.getElementById('board'), {
+        fen: fen || 'start',
+        orientation: orientation || 'white',
+        movable: { color: 'white', dests: {}, showDests: true, events: { after: onUserMove } },
+        draggable: { enabled: true },
+        coordinates: true
+      });
     }
-  });
-  prevBtn.addEventListener('click', function(){ if(currentMoveIndex <= 0) return; if(game) game.undo(); currentMoveIndex = Math.max(0, currentMoveIndex-1); if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
-  nextBtn.addEventListener('click', function(){ if(currentMoveIndex >= moves.length) return; if(!game) return; var san = moves[currentMoveIndex]; var res = game.move(san, { sloppy:true }); if(!res){ notationDiv.hidden=false; return; } currentMoveIndex++; if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
 
-  showBtn.addEventListener('click', function(){ if(notationDiv.hidden){ notationDiv.hidden=false; showBtn.textContent='Hide answer'; } else { notationDiv.hidden=true; showBtn.textContent='Show answer'; } });
-  clearBtn.addEventListener('click', function(){ pgnText.value=''; notationDiv.textContent=''; });
+    function updateTurnText(){ if(!game) { turnText.textContent='-'; return; } turnText.textContent = game.turn() === 'w' ? 'White' : 'Black'; }
 
-  // On load: try sample
-  window.addEventListener('load', function(){ var sample = pgnText.value.trim(); if(sample) prepareFromPGNString(sample); });
+    function expectedMoveObjAtIndex(idx){ if(!game) return null; var legal = game.moves({ verbose:true }); var expectedSAN = moves[idx]; if(!expectedSAN) return null; for(var i=0;i<legal.length;i++) if(legal[i].san===expectedSAN) return legal[i]; return null; }
+
+    function setAllowedMoveForStudent(){ if(!cg) return; if(!game){ cg.set({ movable: { color:'white', dests:{} } }); return; } var exp = expectedMoveObjAtIndex(currentMoveIndex); if(!exp){ cg.set({ movable:{ color:'white', dests:{} } }); notationDiv.hidden=false; msgDiv.textContent='Cannot find expected move — showing notation'; setTimeout(function(){ msgDiv.textContent=''; },2000); return; } var d={}; d[exp.from]=[exp.to]; cg.set({ movable:{ color:'white', dests:d } }); }
+
+    function onUserMove(orig, dest){ if(!game){ msgDiv.textContent='No puzzle loaded'; setTimeout(function(){ msgDiv.textContent=''; },1200); if(cg) cg.set({ fen:'start' }); return; } var attempted = game.move({ from:orig, to:dest, promotion:'q' }); if(!attempted){ msgDiv.textContent='Illegal move'; setTimeout(function(){ msgDiv.textContent=''; },1200); if(cg) cg.set({ fen: game.fen() }); return; } var expected = moves[currentMoveIndex]; if(attempted.san !== expected){ game.undo(); if(cg) cg.set({ fen: game.fen() }); msgDiv.textContent='Wrong move — try again'; setTimeout(function(){ msgDiv.textContent=''; },1400); setAllowedMoveForStudent(); return; } currentMoveIndex++; if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setTimeout(function(){ setAllowedMoveForStudent(); if(currentMoveIndex < moves.length) autoplayStep(); },250); }
+
+    function autoplayStep(){ if(!game) return; if(currentMoveIndex >= moves.length) return; var san = moves[currentMoveIndex]; var res = game.move(san, { sloppy:true }); if(!res){ notationDiv.hidden=false; msgDiv.textContent='Invalid PGN move'; return; } currentMoveIndex++; if(cg) cg.set({ fen: game.fen() }); updateTurnText(); if(currentMoveIndex < moves.length) setTimeout(autoplayStep, Math.max(60, parseInt(speedInput.value || '900',10))); else setAllowedMoveForStudent(); }
+
+    function prepareFromPGNString(pgn){ var lastFen = extractLastFEN(pgn); var cleaned = stripCommentsAndVariations(pgn); var sanMoves = extractSANMoves(cleaned); moves = sanMoves || []; currentMoveIndex = 0; try{ if(typeof Chess === 'undefined') throw new Error('Chess library not available'); game = lastFen ? new Chess(lastFen) : new Chess(); }catch(e){ console.error('Chess.js not available', e); msgDiv.textContent='Error: Chess.js not loaded. See console.'; notationDiv.hidden=false; notationDiv.textContent=cleaned; return; } fenText.textContent = game.fen(); notationDiv.textContent = moves.join(' '); notationDiv.hidden = true; initChessground(game.fen(), 'white'); updateTurnText(); setAllowedMoveForStudent(); if(game.turn && game.turn() === 'b' && currentMoveIndex < moves.length) autoplayStep(); }
+
+    // file upload
+    pgnFile.addEventListener('change', function(ev){ var file = ev.target.files[0]; if(!file) return; var reader = new FileReader(); reader.onload = function(e){ var text = e.target.result; var parts = splitPGNs(text); var chosen = parts && parts.length>0 ? parts[0] : text; pgnText.value = chosen; prepareFromPGNString(chosen); }; reader.readAsText(file,'utf-8'); });
+
+    loadBtn.addEventListener('click', function(){ prepareFromPGNString(pgnText.value); });
+    resetBtn.addEventListener('click', function(){ currentMoveIndex=0; if(game){ var startFen=extractLastFEN(pgnText.value) || game.fen(); try{ game.load(startFen); }catch(e){ try{ game.reset(); }catch(e){} } if(cg) cg.set({ fen: game.fen() }); fenText.textContent = game? game.fen() : 'start'; setAllowedMoveForStudent(); } });
+    prevBtn.addEventListener('click', function(){ if(currentMoveIndex<=0) return; if(game) game.undo(); currentMoveIndex = Math.max(0,currentMoveIndex-1); if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
+    nextBtn.addEventListener('click', function(){ if(currentMoveIndex>=moves.length) return; if(!game) return; var san = moves[currentMoveIndex]; var res = game.move(san,{ sloppy:true }); if(!res){ notationDiv.hidden=false; return; } currentMoveIndex++; if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
+
+    showBtn.addEventListener('click', function(){ if(notationDiv.hidden){ notationDiv.hidden=false; showBtn.textContent='Hide answer'; } else { notationDiv.hidden=true; showBtn.textContent='Show answer'; } });
+    clearBtn.addEventListener('click', function(){ pgnText.value=''; notationDiv.textContent=''; });
+
+    window.addEventListener('load', function(){ var sample = pgnText.value.trim(); if(sample) prepareFromPGNString(sample); });
+  }
   </script>
 </body>
 </html>
