@@ -1,10 +1,8 @@
-name: Build React Client
+name: Build React Client (diagnostic)
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master ]
   workflow_dispatch: {}
 
 jobs:
@@ -16,40 +14,77 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: 'npm'
-
-      - name: Install dependencies (client)
-        working-directory: client
-        run: npm ci
-
-      - name: Build client
-        working-directory: client
-        run: npm run build
-
-      - name: Verify build output
+      - name: Show runner info
         run: |
-          if [ ! -d client/dist ]; then
-            echo "ERROR: client/dist not found. Build failed."
-            ls -la client || true
+          echo "Running on $(uname -a)"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "GITHUB_REF: $GITHUB_REF"
+          echo "GITHUB_SHA: $GITHUB_SHA"
+          ls -la
+
+      - name: Show repo top-level files
+        run: ls -la .
+
+      - name: Show client folder (if present)
+        run: |
+          if [ -d client ]; then
+            echo "client folder exists"
+            ls -la client
+            echo "client/package.json:"
+            if [ -f client/package.json ]; then
+              sed -n '1,200p' client/package.json
+            else
+              echo "client/package.json NOT FOUND"
+            fi
+          else
+            echo "client folder NOT FOUND"
             exit 1
           fi
 
-      - name: Copy dist to repo root
-        run: |
-          rm -rf built_client || true
-          mkdir -p built_client
-          cp -r client/dist/* built_client/
-          # show copied files for debugging
-          ls -la built_client | sed -n '1,200p'
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
 
-      - name: Copy built files into repo root (safe)
+      - name: Node and npm versions
         run: |
-          # Move built files into top-level folder - but do not remove other repo files
-          cp -r built_client/* .
+          node -v
+          npm -v
+          which node
+          which npm
+          ls -la /usr/local/bin || true
+
+      - name: Install client deps (verbose)
+        working-directory: client
+        run: |
+          echo "PWD: $(pwd)"
+          npm ci --loglevel verbose
+        env:
+          CI: true
+
+      - name: Build client (verbose)
+        working-directory: client
+        run: |
+          echo "Run build in $(pwd)"
+          npm run build --if-present --loglevel verbose
+
+      - name: Show build output
+        run: |
+          echo "Top-level after build:"
+          ls -la
+          echo "client/dist listing:"
+          if [ -d client/dist ]; then
+            ls -la client/dist | sed -n '1,200p'
+          else
+            echo "client/dist not found"
+            exit 1
+          fi
+
+      - name: Copy dist to repo root (for test)
+        run: |
+          cp -r client/dist/* .
+          echo "Copied dist files to repo root"
+          ls -la | sed -n '1,200p'
 
       - name: Commit built files (only if changed)
         env:
