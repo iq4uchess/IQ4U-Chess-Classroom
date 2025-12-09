@@ -2,39 +2,66 @@ name: Build React Client
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
+  workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@v3
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
-      - name: Install client deps
-        run: |
-          cd client
-          npm install
+      - name: Install dependencies (client)
+        working-directory: client
+        run: npm ci
 
       - name: Build client
-        run: |
-          cd client
-          npm run build
+        working-directory: client
+        run: npm run build
 
-      - name: Copy dist to server root
+      - name: Verify build output
         run: |
-          cp -r client/dist/* .
+          if [ ! -d client/dist ]; then
+            echo "ERROR: client/dist not found. Build failed."
+            ls -la client || true
+            exit 1
+          fi
 
-      - name: Commit built files
+      - name: Copy dist to repo root
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add .
-          git commit -m "Auto-build React client" || echo "No changes"
-          git push
+          rm -rf built_client || true
+          mkdir -p built_client
+          cp -r client/dist/* built_client/
+          # show copied files for debugging
+          ls -la built_client | sed -n '1,200p'
+
+      - name: Copy built files into repo root (safe)
+        run: |
+          # Move built files into top-level folder - but do not remove other repo files
+          cp -r built_client/* .
+
+      - name: Commit built files (only if changed)
+        env:
+          GIT_AUTHOR_NAME: github-actions
+          GIT_AUTHOR_EMAIL: github-actions@github.com
+        run: |
+          git config user.name "${GIT_AUTHOR_NAME}"
+          git config user.email "${GIT_AUTHOR_EMAIL}"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(build): auto-build client [skip ci]"
+            git push
+          fi
