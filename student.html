@@ -152,7 +152,7 @@
 !function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
   </script>
 
-  <!-- Main script (full, unchanged logic; only SERVER line set to location.origin) -->
+  <!-- Main script (full, unchanged logic; only SERVER line set to location.origin and initSocket robust) -->
   <script>
   (function(){
     // keep your CHESS_URL (unchanged)
@@ -160,9 +160,10 @@
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-    /* -------------- THE ONLY CHANGE YOU NEEDED -------------- */
-    const SERVER = location.origin;   // <--- connects to same origin serving this page
-    /* -------------------------------------------------------- */
+    /* -------------- NETWORK CONFIG -------------- */
+    // Connect to the same origin that served this page (safe: no CORS/mixed-content)
+    const SERVER = location.origin;   // <-- important
+    /* -------------------------------------------- */
 
     console.log("Connecting to socket server at:", SERVER);
 
@@ -190,6 +191,11 @@
     const challengeBtnBottom = document.getElementById('challengeBtnBottom');
     const multiplayStatus = document.getElementById('multiplayStatus');
     const pairedBubble = document.getElementById('pairedBubble');
+
+    // Set initial dropdown state: show "No Player" and disable challenge
+    onlinePlayersBottom.innerHTML = '<option value=\"\" disabled selected>No Player</option>';
+    challengeBtnBottom.disabled = true;
+    challengeBtnBottom.setAttribute('aria-disabled', 'true');
 
     // Resizer refs
     const boardWrapper = document.getElementById('board-wrapper');
@@ -532,11 +538,25 @@
     presetLarge.addEventListener('click', ()=> setBoardSize(920));
 
     // multiplayer event wiring (bottom UI)
+    // Join handler updated to register only after socket connected (reliable)
     joinBtnBottom.addEventListener('click', function(){
       const email = emailInputBottom.value.trim();
       if(!email) return alert('Enter email to join online');
       myEmail = email;
-      if(!socket || !socket.connected) initSocket();
+
+      // ensure socket initialized (initSocket will auto-register if myEmail is set)
+      if(!socket){
+        initSocket();
+        multiplayStatus.textContent = 'Connecting...';
+        return;
+      }
+      if(!socket.connected){
+        initSocket();
+        multiplayStatus.textContent = 'Connecting...';
+        return;
+      }
+
+      // socket connected -> register now
       socket.emit('register', myEmail);
       multiplayStatus.textContent = 'Connected as ' + myEmail;
     });
@@ -606,42 +626,100 @@
     });
 
     /* ----------------------------
-       SOCKET.IO MULTIPLAYER LOGIC
+       SOCKET.IO MULTIPLAYER LOGIC (robust)
        ---------------------------- */
     function initSocket(){
       if(socket && socket.connected) return;
-      // change URL if your server is hosted elsewhere
-      socket = io(SERVER, { transports: ['websocket','polling'], reconnectionAttempts: 3 });
 
-      socket.on('connect', () => {
-        console.log('socket connected', socket.id);
-        multiplayStatus.textContent = 'Connected (not registered)';
-        // if user already entered email, auto-register
-        if(myEmail) { socket.emit('register', myEmail); multiplayStatus.textContent = 'Registered as ' + myEmail; }
+      console.log("Attempting socket connect to", SERVER);
+
+      // Try polling first (more robust in proxied envs), then websocket.
+      socket = io(SERVER, {
+        transports: ['polling','websocket'],
+        reconnectionAttempts: 6,
+        timeout: 20000, // handshake timeout
+        reconnectionDelayMax: 5000
       });
 
-      // server sends object of online users { socketId: {email} }
+      socket.on('connect', () => {
+        console.log('socket connected', socket.id, 'transport', socket.io.engine.transport.name);
+        multiplayStatus.textContent = 'Connected (not registered)';
+        // auto-register if the user entered email already
+        if(myEmail){
+          socket.emit('register', myEmail);
+          multiplayStatus.textContent = 'Registered as ' + myEmail;
+        }
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('connect_error', err);
+        multiplayStatus.textContent = 'Connect error: ' + (err && err.message ? err.message : 'timeout');
+        if(err && err.message && err.message.indexOf('timeout') !== -1){
+          multiplayStatus.textContent += ' — Is the server running? Run `node server.js` and forward port 3000.';
+          console.warn('If you are running in Codespaces/preview, ensure port 3000 is forwarded and server is running inside the environment.');
+        }
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log('socket disconnected', reason);
+        multiplayStatus.textContent = 'Disconnected';
+        isPaired = false;
+        pairedBubble.style.display = 'none';
+      });
+
+      // Robust online handler: accepts map or array; shows "No Player" when none
       socket.on('online', (users) => {
-        // repopulate dropdown; skip self
+        console.log('<< socket.on:online payload >>', users);
         onlinePlayersBottom.innerHTML = '';
-        for(const id in users){
-          if(!users[id] || !users[id].email) continue;
-          if(socket && id === socket.id) continue;
+        const list = [];
+        if (Array.isArray(users)) {
+          for (const u of users) {
+            if (!u) continue;
+            const id = u.id || u.socketId || u.socket;
+            const email = u.email || u.emailAddress || u.name || '(no email)';
+            list.push({ id, email });
+          }
+        } else if (users && typeof users === 'object') {
+          for (const id in users) {
+            if (!users[id]) continue;
+            const email = users[id].email || users[id].emailAddress || users[id].username || '(no email)';
+            list.push({ id, email });
+          }
+        }
+
+        let added = 0;
+        for (const item of list) {
+          if (!item || !item.id) continue;
+          if (socket && item.id === socket.id) continue; // skip self
           const opt = document.createElement('option');
-          opt.value = id;
-          opt.text = users[id].email;
+          opt.value = item.id;
+          opt.textContent = item.email;
           onlinePlayersBottom.appendChild(opt);
+          added++;
+        }
+
+        if (added === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.disabled = true;
+          opt.selected = true;
+          opt.textContent = 'No Player';
+          onlinePlayersBottom.appendChild(opt);
+
+          challengeBtnBottom.disabled = true;
+          challengeBtnBottom.setAttribute('aria-disabled', 'true');
+        } else {
+          challengeBtnBottom.disabled = false;
+          challengeBtnBottom.removeAttribute('aria-disabled');
         }
       });
 
       // someone challenged this client
       socket.on('challengeRequest', (data) => {
-        const ok = confirm(data.email + ' challenges you. Accept?');
+        const ok = confirm((data.email || 'Player') + ' challenges you. Accept?');
         if(ok){
           socket.emit('accept', data.fromId);
           multiplayStatus.textContent = 'Accepted challenge. Waiting...';
-        } else {
-          // optionally emit decline if server supports it (not required here)
         }
       });
 
@@ -700,12 +778,7 @@
         }
       });
 
-      socket.on('disconnect', () => {
-        multiplayStatus.textContent = 'Disconnected';
-        isPaired = false;
-        pairedBubble.style.display = 'none';
-      });
-    }
+    } // end initSocket
 
     /* ----------------------------
        Helper for external boards: call onBoardMove(newFen) when the local board changes
@@ -747,5 +820,3 @@
   </script>
 </body>
 </html>
-
-
