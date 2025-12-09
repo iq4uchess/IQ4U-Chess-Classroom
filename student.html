@@ -1,39 +1,38 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Puzzle (PGN Autoplay + Firebase)</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IQ4U — Student Puzzle</title>
 
-  <!-- Chessground (board), Chess.js (logic) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.0.0/assets/chessground.base.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.0.0/assets/chessground.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.0.0/assets/chessground.base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.0.0/assets/chessground.css">
   <script src="https://cdn.jsdelivr.net/npm/chessground@8.0.0/dist/chessground.min.js"></script>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
+  <!-- Chess.js global build -->
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0-beta.2/chess.js"></script>
 
-  <!-- Firebase compat libraries for RTDB -->
+  <!-- Firebase compat (Realtime DB listener kept) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:12px;background:#f7f8fb}
-    .wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:420px 1fr;gap:18px}
+    .wrap{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:18px}
     .panel{background:#fff;padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(20,20,40,0.06)}
-    #board{width:100%;max-width:760px;height:760px;margin:0 auto}
+    /* board area — explicit height so board renders visibly */
+    #board{width:100%; max-width:760px; height:540px; margin:0 auto; background:linear-gradient(180deg,#f8fbff 0,#ffffff 100%); border-radius:6px; box-shadow: 0 2px 6px rgba(20,20,40,0.04)}
     textarea{width:100%;height:180px;font-family:monospace;font-size:13px}
     .muted{color:#666;font-size:13px}
     #notation{white-space:pre-wrap;font-family:monospace;font-size:13px;max-height:300px;overflow:auto;border:1px solid #eee;padding:8px}
-    .controls{display:flex;gap:8px;align-items:center;justify-content:flex-end}
     .small{font-size:13px;color:#444}
     #msg{color:#a33;font-weight:600;margin-top:6px}
     .row{display:flex;gap:8px;align-items:center}
-    .switch{display:inline-flex;align-items:center;gap:6px}
-    select{padding:6px}
+    .controls{display:flex;gap:8px;align-items:center}
   </style>
 </head>
 <body>
-  <h2 style="text-align:center">IQ4U — Student Puzzle (PGN Autoplay + Firebase)</h2>
+  <h2 style="text-align:center">IQ4U — Student Puzzle</h2>
 
   <div class="wrap">
     <div class="panel">
@@ -46,17 +45,14 @@
       </div>
 
       <div style="margin-top:10px;display:flex;gap:8px">
-        <input type="file" id="pgnFile" accept=".pgn,text/plain" />
+        <input type="file" id="pgnFile" accept=".pgn,text/plain">
         <button id="clearBtn">Clear</button>
       </div>
 
-      <div style="margin-top:8px">
-        <label class="small">Select puzzle from uploaded file:</label>
-        <select id="pgnSelect"><option value="">-- no file loaded --</option></select>
-      </div>
+      <!-- removed: select puzzle from uploaded file -->
 
       <div style="margin-top:8px">
-        <label class="small">Paste PGN (single puzzle) — textarea will be used if no selection:</label>
+        <label class="small">Paste PGN (single puzzle) — textarea will be used if no upload selected:</label>
         <textarea id="pgnText">[Event "Trapped pieces: Chapter 1"]
 [FEN "r1bq1rk1/ppp2pb1/3p3p/4n1pQ/2B1P3/2PP2B1/PP3PPP/RN2R1K1 b - - 0 1"]
 [SetUp "1"]
@@ -66,13 +62,8 @@
 
       <p class="muted">Notes: comments { } and variations ( ) are stripped before play so mainline is used. Notation hidden by default.</p>
 
-      <div style="margin-top:8px;display:flex;gap:12px;align-items:center">
-        <div class="switch"><input type="checkbox" id="playAsBlack" /> <label for="playAsBlack">Student plays as Black</label></div>
-        <div class="switch"><input type="checkbox" id="restrictMove" checked /> <label for="restrictMove">Restrict to correct move</label></div>
-      </div>
-
       <div style="margin-top:8px">
-        <label class="small">Autoplay speed (ms per half-move): <input id="speed" type="number" value="900" style="width:100px" /></label>
+        <label class="small">Autoplay speed (ms per half-move): <input id="speed" type="number" value="900" style="width:100px"></label>
       </div>
 
       <div style="margin-top:10px;display:flex;gap:8px">
@@ -82,13 +73,8 @@
         <button id="nextBtn">Next</button>
       </div>
 
-      <div style="margin-top:10px">
-        <div id="msg"></div>
-      </div>
-
-      <div style="margin-top:10px">
-        <div id="notation" hidden></div>
-      </div>
+      <div style="margin-top:10px"><div id="msg"></div></div>
+      <div style="margin-top:10px"><div id="notation" hidden></div></div>
     </div>
 
     <div class="panel" style="display:flex;flex-direction:column;align-items:center">
@@ -101,84 +87,54 @@
   </div>
 
   <script>
-  /************************************************************************
-   * PGN autoplay + Chessground integration for student.html
-   * + Firebase RTDB listener (dedupe & validation)
-   ************************************************************************/
-
-  // ----- Utilities -----
-  function stripCommentsAndVariations(pgnRaw){
-    let s = pgnRaw.replace(/\{[^}]*\}/g, ' ');
-    s = s.replace(/%[^\n]*\n/g, ' ');
-    while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, ' ');
+  // --- helpers (trimmed + robust) ---
+  function stripCommentsAndVariations(raw){
+    var s = (raw||'');
+    s = s.replace(/\{[^}]*\}/g,' ');
+    s = s.replace(/%[^\n]*\n/g,' ');
+    while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g,' ');
     return s;
   }
 
-  function extractLastFEN(pgnRaw){
-    const re = /\[FEN\s+"([^"]+)"\]/g;
-    let match, last = null;
-    while ((match = re.exec(pgnRaw)) !== null) last = match[1];
+  function extractLastFEN(raw){
+    var re = /\[FEN\s+"([^"]+)"\]/g; var m; var last=null;
+    while((m=re.exec(raw))!==null) last=m[1];
     return last;
   }
 
-  function extractSANMoves(pgnClean){
-    let body = pgnClean.replace(/\[[^\]]*\]/g, ' ');
-    body = body.replace(/\s+/g, ' ').trim();
-    const tokens = body.split(/\s+/).filter(t =>
-      t && !/^\d+\.{1,3}$/.test(t) &&
-      t !== '1-0' && t !== '0-1' && t !== '1/2-1/2' && t !== '*'
-    );
+  function extractSANMoves(cleaned){
+    var body = cleaned.replace(/\[[^\]]*\]/g,' ');
+    body = body.replace(/\s+/g,' ').trim();
+    var tokens = body.split(' ').filter(function(t){ return t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*'; });
     return tokens;
   }
 
   function splitPGNs(raw){
-    const regex = /(\[Event[\s\S]*?)(?=(\n\[Event|\n\s*$))/g;
-    const found = [];
-    let m;
-    while ((m = regex.exec(raw)) !== null) found.push(m[1].trim());
-    if (found.length === 0) return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+    var regex = /(\[Event[\s\S]*?)(?=(\n\[Event|\n\s*$))/g; var found=[]; var m;
+    while((m=regex.exec(raw))!==null) found.push(m[1].trim());
+    if(found.length===0) return raw.split(/\n\s*\n/).map(function(s){return s.trim();}).filter(Boolean);
     return found;
   }
 
-  function parseTitleFromPGN(pgn){
-    const cn = pgn.match(/\[ChapterName\s+"([^\"]+)"\]/);
-    if (cn) return cn[1];
-    const ev = pgn.match(/\[Event\s+"([^\"]+)"\]/);
-    if (ev) return ev[1];
-    const fn = pgn.match(/\[FEN\s+"([^\"]+)"\]/);
-    if (fn) return 'FEN: ' + fn[1].slice(0,20);
-    return 'Untitled puzzle';
-  }
+  // --- DOM refs ---
+  var pgnText = document.getElementById('pgnText');
+  var pgnFile = document.getElementById('pgnFile');
+  var loadBtn = document.getElementById('loadBtn');
+  var showBtn = document.getElementById('showBtn');
+  var pauseBtn = document.getElementById('pauseBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var speedInput = document.getElementById('speed');
+  var notationDiv = document.getElementById('notation');
+  var fenText = document.getElementById('fenText');
+  var turnText = document.getElementById('turnText');
+  var msgDiv = document.getElementById('msg');
 
-  // ----- DOM ----
-  const pgnText = document.getElementById('pgnText');
-  const pgnFile = document.getElementById('pgnFile');
-  const loadBtn = document.getElementById('loadBtn');
-  const showBtn = document.getElementById('showBtn');
-  const pauseBtn = document.getElementById('pauseBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const prevBtn = document.getElementById('prevBtn');
-  const nextBtn = document.getElementById('nextBtn');
-  const speedInput = document.getElementById('speed');
-  const notationDiv = document.getElementById('notation');
-  const fenText = document.getElementById('fenText');
-  const turnText = document.getElementById('turnText');
-  const msgDiv = document.getElementById('msg');
-  const pgnSelect = document.getElementById('pgnSelect');
-  const clearBtn = document.getElementById('clearBtn');
-  const playAsBlackChk = document.getElementById('playAsBlack');
-  const restrictChk = document.getElementById('restrictMove');
+  var game = null, cg = null, moves = [], currentMoveIndex = 0, autoplayTimer = null;
 
-  // ----- Game & board state ----
-  let game = new Chess();
-  let cg = null;
-  let moves = [];               // SAN moves (sequence)
-  let currentMoveIndex = 0;     // count of HALF-moves applied
-  let autoplayTimer = null;
-  let loadedPGNs = [];          // from file: [{title,pgn}]
-
-  // ----- Firebase RTDB setup (using your config) -----
-  const firebaseConfig = {
+  // --- Firebase (kept) ---
+  var firebaseConfig = {
     apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
     authDomain: "iq4u-chess-classroom.firebaseapp.com",
     databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -187,141 +143,153 @@
     messagingSenderId: "833620718306",
     appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
   };
+  if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  var db = firebase.database();
+  var remotePath = '/classrooms/room1/currentPuzzle', lastRemoteTs = 0;
 
-  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-
-  // Path teacher will write to. Adjust as needed.
-  const remotePath = '/classrooms/room1/currentPuzzle';
-  let lastRemoteTs = 0; // dedupe
-
-  function isLikelyPGN(s){
-    if (!s || typeof s !== 'string') return false;
-    return /\b1\./.test(s) || /\[FEN\s+"/.test(s) || s.trim().split(/\s+/).length > 4;
-  }
-
-  // Listener: expects either plain string or object { pgn: string, ts: number }
-  db.ref(remotePath).on('value', (snap) => {
-    const val = snap.val();
-    if (!val) return;
-    let pgn = null;
-    let ts = Date.now();
-    if (typeof val === 'string') pgn = val;
-    else if (val.pgn && typeof val.pgn === 'string'){ pgn = val.pgn; ts = val.ts || Date.now(); }
-    else { console.warn('Remote payload not recognized', val); return; }
-
-    if (ts <= lastRemoteTs) return; // already processed
-    if (!isLikelyPGN(pgn)) { console.warn('Remote value not PGN-like', pgn); return; }
-
+  function isLikelyPGN(s){ if(!s || typeof s!=='string') return false; return /\b1\./.test(s) || /\[FEN\s+"/.test(s) || s.trim().split(/\s+/).length > 4; }
+  db.ref(remotePath).on('value', function(snap){
+    var val = snap.val(); if(!val) return; var pgn=null; var ts=Date.now();
+    if(typeof val === 'string') pgn = val;
+    else if(val.pgn && typeof val.pgn === 'string'){ pgn = val.pgn; ts = val.ts || Date.now(); }
+    else return;
+    if(ts <= lastRemoteTs) return;
+    if(!isLikelyPGN(pgn)) return;
     lastRemoteTs = ts;
-    try { prepareFromPGNString(pgn); }
-    catch (err){ console.error('Failed to load remote PGN', err); }
+    try { prepareFromPGNString(pgn); } catch(e){ console.error(e); }
   });
 
-  // Optional helper: teacher push example (use in master UI only)
-  function teacherPushPuzzle(roomPath, pgnString){
-    const payload = { pgn: pgnString, ts: Date.now() };
-    return firebase.database().ref(roomPath).set(payload);
-  }
-
-  // student color helper
-  function getStudentColorFromUIOrFEN(fen){ return playAsBlackChk.checked ? 'b' : 'w'; }
-
+  // --- Chessground init ---
   function initChessground(fen, orientation){
-    if (cg) cg.destroy();
+    if(cg) cg.destroy();
     cg = Chessground(document.getElementById('board'), {
       fen: fen || 'start',
       orientation: orientation || 'white',
-      turnColor: (fen && fen.split(' ')[1] === 'b') ? 'black' : 'white',
       movable: { color: 'white', dests: {}, showDests: true, events: { after: onUserMove } },
       draggable: { enabled: true },
       coordinates: true
     });
   }
 
-  function updateTurnText(){ turnText.textContent = game.turn() === 'w' ? 'White' : 'Black'; }
+  function updateTurnText(){ if(!game){ turnText.textContent='-'; return; } turnText.textContent = game.turn() === 'w' ? 'White' : 'Black'; }
 
   function expectedMoveObjAtIndex(idx){
-    const legal = game.moves({ verbose: true });
-    const expectedSAN = moves[idx];
-    if (!expectedSAN) return null;
-    for (let mv of legal) if (mv.san === expectedSAN) return mv;
+    if(!game) return null;
+    var legal = game.moves({ verbose:true });
+    var expectedSAN = moves[idx];
+    if(!expectedSAN) return null;
+    for(var i=0;i<legal.length;i++) if(legal[i].san === expectedSAN) return legal[i];
     return null;
   }
 
   function setAllowedMoveForStudent(){
-    const restrict = restrictChk.checked;
-    const studentColor = getStudentColorFromUIOrFEN(game.fen());
-    cg.options.movable.color = studentColor === 'w' ? 'white' : 'black';
-    if (!restrict){
-      const dests = {};
-      const legal = game.moves({ verbose: true });
-      for (let mv of legal){
-        if ((studentColor === 'w' && mv.color === 'w') || (studentColor === 'b' && mv.color === 'b')){
-          if (!dests[mv.from]) dests[mv.from] = [];
-          if (!dests[mv.from].includes(mv.to)) dests[mv.from].push(mv.to);
-        }
-      }
-      cg.set({ movable: { color: cg.options.movable.color, dests: dests } });
+    if(!cg) return;
+    if(!game){ cg.set({ movable: { color:'white', dests: {} } }); return; }
+    // Default behavior: restrict to correct move (clean UX). If you want to allow all moves, set allowAll = true.
+    var allowAll = false;
+    if(allowAll){
+      var dests = {}, legal = game.moves({ verbose:true });
+      for(var i=0;i<legal.length;i++){ var mv = legal[i]; if(!dests[mv.from]) dests[mv.from] = []; if(dests[mv.from].indexOf(mv.to) === -1) dests[mv.from].push(mv.to); }
+      cg.set({ movable: { color:'white', dests: dests } });
       return;
     }
-
-    if ((game.turn() === 'w' && studentColor === 'w') || (game.turn() === 'b' && studentColor === 'b')){
-      const exp = expectedMoveObjAtIndex(currentMoveIndex);
-      if (!exp){ notationDiv.hidden = false; msgDiv.textContent = 'Cannot find expected move — showing notation'; setTimeout(()=> msgDiv.textContent = '', 2500); setAllowedMoveForStudent(); return; }
-      const dests = {}; dests[exp.from] = [exp.to];
-      cg.set({ movable: { color: cg.options.movable.color, dests: dests } });
-    } else {
-      cg.set({ movable: { color: cg.options.movable.color, dests: {} } });
-    }
+    // restrict to expected move if possible (player must play the move in PGN)
+    var exp = expectedMoveObjAtIndex(currentMoveIndex);
+    if(!exp){ cg.set({ movable:{ color:'white', dests:{} } }); notationDiv.hidden = false; msgDiv.textContent='Cannot find expected move — showing notation'; setTimeout(function(){ msgDiv.textContent=''; },2000); return; }
+    var d = {}; d[exp.from] = [exp.to];
+    cg.set({ movable: { color:'white', dests: d } });
   }
 
   function onUserMove(orig, dest){
-    const attempted = game.move({ from: orig, to: dest, promotion: 'q' });
-    if (!attempted){ msgDiv.textContent = 'Illegal move — try again'; setTimeout(()=> msgDiv.textContent = '', 1500); cg.set({ fen: game.fen() }); return; }
-    if (restrictChk.checked){ const expected = moves[currentMoveIndex]; if (attempted.san !== expected){ game.undo(); cg.set({ fen: game.fen() }); msgDiv.textContent = 'Wrong move — not the puzzle solution'; setTimeout(()=> msgDiv.textContent = '', 1600); setAllowedMoveForStudent(); return; } }
-    currentMoveIndex++; cg.set({ fen: game.fen() }); updateTurnText(); setTimeout(() => { setAllowedMoveForStudent(); if ((game.turn() !== getStudentColorFromUIOrFEN(game.fen())) && currentMoveIndex < moves.length) autoplayStep(); }, 250);
+    if(!game){ msgDiv.textContent='No puzzle loaded'; setTimeout(function(){ msgDiv.textContent=''; },1200); if(cg) cg.set({ fen:'start' }); return; }
+    var attempted = game.move({ from: orig, to: dest, promotion:'q' });
+    if(!attempted){ msgDiv.textContent='Illegal move'; setTimeout(function(){ msgDiv.textContent=''; },1200); if(cg) cg.set({ fen: game.fen() }); return; }
+    var expected = moves[currentMoveIndex];
+    if(attempted.san !== expected){ game.undo(); if(cg) cg.set({ fen: game.fen() }); msgDiv.textContent='Wrong move — try again'; setTimeout(function(){ msgDiv.textContent=''; },1400); setAllowedMoveForStudent(); return; }
+    currentMoveIndex++;
+    if(cg) cg.set({ fen: game.fen() });
+    updateTurnText();
+    setTimeout(function(){ setAllowedMoveForStudent(); if(currentMoveIndex < moves.length) autoplayStep(); },250);
   }
 
   function autoplayStep(){
-    if (currentMoveIndex >= moves.length) { stopAutoplay(); return; }
-    const san = moves[currentMoveIndex];
-    const result = game.move(san, { sloppy: true });
-    if (!result){ console.warn('Invalid PGN move at', currentMoveIndex, san); notationDiv.hidden = false; msgDiv.textContent = 'PGN contains an invalid move. See notation.'; return; }
-    currentMoveIndex++; cg.set({ fen: game.fen() }); updateTurnText(); const studentColor = getStudentColorFromUIOrFEN(game.fen()); if ((game.turn() !== studentColor) && currentMoveIndex < moves.length){ setTimeout(autoplayStep, Math.max(60, parseInt(speedInput.value || '900',10))); } else { setAllowedMoveForStudent(); }
+    if(!game) return;
+    if(currentMoveIndex >= moves.length) return;
+    var san = moves[currentMoveIndex];
+    var res = game.move(san, { sloppy:true });
+    if(!res){ notationDiv.hidden=false; msgDiv.textContent='Invalid PGN move'; return; }
+    currentMoveIndex++;
+    if(cg) cg.set({ fen: game.fen() });
+    updateTurnText();
+    if(currentMoveIndex < moves.length) setTimeout(autoplayStep, Math.max(60, parseInt(speedInput.value || '900',10)));
+    else setAllowedMoveForStudent();
   }
 
-  function startAutoplay(){ stopAutoplay(); const studentColor = getStudentColorFromUIOrFEN(game.fen()); if (game.turn() !== studentColor) autoplayStep(); else setAllowedMoveForStudent(); }
-  function stopAutoplay(){ if (autoplayTimer){ clearInterval(autoplayTimer); autoplayTimer = null; } }
+  function prepareFromPGNString(pgn){
+    var lastFen = extractLastFEN(pgn);
+    var cleaned = stripCommentsAndVariations(pgn);
+    var sanMoves = extractSANMoves(cleaned);
+    moves = sanMoves || [];
+    currentMoveIndex = 0;
 
-  function prepareFromPGNString(pgn){ stopAutoplay(); const lastFen = extractLastFEN(pgn); const cleaned = stripCommentsAndVariations(pgn); const sanMoves = extractSANMoves(cleaned); moves = sanMoves || []; currentMoveIndex = 0; if (lastFen){ game = new Chess(lastFen); fenText.textContent = lastFen; } else { game = new Chess(); fenText.textContent = game.fen(); } notationDiv.textContent = moves.join(' '); notationDiv.hidden = true; const orientation = playAsBlackChk.checked ? 'black' : 'white'; initChessground(game.fen(), orientation); updateTurnText(); setAllowedMoveForStudent(); startAutoplay(); }
+    try {
+      if(typeof Chess === 'undefined') throw new Error('Chess library not available');
+      game = lastFen ? new Chess(lastFen) : new Chess();
+    } catch(e){
+      console.error(e);
+      msgDiv.textContent = 'Error: Chess.js not loaded. See console.';
+      notationDiv.hidden = false;
+      notationDiv.textContent = cleaned;
+      return;
+    }
 
-  pgnFile.addEventListener('change', (ev) => { const file = ev.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(e){ const text = e.target.result; const parts = splitPGNs(text); loadedPGNs = parts.map(p => ({ title: parseTitleFromPGN(p), pgn: p })); populateSelectFromLoaded(); if (loadedPGNs.length > 0){ pgnSelect.selectedIndex = 1; onSelectChange(); } }; reader.readAsText(file, 'utf-8'); });
+    fenText.textContent = game.fen();
+    notationDiv.textContent = moves.join(' ');
+    notationDiv.hidden = true;
 
-  function populateSelectFromLoaded(){ pgnSelect.innerHTML = '<option value="">-- choose puzzle --</option>'; loadedPGNs.forEach((g,i)=>{ const opt = document.createElement('option'); opt.value = i; opt.textContent = (i+1) + '. ' + g.title; pgnSelect.appendChild(opt); }); }
+    // orientation default: white bottom (no student-as-black option per request)
+    initChessground(game.fen(), 'white');
+    updateTurnText();
+    setAllowedMoveForStudent();
 
-  function onSelectChange(){ const idx = pgnSelect.value; if (idx === '') return; const selected = loadedPGNs[Number(idx)]; if (selected){ pgnText.value = selected.pgn; prepareFromPGNString(selected.pgn); } }
+    // If the PGN expects black to move first in the FEN, run autoplay for initial opponent half-moves:
+    if(game.turn && game.turn() === 'b' && currentMoveIndex < moves.length) autoplayStep();
+  }
 
-  pgnSelect.addEventListener('change', onSelectChange);
+  // file upload: take first PGN found in file
+  pgnFile.addEventListener('change', function(ev){
+    var file = ev.target.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var text = e.target.result;
+      var parts = splitPGNs(text);
+      var chosen = parts && parts.length>0 ? parts[0] : text;
+      pgnText.value = chosen;
+      prepareFromPGNString(chosen);
+    };
+    reader.readAsText(file,'utf-8');
+  });
 
-  loadBtn.addEventListener('click', () => { const idx = pgnSelect.value; if (idx !== ''){ const selected = loadedPGNs[Number(idx)]; if (selected) prepareFromPGNString(selected.pgn); else prepareFromPGNString(pgnText.value); } else { prepareFromPGNString(pgnText.value); } });
+  loadBtn.addEventListener('click', function(){ prepareFromPGNString(pgnText.value); });
+  pauseBtn.addEventListener('click', function(){ /* optional pause: kept simple */ });
+  resetBtn.addEventListener('click', function(){
+    currentMoveIndex = 0;
+    if(game){
+      var startFen = extractLastFEN(pgnText.value) || game.fen();
+      try{ game.load(startFen); } catch(e){ try{ game.reset(); } catch(e){} }
+      if(cg) cg.set({ fen: game.fen() });
+      fenText.textContent = game ? game.fen() : 'start';
+      setAllowedMoveForStudent();
+    }
+  });
+  prevBtn.addEventListener('click', function(){ if(currentMoveIndex <= 0) return; if(game) game.undo(); currentMoveIndex = Math.max(0, currentMoveIndex-1); if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
+  nextBtn.addEventListener('click', function(){ if(currentMoveIndex >= moves.length) return; if(!game) return; var san = moves[currentMoveIndex]; var res = game.move(san, { sloppy:true }); if(!res){ notationDiv.hidden=false; return; } currentMoveIndex++; if(cg) cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
 
-  pauseBtn.addEventListener('click', () => { stopAutoplay(); pauseBtn.textContent = 'Resume'; });
+  showBtn.addEventListener('click', function(){ if(notationDiv.hidden){ notationDiv.hidden=false; showBtn.textContent='Hide answer'; } else { notationDiv.hidden=true; showBtn.textContent='Show answer'; } });
+  clearBtn.addEventListener('click', function(){ pgnText.value=''; notationDiv.textContent=''; });
 
-  resetBtn.addEventListener('click', () => { stopAutoplay(); currentMoveIndex = 0; const startFen = extractLastFEN(pgnText.value) || (loadedPGNs[pgnSelect.value] && extractLastFEN(loadedPGNs[pgnSelect.value].pgn)); if (startFen) game.load(startFen); else game.reset(); cg.set({ fen: game.fen() }); fenText.textContent = game.fen(); updateTurnText(); setAllowedMoveForStudent(); });
-
-  prevBtn.addEventListener('click', () => { if (currentMoveIndex <= 0) return; stopAutoplay(); game.undo(); currentMoveIndex = Math.max(0, currentMoveIndex - 1); cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
-
-  nextBtn.addEventListener('click', () => { if (currentMoveIndex >= moves.length) return; stopAutoplay(); const san = moves[currentMoveIndex]; const res = game.move(san, { sloppy: true }); if (!res) { console.warn('Invalid next move', san); notationDiv.hidden = false; return; } currentMoveIndex++; cg.set({ fen: game.fen() }); updateTurnText(); setAllowedMoveForStudent(); });
-
-  showBtn.addEventListener('click', () => { if (notationDiv.hidden){ notationDiv.hidden = false; showBtn.textContent = 'Hide answer'; } else { notationDiv.hidden = true; showBtn.textContent = 'Show answer'; } });
-
-  clearBtn.addEventListener('click', () => { pgnText.value = ''; loadedPGNs = []; pgnSelect.innerHTML = '<option value="">-- no file loaded --</option>'; });
-
-  restrictChk.addEventListener('change', () => setAllowedMoveForStudent());
-  playAsBlackChk.addEventListener('change', () => { initChessground(game.fen(), playAsBlackChk.checked ? 'black' : 'white'); setAllowedMoveForStudent(); });
-
-  window.addEventListener('load', () => { const sample = pgnText.value.trim(); if (sample) prepareFromPGNString(sample); });
+  // On load: try sample
+  window.addEventListener('load', function(){ var sample = pgnText.value.trim(); if(sample) prepareFromPGNString(sample); });
   </script>
 </body>
 </html>
