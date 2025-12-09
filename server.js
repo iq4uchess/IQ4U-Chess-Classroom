@@ -1,7 +1,4 @@
-// server.js
-// Serve static site and run Socket.IO on same origin.
-// Node 16+ recommended.
-
+// server.js (updated)
 const path = require('path');
 const express = require('express');
 const http = require('http');
@@ -20,27 +17,29 @@ app.get('/', (req, res) => {
 
 const server = http.createServer(app);
 
-// socket.io attached to same HTTP server (no CORS headaches when client is served by this server)
+// Add a permissive cors for dev/testing (OK locally; tighten for production)
 const io = new Server(server, {
-  // default options fine for same-origin
+  cors: {
+    origin: '*',
+    methods: ['GET','POST']
+  },
+  // Slightly more tolerant ping/pong for flaky dev networks
+  pingInterval: 25000,
+  pingTimeout: 120000
 });
 
 const online = {}; // { socketId: { email } }
 
 io.on('connection', (socket) => {
-  // Print some handshake info for debugging
   console.log('socket connected', socket.id, 'from', socket.handshake.address, 'transport', socket.conn.transport.name);
 
-  // Register user email
   socket.on('register', (email) => {
     const safeEmail = String(email || '').slice(0, 128);
     online[socket.id] = { email: safeEmail };
     console.log('register', socket.id, safeEmail);
-    // Broadcast full online map to everyone
     io.emit('online', online);
   });
 
-  // Challenge another player
   socket.on('challenge', (targetId) => {
     console.log('challenge', socket.id, '->', targetId);
     const fromEmail = online[socket.id] && online[socket.id].email;
@@ -52,23 +51,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Accept a challenge
   socket.on('accept', (fromId) => {
     console.log('accept', socket.id, 'from', fromId);
-    // pair the two players (simple pairing — white = challenger)
     const white = fromId;
     const black = socket.id;
     io.to(white).emit('startGame', { white, black });
     io.to(black).emit('startGame', { white, black });
   });
 
-  // Relay moves to others (simple broadcast; in production you'd narrow to paired partner)
   socket.on('move', (data) => {
-    // you may add validation here. For now, broadcast to others.
     socket.broadcast.emit('move', data);
   });
 
-  // cleanup on disconnect
   socket.on('disconnect', (reason) => {
     console.log('disconnect', socket.id, reason);
     delete online[socket.id];
@@ -76,7 +70,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start HTTP+Socket server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Socket server & static files listening on http://0.0.0.0:${PORT}`);
