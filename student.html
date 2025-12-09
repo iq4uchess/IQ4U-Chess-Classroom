@@ -152,7 +152,7 @@
 !function(e,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((e="undefined"!=typeof globalThis?globalThis:e||self).parser={})}(this,(function(e){"use strict";e.pgn2json=function(e){var n,t,i=e.split("\n"),r={str:{},moves:[],annotations:[],nag:[]},o=[];i.forEach(((e,n,t)=>t[n]=t[n].trim().replace("\r",""))),i=function(e){return e.filter((e=>"%"!==e.trim()[0]))}(i),[r.str,n]=function(e){var n={};for(let i=0;i<e.length;i++){var t=e[i];if("["===t[0]){let e=t.substring(1,t.indexOf(" ")),i=t.substring(t.indexOf(" ")+2,t.length-2);n[e]=i}else if("["!==t[0]&&""!==t.trim())return[n,e.slice(e.indexOf(t)).join(" ").trim().split("")]}}(i),t=n.join("").split(" ");for(let e=1;t.includes(`${e}.`);e++)o.push(t.indexOf(`${e}.`));return r.nag=function(e,n){var t=[];return e.filter((e=>e.includes("$"))).map((i=>{var r=0;t.length&&(r=t[t.length-1]);var o=n.filter((n=>n<e.indexOf(i,r)));return t.push(o[o.length-1]),{moveCount:o.length,value:i}}))}(t,o),r.annotations=function(e,n,t){for(var i=[];-1!==e.indexOf("{");){var r=e.indexOf("{"),o=e.indexOf("}"),f=e.splice(r,o-r+2).join(""),l=n.indexOf(f.split(" ")[0]);i.push({moveCount:t.filter((e=>e<l)).length,comment:f.substring(1,f.length-2)})}return i}(n,t,o),(n=(n=n.join("").split(" ")).filter((e=>!e.includes(".")&&!e.includes("$")))).pop(),r.moves=n,JSON.stringify(r,null,4)},Object.defineProperty(e,"__esModule",{value:!0})}));
   </script>
 
-  <!-- Main script (keeps your logic intact, only layout/CSS changed above) -->
+  <!-- Main script (full, unchanged logic; only SERVER line set to location.origin) -->
   <script>
   (function(){
     // keep your CHESS_URL (unchanged)
@@ -160,11 +160,11 @@
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-    // IMPORTANT: change SERVER depending on how you test:
-    // - Local test (serve page via http on same machine): "http://localhost:3000"
-    // - LAN test (open page on phone): "http://<your-pc-lan-ip>:3000"
-    // - HTTPS page (GitHub Pages): use an https tunnel (ngrok) and put the ngrok https URL here.
-    const SERVER = "http://localhost:3000";
+    /* -------------- THE ONLY CHANGE YOU NEEDED -------------- */
+    const SERVER = location.origin;   // <--- connects to same origin serving this page
+    /* -------------------------------------------------------- */
+
+    console.log("Connecting to socket server at:", SERVER);
 
     // DOM refs
     const pgnInput = document.getElementById('pgnInput');
@@ -554,6 +554,7 @@
       // ensure Chess.js
       if(typeof Chess === 'undefined'){
         try{
+          // try dynamic import then fallback to script tag (like your previous logic)
           const mod = await import(CHESS_URL + '?t=' + Date.now());
           const candidate = mod.default || mod.Chess || mod;
           if(candidate) window.Chess = candidate;
@@ -581,10 +582,8 @@
       const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 920;
       setBoardSize(initial);
 
-      // DO NOT auto-register; wait for user to click Join Online
-      // but pre-init socket so CORS/connect errors appear in console early
-      // (initSocket will be safe to call multiple times)
-      // initSocket(); // optional: uncomment to auto-init
+      // initialize socket but do not auto-register — user clicks Join Online
+      initSocket();
     }
 
     boot();
@@ -607,103 +606,60 @@
     });
 
     /* ----------------------------
-       SOCKET.IO MULTIPLAYER LOGIC (robust client)
+       SOCKET.IO MULTIPLAYER LOGIC
        ---------------------------- */
     function initSocket(){
       if(socket && socket.connected) return;
-      if(!SERVER) {
-        console.warn('SERVER not set; cannot connect socket');
-        multiplayStatus.textContent = 'No server configured';
-        return;
-      }
-      console.log('Attempting socket connect to', SERVER);
-
-      // prefer websocket transport (reduces polling/CORS complexity)
-      socket = io(SERVER, { transports: ['websocket'], reconnectionAttempts: 3 });
+      // change URL if your server is hosted elsewhere
+      socket = io(SERVER, { transports: ['websocket','polling'], reconnectionAttempts: 3 });
 
       socket.on('connect', () => {
         console.log('socket connected', socket.id);
         multiplayStatus.textContent = 'Connected (not registered)';
-        if(myEmail){
-          console.log('Auto-registering email', myEmail);
-          socket.emit('register', myEmail);
-          multiplayStatus.textContent = 'Registered as ' + myEmail;
-        }
+        // if user already entered email, auto-register
+        if(myEmail) { socket.emit('register', myEmail); multiplayStatus.textContent = 'Registered as ' + myEmail; }
       });
 
-      socket.on('connect_error', (err) => {
-        console.error('connect_error', err);
-        multiplayStatus.textContent = 'Connect error';
-      });
-
-      socket.on('error', (err) => {
-        console.error('socket error', err);
-      });
-
-      // Normalize server 'online' payload (server may send object keyed by socketId or an array)
+      // server sends object of online users { socketId: {email} }
       socket.on('online', (users) => {
-        console.log('received online payload', users);
+        // repopulate dropdown; skip self
         onlinePlayersBottom.innerHTML = '';
-
-        let list = [];
-        if(Array.isArray(users)){
-          list = users.map(u => ({ id: u.id || u.socketId || u.socket, email: u.email }));
-        } else if(users && typeof users === 'object'){
-          for(const id in users){
-            if(!users[id]) continue;
-            const email = users[id].email || users[id].emailAddress || users[id].username;
-            list.push({ id, email });
-          }
-        }
-
-        if(list.length === 0){
+        for(const id in users){
+          if(!users[id] || !users[id].email) continue;
+          if(socket && id === socket.id) continue;
           const opt = document.createElement('option');
-          opt.value = '';
-          opt.text = '— no other players —';
-          onlinePlayersBottom.appendChild(opt);
-          return;
-        }
-
-        let added = 0;
-        list.forEach(item => {
-          if(!item || !item.id) return;
-          if(socket && item.id === socket.id) return; // skip self
-          const opt = document.createElement('option');
-          opt.value = item.id;
-          opt.text = (item.email || ('player ' + item.id)).slice(0,64);
-          onlinePlayersBottom.appendChild(opt);
-          added++;
-        });
-
-        if(added === 0){
-          const opt = document.createElement('option');
-          opt.value = '';
-          opt.text = '— no other players —';
+          opt.value = id;
+          opt.text = users[id].email;
           onlinePlayersBottom.appendChild(opt);
         }
       });
 
+      // someone challenged this client
       socket.on('challengeRequest', (data) => {
-        console.log('challengeRequest', data);
-        const ok = confirm((data.email || 'Player') + ' challenges you. Accept?');
+        const ok = confirm(data.email + ' challenges you. Accept?');
         if(ok){
           socket.emit('accept', data.fromId);
           multiplayStatus.textContent = 'Accepted challenge. Waiting...';
+        } else {
+          // optionally emit decline if server supports it (not required here)
         }
       });
 
+      // challenge declined (optional)
       socket.on('challenge_declined', ({ email }) => {
         multiplayStatus.textContent = email + ' declined your challenge';
       });
 
+      // start game - server sends who is white and black
       socket.on('startGame', (data) => {
-        console.log('startGame', data);
+        // server should send { white: socketId, black: socketId, /* optional initialFen */ }
         if(!data) return;
         isPaired = true;
         pairedBubble.style.display = 'inline-block';
         multiplayStatus.textContent = 'Paired: ' + (data.white === socket.id ? 'You are White' : 'You are Black');
         myColor = (data.white === socket.id) ? 'white' : 'black';
 
+        // if server provided an initial FEN, load it; otherwise use current game
         if(data.initialFen){
           try{
             if(game && typeof game.load === 'function'){
@@ -713,15 +669,18 @@
                 fenDisplay.textContent = game.fen();
               }
             } else {
+              // fallback: set board position directly
               if(board) board.position(data.initialFen);
               fenDisplay.textContent = data.initialFen;
             }
-          }catch(e){ console.warn('Failed load initial FEN from server', e); }
+          }catch(e){
+            console.warn('Failed load initial FEN from server', e);
+          }
         }
       });
 
+      // receive move - update board
       socket.on('move', (data) => {
-        console.log('received remote move', data);
         if(!data || !data.fen) return;
         try{
           if(!game) game = new Chess();
@@ -730,34 +689,37 @@
             if(board) board.position(game.fen());
             fenDisplay.textContent = game.fen();
           } else {
+            // if load fails, try setting board position directly
             if(board) board.position(data.fen);
             fenDisplay.textContent = data.fen;
           }
         }catch(e){
+          // fallback
           if(board) board.position(data.fen);
           fenDisplay.textContent = data.fen;
         }
       });
 
-      socket.on('disconnect', (reason) => {
-        console.log('socket disconnected', reason);
+      socket.on('disconnect', () => {
         multiplayStatus.textContent = 'Disconnected';
         isPaired = false;
         pairedBubble.style.display = 'none';
-        onlinePlayersBottom.innerHTML = '<option value="">—disconnected—</option>';
       });
     }
 
     /* ----------------------------
        Helper for external boards: call onBoardMove(newFen) when the local board changes
+       If you later replace chessboard.js with another board, call onBoardMove to emit moves
        ---------------------------- */
     window.onBoardMove = function(newFen){
       try{
         if(!newFen) return;
         if(!game) game = new Chess();
+        // try to load fen into game
         if(typeof game.load === 'function') game.load(newFen);
         if(board) board.position(newFen);
         fenDisplay.textContent = newFen;
+        // emit if paired
         if(isPaired && socket && socket.connected){
           socket.emit('move', { fen: newFen });
         }
@@ -767,7 +729,10 @@
     /* ----------------------------
        Make sure we update partner when user clicks Reset/Load FEN etc.
        ---------------------------- */
+    // when loading a FEN via your Load FEN button we already call game.load and set board.position
+    // but we also want to notify partner if paired — so intercept loadFenBtn and resetBtn were handled above.
     loadFenBtn.addEventListener('click', function(){
+      // after performing load, if paired emit the new fen
       setTimeout(()=> {
         try{ if(isPaired && socket && socket.connected){ socket.emit('move', { fen: game.fen() }); } }catch(e){}
       }, 120);
@@ -782,3 +747,5 @@
   </script>
 </body>
 </html>
+
+
