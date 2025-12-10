@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     html,body{ overscroll-behavior-y: contain; height:100%; }
-    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; display:flex; flex-direction:column; align-items:center; }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; width:100%; justify-content:center; }
     .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:920px; width:100%; box-sizing:border-box; }
@@ -17,14 +17,16 @@
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
     .board-top{ grid-column: 1 / -1; display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; }
     .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
-    #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; }
+    #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; } /* position relative for overlay */
     #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
     #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
     .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
     .resizer .range{ width:260px; }
     .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
     textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
-    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; }
+    /* notation: horizontal + wrap as requested */
+    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
     @media (max-width:900px){
       .container{ grid-template-columns:1fr; padding:0 12px; gap:12px; }
       #board-wrapper{ max-width:100%; }
@@ -43,6 +45,14 @@
     .promote-modal button{ min-width:44px; min-height:44px; font-weight:700; }
     .readonly-note{ color:#444; font-size:13px; margin-left:8px; }
     .logout-btn { background:#dc2626; }
+
+    /* drawing overlay & square highlight */
+    /* overlay will be positioned to match the internal board element (.board) */
+    #draw-overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:30; }
+    .arrow-line { stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .arrow-head { fill: currentColor; }
+    /* selection color changed to red */
+    .square-highlight { position:absolute; border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,0.06); background: rgba(220,20,60,0.12); width:44px; height:44px; display:block; z-index:25; border:3px solid rgba(220,20,60,0.25); }
   </style>
 </head>
 <body>
@@ -73,7 +83,11 @@
     </div>
 
     <div class="panel" style="width:100%; max-width:920px;">
-      <div id="board-wrapper"><div id="board" aria-label="Chessboard container"></div></div>
+      <div id="board-wrapper">
+        <div id="board" aria-label="Chessboard container"></div>
+        <!-- drawing overlay (will be positioned/ sized to match internal .board element) -->
+        <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+      </div>
 
       <div style="margin-top:10px; display:flex; justify-content:center; align-items:center;">
         <!-- Orientation removed per request -->
@@ -157,6 +171,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
     // DOM
     const boardWrapper = document.getElementById('board-wrapper');
+    const drawOverlay = document.getElementById('draw-overlay');
     const boardSizeRange = document.getElementById('boardSizeRange');
     const boardSizeLabel = document.getElementById('boardSizeLabel');
     const msgEl = document.getElementById('msg');
@@ -192,14 +207,22 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     let isSpectator = false, myColor = null, isPaired = false, pairedGameId = null;
     let pendingPromo = null;
 
+    // drawing state
+    let drawing = false;
+    let drawPointerId = null;
+    let drawStart = null; // {square, x, y, centerX, centerY}
+    let tempLine = null;
+    let tempHead = null;
+    let finalizedArrows = [];
+    let selectedSquareHighlights = {};
+    let lastMoveSquares = [];
+
+    // left-click click detection (to clear on single click)
+    let leftClickStart = null; // {pointerId, x, y, time}
+
     function setMsg(t, ms=0){
       if(msgEl) msgEl.textContent = t||'';
       if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
-    }
-
-    async function chooseTheme(){
-      const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
-      try{ const res = await fetch(test,{method:'HEAD',cache:'no-store'}); return res.ok?CUSTOM_PIECE_THEME:FALLBACK_THEME;}catch(e){return FALLBACK_THEME}
     }
 
     async function ensureChessLoaded(){
@@ -219,8 +242,12 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
     }
 
+    async function chooseTheme(){
+      const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
+      try{ const res = await fetch(test,{method:'HEAD',cache:'no-store'}); return res.ok?CUSTOM_PIECE_THEME:FALLBACK_THEME;}catch(e){return FALLBACK_THEME}
+    }
+
     function createBoard(theme){
-      // orientation dropdown removed. If paired and you're black, show black; otherwise default white.
       const orientation = (isPaired && myColor==='black') ? 'black' : 'white';
       if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
       if(typeof game === 'undefined' || game===null) game = new Chess();
@@ -234,6 +261,8 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
       try{ if(board && typeof board.position === 'function') board.position(game.fen()); }catch(e){ console.warn('board.position error', e); }
       refreshNotation();
+      // small delay to allow chessboard to render inner DOM then update overlay
+      setTimeout(updateOverlaySize, 30);
     }
 
     function onSnapEnd(){ if(board) board.position(game.fen()); }
@@ -279,11 +308,13 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       if(board) board.position(game.fen());
       refreshNotation();
 
+      setPersistentLastMove(source, target);
+
       try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } }); } }catch(e){}
       return;
     }
 
-    // SAN notation refresh
+    // notation refresh
     function refreshNotation(){
       try{
         if(!movesList) return;
@@ -291,24 +322,25 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         const hist = game.history() || [];
         if(hist.length === 0){ movesList.innerHTML = 'No moves yet.'; return; }
 
-        let html = '';
+        movesList.innerHTML = '';
         for(let i=0;i<hist.length;i+=2){
           const no = Math.floor(i/2)+1;
           const w = hist[i]||'';
           const b = hist[i+1]||'';
-          html += `<div style="padding:4px 0;"><strong>${no}.</strong>&nbsp;${w}${ b ? ('&nbsp;' + b) : '' }</div>`;
+          const div = document.createElement('div');
+          div.className = 'move';
+          div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${ b ? ('\u00A0' + b) : '' }`;
+          movesList.appendChild(div);
         }
-        movesList.innerHTML = html;
-        movesList.scrollTop = movesList.scrollHeight;
+        movesList.scrollLeft = movesList.scrollWidth;
       }catch(e){ console.warn('refreshNotation error', e); }
     }
 
-    // accepts remote payload from firebase
+    // inbound move handler
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
 
-        // if payload is a plain string (legacy), treat as FEN
         if(typeof payload === 'string'){
           if(!game) game = new Chess();
           if(typeof game.load === 'function'){ game.load(payload); }
@@ -317,22 +349,20 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
           return;
         }
 
-        // payload expected to be an object: { fen: "...", move: { from, to, san, promotion } }
         if(!game) game = new Chess();
 
-        // If there's a move object, attempt to apply it to preserve history (so notation is generated)
         if(payload.move && payload.move.from && payload.move.to){
           const mvObj = { from: payload.move.from, to: payload.move.to };
           if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
           const applied = game.move(mvObj);
           if(applied === null){
-            // fallback: try to load FEN (if available)
             if(payload.fen && typeof game.load === 'function'){
               game.load(payload.fen);
             }
+          } else {
+            setPersistentLastMove(payload.move.from, payload.move.to);
           }
         } else if(payload.fen){
-          // no move provided (or move malformed) -> load FEN
           if(typeof game.load === 'function') game.load(payload.fen);
         }
 
@@ -341,64 +371,305 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ console.warn('onBoardMove failed', e); }
     };
 
-    // provide a callback that firebase code will call on game start
-    window._onFirebaseGameStart = function(data){
-      try{
-        // data: { gameId, color, myId } (as provided by firebase)
-        isPaired = true;
-        myColor = data && data.color ? data.color : null;
-        pairedGameId = data && data.gameId ? data.gameId : null;
-        if(pairedBubble) pairedBubble.style.display='inline-block';
-        if(multiplayStatus) multiplayStatus.textContent = 'Paired: You are ' + (myColor ? (myColor.charAt(0).toUpperCase()+myColor.slice(1)) : '');
-        readonlyNote.style.display = (isSpectator? 'inline' : 'none');
-        createBoard(currentTheme);
-      }catch(e){ console.warn('_onFirebaseGameStart error', e); }
-    };
+    // persistent last-move highlight
+    function setPersistentLastMove(src, tgt){
+      lastMoveSquares.forEach(sq => {
+        const el = document.querySelector('.square-' + sq);
+        if(el) el.classList.remove('cb-last-move');
+      });
+      lastMoveSquares = [];
+      ['square-' + src, 'square-' + tgt].forEach(cls => {
+        const el = document.querySelector('.' + cls);
+        if(el) el.classList.add('cb-last-move');
+        lastMoveSquares.push(cls.replace('square-',''));
+      });
+    }
 
-    // UI handlers: undo/flip/resign/logout
-    undoBtn.addEventListener('click', ()=>{ if(!game) return; const mv = game.undo(); if(mv) { if(board) board.position(game.fen()); refreshNotation(); setMsg('Undid move',900); } });
-    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); });
-    resignBtn.addEventListener('click', ()=>{
-      if(!game) return;
-      game.reset();
-      if(board) board.position('start');
-      refreshNotation();
-      setMsg('You resigned — game reset',1500);
-      try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null }); } }catch(e){}
-      isPaired = false; myColor = null; pairedGameId = null; isSpectator = false;
-      pairedBubble.style.display='none';
-      multiplayStatus.textContent = 'Not connected';
-      readonlyNote.style.display = 'none';
-      createBoard(currentTheme);
-    });
+    // --- Helpers for square centers and square detection ---
+    function getBoardInner(){
+      const boardNode = document.getElementById('board');
+      if(!boardNode) return null;
+      return boardNode.querySelector('.board') || boardNode;
+    }
 
-    // Logout
-    logoutBtn.addEventListener('click', ()=>{
-      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
-      window.location.href = 'index.html';
-    });
+    function findSquareClass(classes){
+      for(const c of classes){
+        if(/^square-[a-h][1-8]$/.test(c)) return c;
+      }
+      return null;
+    }
 
-    // FEN controls
-    loadFenBtn.addEventListener('click', ()=>{
-      const txt = pgnInput.value.trim();
-      if(!txt){ setMsg('Paste a FEN string to load',1200); return; }
-      try{
-        if(!game) game = new Chess();
-        const ok = game.load(txt);
-        if(ok === false){ setMsg('Invalid FEN',1400); return; }
-        if(board) board.position(game.fen());
-        refreshNotation();
-        setMsg('FEN loaded',1100);
-      }catch(e){ setMsg('Invalid FEN',1400); console.warn(e); }
-    });
+    function getSquareCenters(){
+      const squares = {};
+      const boardInner = getBoardInner();
+      if(!boardInner) return squares;
+      const parentRect = boardInner.getBoundingClientRect();
+      const sqEls = boardInner.querySelectorAll('.square-55d63');
+      sqEls.forEach(el => {
+        const cls = findSquareClass(el.classList);
+        if(!cls) return;
+        const rect = el.getBoundingClientRect();
+        const centerX = rect.left + rect.width/2 - parentRect.left;
+        const centerY = rect.top + rect.height/2 - parentRect.top;
+        const square = cls.replace('square-','');
+        squares[square] = { el, rect, centerX, centerY, w: rect.width, h: rect.height };
+      });
+      return squares;
+    }
 
-    clearPgn.addEventListener('click', ()=>{ pgnInput.value=''; setMsg('Cleared',900); });
+    function squareAtClientXY(clientX, clientY){
+      const overlayWas = drawOverlay.style.pointerEvents;
+      drawOverlay.style.pointerEvents = 'none';
+      const el = document.elementFromPoint(clientX, clientY);
+      drawOverlay.style.pointerEvents = overlayWas || 'none';
+      if(!el) return null;
+      const sq = el.classList.contains('square-55d63') ? el : el.closest('.square-55d63');
+      if(!sq) return null;
+      const cls = findSquareClass(sq.classList);
+      if(!cls) return null;
+      return cls.replace('square-','');
+    }
 
-    resetBtnLeft.addEventListener('click', ()=>{ if(!game) game = new Chess(); else game.reset(); if(board) board.position(game.fen()); refreshNotation(); setMsg('Reset to start',900); });
+    function clearTempDrawing(){
+      if(tempLine){ tempLine.remove(); tempLine=null; }
+      if(tempHead){ tempHead.remove(); tempHead=null; }
+    }
 
-    // resizer
-    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
-    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } }
+    // create svg primitives inside overlay (coords relative to boardInner)
+    function createSvgLine(x1,y1,x2,y2, color='#ff7f50'){
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.setAttribute('stroke', color);
+      line.setAttribute('class', 'arrow-line');
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('stroke-width', 6);
+      line.style.pointerEvents = 'none';
+      drawOverlay.appendChild(line);
+      return line;
+    }
+    function createSvgArrowHead(x, y, angleDeg, size=14, color='#ff7f50'){
+      const head = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+      const points = [
+        [0,0],
+        [-size, -size/2],
+        [-size, size/2]
+      ];
+      const angle = angleDeg * Math.PI/180;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const pts = points.map(p => {
+        const rx = p[0]*cos - p[1]*sin;
+        const ry = p[0]*sin + p[1]*cos;
+        return (x+rx) + ',' + (y+ry);
+      }).join(' ');
+      head.setAttribute('points', pts);
+      head.setAttribute('fill', color);
+      head.setAttribute('class', 'arrow-head');
+      head.style.pointerEvents = 'none';
+      drawOverlay.appendChild(head);
+      return head;
+    }
+
+    function finalizeArrow(x1,y1,x2,y2){
+      const color = '#b86b48';
+      const line = createSvgLine(x1,y1,x2,y2, color);
+      const angle = Math.atan2(y2-y1, x2-x1) * 180/Math.PI;
+      const head = createSvgArrowHead(x2, y2, angle, Math.max(8, Math.min(20, Math.hypot(x2-x1, y2-y1)/8)), color);
+      finalizedArrows.push({ line, head, meta: null });
+    }
+
+    // position overlay to match internal board area and set viewBox
+    function updateOverlaySize(){
+      const boardInner = getBoardInner();
+      if(!boardInner) return;
+      const boardRect = boardInner.getBoundingClientRect();
+      const wrapperRect = boardWrapper.getBoundingClientRect();
+
+      const left = boardRect.left - wrapperRect.left;
+      const top  = boardRect.top  - wrapperRect.top;
+
+      drawOverlay.style.position = 'absolute';
+      drawOverlay.style.left = left + 'px';
+      drawOverlay.style.top  = top  + 'px';
+      drawOverlay.style.width = boardRect.width + 'px';
+      drawOverlay.style.height = boardRect.height + 'px';
+
+      drawOverlay.setAttribute('width', Math.round(boardRect.width));
+      drawOverlay.setAttribute('height', Math.round(boardRect.height));
+      drawOverlay.setAttribute('viewBox', `0 0 ${Math.round(boardRect.width)} ${Math.round(boardRect.height)}`);
+      drawOverlay.setAttribute('preserveAspectRatio', 'none');
+
+      const centers = getSquareCenters();
+      const boardLeftInWrapper = boardRect.left - wrapperRect.left;
+      const boardTopInWrapper  = boardRect.top  - wrapperRect.top;
+      for(const sq in selectedSquareHighlights){
+        const info = centers[sq];
+        if(info){
+          const el = selectedSquareHighlights[sq];
+          el.style.left = (boardLeftInWrapper + info.centerX) + 'px';
+          el.style.top  = (boardTopInWrapper  + info.centerY) + 'px';
+          el.style.width = Math.max(30, info.w * 0.7) + 'px';
+          el.style.height = Math.max(30, info.h * 0.7) + 'px';
+        }
+      }
+    }
+
+    function clearAllDrawings(){
+      // remove arrow svg elements
+      finalizedArrows.forEach(a => { if(a.line) a.line.remove(); if(a.head) a.head.remove(); });
+      finalizedArrows = [];
+      clearTempDrawing();
+      // remove square highlight elements
+      for(const k in selectedSquareHighlights){
+        try{ selectedSquareHighlights[k].remove(); }catch(e){}
+      }
+      selectedSquareHighlights = {};
+    }
+
+    function toggleSquareSelection(square){
+      if(selectedSquareHighlights[square]){
+        selectedSquareHighlights[square].remove();
+        delete selectedSquareHighlights[square];
+        return;
+      }
+      const centers = getSquareCenters();
+      const info = centers[square];
+      if(!info) return;
+      const boardInner = getBoardInner();
+      const boardRect = boardInner.getBoundingClientRect();
+      const wrapperRect = boardWrapper.getBoundingClientRect();
+      const absLeft = (boardRect.left - wrapperRect.left) + info.centerX;
+      const absTop  = (boardRect.top  - wrapperRect.top) + info.centerY;
+
+      const el = document.createElement('div');
+      el.className = 'square-highlight';
+      el.style.left = absLeft + 'px';
+      el.style.top  = absTop  + 'px';
+      el.style.width = Math.max(30, info.w * 0.7) + 'px';
+      el.style.height = Math.max(30, info.h * 0.7) + 'px';
+      boardWrapper.appendChild(el);
+      selectedSquareHighlights[square] = el;
+    }
+
+    // wire pointer events: right-click to select / right-drag free-angle arrows
+    (function wirePointerEvents(){
+      boardWrapper.addEventListener('contextmenu', e => e.preventDefault());
+
+      boardWrapper.addEventListener('pointerdown', function(e){
+        // LEFT button click detection (start)
+        if(e.button === 0){
+          leftClickStart = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now() };
+        }
+
+        // right-button -> start drawing/selection
+        if(e.button === 2){
+          try{ e.target.setPointerCapture(e.pointerId); }catch(err){}
+          drawPointerId = e.pointerId;
+          const sq = squareAtClientXY(e.clientX, e.clientY);
+          const centers = getSquareCenters();
+          const info = (sq && centers[sq]) ? centers[sq] : null;
+          if(!info){
+            drawing = false;
+            drawStart = null;
+            drawPointerId = null;
+            return;
+          }
+          drawing = true;
+          // drawStart center coords are relative to boardInner (overlay viewBox)
+          drawStart = { square: sq, x: e.clientX, y: e.clientY, centerX: info.centerX, centerY: info.centerY };
+          drawOverlay.style.pointerEvents = 'auto';
+          clearTempDrawing();
+          tempLine = createSvgLine(drawStart.centerX, drawStart.centerY, drawStart.centerX, drawStart.centerY, '#b86b48');
+          tempHead = createSvgArrowHead(drawStart.centerX, drawStart.centerY, 0, 0, '#b86b48');
+          e.preventDefault();
+          return;
+        }
+      }, {capture:true});
+
+      window.addEventListener('pointermove', function(e){
+        // if left-click has moved significantly, cancel simple-click detection
+        if(leftClickStart && e.pointerId === leftClickStart.pointerId){
+          const dx = e.clientX - leftClickStart.x;
+          const dy = e.clientY - leftClickStart.y;
+          if(Math.hypot(dx,dy) > 6) leftClickStart = null;
+        }
+
+        if(!drawing || e.pointerId !== drawPointerId || !drawStart) return;
+
+        // FREE-ANGLE: use the actual drag vector (no snapping)
+        const dx = (e.clientX - drawStart.x);
+        const dy = (e.clientY - drawStart.y);
+        const endX = drawStart.centerX + dx;
+        const endY = drawStart.centerY + dy;
+
+        if(tempLine){
+          tempLine.setAttribute('x1', drawStart.centerX);
+          tempLine.setAttribute('y1', drawStart.centerY);
+          tempLine.setAttribute('x2', endX);
+          tempLine.setAttribute('y2', endY);
+        }
+        if(tempHead){
+          tempHead.remove();
+          const angle = Math.atan2(endY - drawStart.centerY, endX - drawStart.centerX) * 180/Math.PI;
+          const len = Math.hypot(endX - drawStart.centerX, endY - drawStart.centerY);
+          tempHead = createSvgArrowHead(endX, endY, angle, Math.max(6, Math.min(20, len/8)), '#b86b48');
+        }
+      }, {passive:false});
+
+      window.addEventListener('pointerup', function(e){
+        // LEFT click: if this ended a short click (no drag), clear all drawings
+        if(e.button === 0 && leftClickStart && e.pointerId === leftClickStart.pointerId){
+          const dt = Date.now() - leftClickStart.t;
+          // treat as click if short time and small movement
+          if(dt < 600){
+            // clear everything
+            clearAllDrawings();
+            setMsg('Cleared drawings',400);
+            leftClickStart = null;
+            return;
+          }
+          leftClickStart = null;
+        }
+
+        if(!drawing || e.pointerId !== drawPointerId || !drawStart) return;
+        try{ e.target.releasePointerCapture(e.pointerId); }catch(err){}
+        const dx = (e.clientX - drawStart.x);
+        const dy = (e.clientY - drawStart.y);
+        const dist = Math.hypot(dx, dy);
+        drawOverlay.style.pointerEvents = 'none';
+
+        // short drags toggle square selection
+        if(dist < 8){
+          const sq = squareAtClientXY(e.clientX, e.clientY) || drawStart.square;
+          if(sq) toggleSquareSelection(sq);
+          clearTempDrawing();
+          drawing = false;
+          drawPointerId = null;
+          drawStart = null;
+          return;
+        }
+
+        // finalize using free-angle endpoint
+        const ex = drawStart.centerX + dx;
+        const ey = drawStart.centerY + dy;
+        finalizeArrow(drawStart.centerX, drawStart.centerY, ex, ey);
+        clearTempDrawing();
+        drawing = false;
+        drawPointerId = null;
+        drawStart = null;
+        setMsg('Arrow drawn',700);
+      }, {passive:false});
+
+      window.addEventListener('resize', updateOverlaySize);
+      const ro = new ResizeObserver(updateOverlaySize);
+      ro.observe(boardWrapper);
+      setTimeout(()=>{ const b = getBoardInner(); if(b) ro.observe(b); }, 200);
+    })();
+
+    // expose refreshNotation
+    window.refreshNotation = refreshNotation;
 
     // boot
     async function boot(){
@@ -415,17 +686,60 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 570;
       setBoardSize(initial);
       setMsg('Ready', 700);
+
+      drawOverlay.addEventListener('contextmenu', e => e.preventDefault());
+      document.getElementById('board').addEventListener('contextmenu', e => e.preventDefault());
     }
     boot();
 
-    // expose refresh for external calls
-    window.refreshNotation = refreshNotation;
+    // UI handlers (undo/flip/resign/logout)
+    undoBtn.addEventListener('click', ()=>{ if(!game) return; const mv = game.undo(); if(mv) { if(board) board.position(game.fen()); refreshNotation(); setMsg('Undid move',900); } });
+    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
+    resignBtn.addEventListener('click', ()=>{
+      if(!game) return;
+      game.reset();
+      if(board) board.position('start');
+      refreshNotation();
+      setMsg('You resigned — game reset',1500);
+      try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null }); } }catch(e){}
+      isPaired = false; myColor = null; pairedGameId = null; isSpectator = false;
+      pairedBubble.style.display='none';
+      multiplayStatus.textContent = 'Not connected';
+      readonlyNote.style.display = 'none';
+      createBoard(currentTheme);
+    });
 
-    // firebase code below remains functionally unchanged, except the sessionStorage key was corrected
+    logoutBtn.addEventListener('click', ()=>{
+      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
+      window.location.href = 'index.html';
+    });
+
+    loadFenBtn.addEventListener('click', ()=>{
+      const txt = pgnInput.value.trim();
+      if(!txt){ setMsg('Paste a FEN string to load',1200); return; }
+      try{
+        if(!game) game = new Chess();
+        const ok = game.load(txt);
+        if(ok === false){ setMsg('Invalid FEN',1400); return; }
+        if(board) board.position(game.fen());
+        refreshNotation();
+        setMsg('FEN loaded',1100);
+        setTimeout(updateOverlaySize, 30);
+      }catch(e){ setMsg('Invalid FEN',1400); console.warn(e); }
+    });
+
+    clearPgn.addEventListener('click', ()=>{ pgnInput.value=''; setMsg('Cleared',900); });
+
+    resetBtnLeft.addEventListener('click', ()=>{ if(!game) game = new Chess(); else game.reset(); if(board) board.position(game.fen()); refreshNotation(); setMsg('Reset to start',900); setTimeout(updateOverlaySize, 30); });
+
+    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
+    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
+
+    // firebase code unchanged (kept as in your original file)
   })();
   </script>
 
-  <!-- FIREBASE (fixed sessionStorage key & corrected IIFE closures) -->
+  <!-- FIREBASE (kept as in your original file) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script>
