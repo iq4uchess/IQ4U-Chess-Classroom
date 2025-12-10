@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Puzzle Trainer — Student2 (Offline)</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --panel:#ffffff; --muted:#6b7280; --accent:#0f172a; --card-shadow: 0 6px 18px rgba(2,6,23,.04);
+  }
+  html,body{height:100%; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:#111;}
+  .wrap{max-width:1200px; margin:20px auto; padding:14px; display:grid; grid-template-columns: 420px 1fr; gap:18px; align-items:start;}
+  header{grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px;}
+  header h1{margin:0;font-size:18px;}
+  .panel{background:var(--panel); padding:12px; border-radius:10px; box-shadow:var(--card-shadow);}
+  .muted{color:var(--muted); font-size:13px;}
+  /* Board Top */
+  .board-top{grid-column:1/-1; display:flex; flex-direction:column; gap:12px; align-items:center;}
+  .controls{display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap;}
+  .controls button, .controls select{padding:8px 10px; border-radius:8px; border:none; background:var(--accent); color:#fff; cursor:pointer;}
+  .controls .ghost{background:transparent; color:var(--accent); border:1px solid #e6eefc;}
+  /* Resizer UI */
+  .resizer{display:flex; gap:10px; align-items:center;}
+  .range{width:260px;}
+  #board-wrapper{width:100%; max-width:720px; display:flex; align-items:center; justify-content:center; transition: max-width 160ms ease;}
+  #board{width:100%; aspect-ratio:1/1; max-height:80vh; border-radius:8px; background:#fefefe; box-shadow:inset 0 0 0 1px #eef2ff; display:block; touch-action:none;}
+  .board-row{display:flex;}
+  .square{width:calc(100%/8); height:calc(100%/8); display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; cursor:pointer; font-size:32px;}
+  .square.dark{background:#b58863;}
+  .square.light{background:#f0d9b5;}
+  .square.highlight{outline:3px solid rgba(255,215,0,0.4);}
+  .square.legal{box-shadow:inset 0 -10px 0 rgba(0,0,0,0.12);}
+  .piece{font-size:calc(var(--piece-size,38px)); pointer-events:none;}
+  /* left column */
+  .col-left{display:flex; flex-direction:column; gap:12px;}
+  textarea{width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace;}
+  .row{display:flex; gap:8px; align-items:center;}
+  .small{font-size:13px; color:var(--muted);}
+  /* moves list and stats */
+  #movesList{min-height:220px; max-height:320px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff;}
+  .move-row{padding:6px;border-radius:6px;}
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .tag{background:#eef2ff;color:#0f172a;padding:4px 8px;border-radius:999px;font-size:12px;}
+  .stat{font-size:13px;color:var(--muted);}
+  /* right column */
+  .col-right{display:flex; flex-direction:column; gap:12px;}
+  .panel-title{display:flex; justify-content:space-between; align-items:center;}
+  .list{display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto;}
+  .puzzle-item{padding:8px;border-radius:8px; display:flex; justify-content:space-between; align-items:center; gap:8px; border:1px solid #eef2ff; background:#fff;}
+  footer{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;margin-top:8px;}
+  /* responsive */
+  @media(max-width:980px){
+    .wrap{grid-template-columns:1fr; padding:10px;}
+    #board-wrapper{max-width:100%;}
+    .range{width:140px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" role="application" aria-label="Puzzle trainer UI">
+  <header>
+    <h1>Puzzle Trainer — Student2 (Offline)</h1>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div class="small">Logged in as <strong>student2</strong></div>
+      <button id="exportDbBtn" title="Export local puzzle DB">Export DB</button>
+      <button id="importDbBtn" title="Import DB">Import DB</button>
+      <input id="importFile" type="file" accept=".json" style="display:none" />
+    </div>
+  </header>
+
+  <!-- TOP: board + controls -->
+  <div class="board-top panel">
+    <div class="controls" aria-hidden="false">
+      <div class="toolbar">
+        <button id="undoBtn">Undo</button>
+        <button id="prevBtn">Prev</button>
+        <button id="nextBtn">Next</button>
+        <button id="flipBtn">Flip</button>
+        <button id="autoPlayBtn" class="ghost">Auto Play</button>
+        <button id="hintBtn" class="ghost">Hint</button>
+        <button id="showSolutionBtn">Show Solution</button>
+      </div>
+
+      <div style="width:8px;"></div>
+
+      <div class="resizer">
+        <button id="presetSmall">S</button>
+        <button id="presetMed">M</button>
+        <button id="presetLarge">L</button>
+        <input id="boardSizeRange" class="range" type="range" min="240" max="1200" step="10" value="720" aria-label="Board size">
+        <small id="boardSizeLabel">720px</small>
+      </div>
+    </div>
+
+    <div style="width:100%; max-width:920px;">
+      <div id="board-wrapper"><div id="board" role="grid" aria-label="Chessboard container"></div></div>
+
+      <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>Orientation:
+          <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
+        </div>
+        <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
+      </div>
+      <div class="muted" id="msg" aria-live="polite" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Left column: puzzle input / controls -->
+  <div class="col-left">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong>Import / Create Puzzles</strong>
+        <div class="small muted">Offline only</div>
+      </div>
+      <div style="margin-top:8px;">
+        <textarea id="pgnInput" placeholder="Paste PGN(s) or FEN+solution here. Examples:
+1) PGN: 1. e4 e5 2. Nf3 Nc6
+2) FEN + moves block:
+[FEN \"r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3\"]
+1. Nc3 d6
+"></textarea>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input type="file" id="pgnFile" accept=".pgn,text/plain" />
+          <button id="loadPgnBtn">Load</button>
+          <button id="clearPgn">Clear</button>
+          <button id="addToDbBtn">Add to DB</button>
+        </div>
+        <div class="small muted" style="margin-top:8px;">You may paste multiple PGNs separated by a blank line or [Event] tag. Use FEN header to specify starting positions.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <strong>Puzzle Controls</strong>
+        <div class="small muted" id="puzzleCounter">0 puzzles</div>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="startBtn">Start</button>
+        <button id="shuffleBtn">Shuffle</button>
+        <button id="markWrongBtn" class="ghost">Mark Wrong</button>
+        <button id="skipBtn" class="ghost">Skip</button>
+        <button id="reviewWrongBtn">Review Wrong</button>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small">Filters: <input id="filterTag" placeholder="tag/category" /> <button id="applyFilter">Apply</button> <button id="clearFilter">Clear</button></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Session Stats</strong>
+      <div style="margin-top:8px;">
+        <div class="stat">Total attempted: <span id="statAttempted">0</span></div>
+        <div class="stat">Solved: <span id="statSolved">0</span></div>
+        <div class="stat">Accuracy: <span id="statAccuracy">0%</span></div>
+        <div style="margin-top:8px;"><button id="resetProgress">Reset Progress</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: puzzle list / moves -->
+  <div class="col-right">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong>Loaded Puzzles</strong>
+        <div class="small muted">click to load</div>
+      </div>
+      <div id="puzzleList" class="list" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong>Solution / Moves</strong>
+        <div class="small muted">toggle</div>
+      </div>
+      <div id="movesList" style="margin-top:8px; display:block;"></div>
+    </div>
+  </div>
+
+  <footer class="muted">Local puzzle DB stored in browser. Export/Import with buttons above.</footer>
+</div>
+
+<!-- Local dependency: chess.min.js must be in same folder -->
+<script src="chess.min.js"></script>
+
+<script>
+/*
+  Student2 Puzzle Trainer (offline)
+  - Requires chess.min.js available locally in same directory.
+  - Board rendered with SVG/HTML and Unicode chess glyphs (no external images).
+  - Uses chess.js for move validation, FEN, SAN, etc.
+*/
+
+/* ---------- Utility helpers ---------- */
+function $(id){ return document.getElementById(id); }
+function setMsg(t, ms=0){ const m=$('msg'); m.textContent=t||''; if(ms>0) setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, ms); }
+
+/* ---------- Board rendering w/ Unicode pieces ---------- */
+const UNICODE_PIECES = {
+  p: '♟', r:'♜', n:'♞', b:'♝', q:'♛', k:'♚',
+  P: '♙', R:'♖', N:'♘', B:'♗', Q:'♕', K:'♔'
+};
+
+const fileNames = ['a','b','c','d','e','f','g','h'];
+
+function createBoardElement(sizePx){
+  const board = $('board');
+  board.innerHTML = '';
+  const wrapperWidth = board.clientWidth || sizePx || 720;
+  board.style.width = '100%';
+  // create 8x8 squares
+  for(let rank=8; rank>=1; rank--){
+    const row = document.createElement('div');
+    row.className = 'board-row';
+    row.style.display = 'flex';
+    for(let file=0; file<8; file++){
+      const sq = document.createElement('div');
+      sq.className = 'square';
+      const isDark = ((file + rank) % 2 === 1);
+      sq.classList.add(isDark ? 'dark' : 'light');
+      sq.dataset.square = fileNames[file] + rank;
+      sq.setAttribute('role','button');
+      sq.setAttribute('aria-label', 'square ' + sq.dataset.square);
+      const p = document.createElement('div');
+      p.className = 'piece';
+      sq.appendChild(p);
+      row.appendChild(sq);
+    }
+    board.appendChild(row);
+  }
+}
+
+/* ---------- Application state ---------- */
+let engine = null; // Chess.js instance
+let boardOrientation = 'white'; // 'white' | 'black'
+let db = { puzzles: [] }; // puzzle DB in memory
+let session = {
+  currentIndex: -1,
+  currentPuzzle: null,
+  stepIndex: 0, // index into puzzle.moves (SAN tokens)
+  inPlay: false,
+  selectedSquare: null,
+  stats: { attempted:0, solved:0 },
+  showMoves: false,
+  wrongQueue: []
+};
+const STORAGE_KEY = 'puzzleTrainerDB_v1';
+const PROGRESS_KEY = 'puzzleTrainerProgress_v1';
+
+/* ---------- Persistence ---------- */
+function saveDB(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+function loadDB(){ const raw=localStorage.getItem(STORAGE_KEY); if(raw){ try{ db=JSON.parse(raw); }catch(e){ console.warn('db parse fail',e); } } renderPuzzleList(); updatePuzzleCounter(); }
+function saveProgress(){ localStorage.setItem(PROGRESS_KEY, JSON.stringify({ stats:session.stats, wrong: session.wrongQueue })); }
+function loadProgress(){ const raw=localStorage.getItem(PROGRESS_KEY); if(raw){ try{ const j=JSON.parse(raw); session.stats = j.stats || session.stats; session.wrongQueue = j.wrong || []; }catch(e){ } } updateStatsUI(); }
+
+/* ---------- PGN / FEN parsing helpers (robust) ---------- */
+function stripCommentsAndVariations(raw){
+  if(!raw) return '';
+  let s = raw.replace(/\{[^}]*\}/g, ' ');
+  s = s.replace(/%[^\n]*\n/g, ' ');
+  while(/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, ' ');
+  return s;
+}
+
+function extractLastFEN(raw){
+  if(!raw) return null;
+  const re = /\[FEN\s+"([^"]+)"\]/g;
+  let m, last=null;
+  while((m=re.exec(raw))!==null) last = m[1];
+  return last;
+}
+
+function extractSANMoves(pgnClean){
+  if(!pgnClean) return [];
+  let body = pgnClean.replace(/\[[^\]]*\]/g,' ');
+  body = body.replace(/\s+/g,' ').trim();
+  if(!body) return [];
+  const tokens = body.split(' ').filter(t => t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
+  return tokens;
+}
+
+function splitPGNs(raw){
+  if(!raw) return [];
+  const byEvent = raw.split(/\n(?=\[Event\s)/g).map(s=>s.trim()).filter(Boolean);
+  if(byEvent.length>1) return byEvent;
+  return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+}
+
+/* ---------- Puzzle object format ----------
+  {
+    id: <uuid/string>,
+    title: <string>,
+    tags: [ 'tactics', 'mate', 'endgame' ],
+    fen: <starting FEN> or null (default start),
+    moves: [ 'e4', 'e5', 'Nf3', ... ]  // SAN tokens
+    sourceText: original input for reference
+    stats: { attempts:0, solved:0, lastAttempt:timestamp }
+  }
+------------------------------------------- */
+
+function makeId(){ return 'p_'+Math.random().toString(36).slice(2,9); }
+
+function addPuzzlesFromText(raw){
+  const parts = splitPGNs(raw);
+  let added = 0;
+  for(const part of parts){
+    const pgn = part.trim();
+    if(!pgn) continue;
+    const cleaned = stripCommentsAndVariations(pgn);
+    const moves = extractSANMoves(cleaned);
+    const fen = extractLastFEN(pgn) || null;
+    const title = fen ? 'FEN puzzle' : (pgn.split('\n')[0].slice(0,80) || 'Puzzle');
+    const pu = {
+      id: makeId(),
+      title: title,
+      tags: [],
+      fen: fen,
+      moves: moves,
+      sourceText: pgn,
+      stats: { attempts:0, solved:0, lastAttempt:null }
+    };
+    db.puzzles.push(pu);
+    added++;
+  }
+  saveDB();
+  loadDB();
+  setMsg(`Added ${added} puzzle(s)`, 1600);
+}
+
+/* ---------- UI rendering ---------- */
+function renderPuzzleList(){
+  const list = $('puzzleList');
+  list.innerHTML = '';
+  db.puzzles.forEach((p, idx) => {
+    const el = document.createElement('div');
+    el.className='puzzle-item';
+    el.innerHTML = `<div style="min-width:0">
+      <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.title}</div>
+      <div class="small muted" style="margin-top:4px;">moves: ${p.moves.length} | id:${p.id.slice(0,6)}</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button data-idx="${idx}" class="loadPuzzleBtn">Load</button>
+      <button data-idx="${idx}" class="delPuzzleBtn ghost">Del</button>
+    </div>`;
+    list.appendChild(el);
+  });
+  // wire buttons
+  Array.from(document.getElementsByClassName('loadPuzzleBtn')).forEach(b=>b.onclick = (e)=>{
+    const idx = Number(e.currentTarget.dataset.idx);
+    loadPuzzleByIndex(idx);
+  });
+  Array.from(document.getElementsByClassName('delPuzzleBtn')).forEach(b=>b.onclick = (e)=>{
+    const idx = Number(e.currentTarget.dataset.idx);
+    if(confirm('Delete puzzle?')){ db.puzzles.splice(idx,1); saveDB(); loadDB(); }
+  });
+  updatePuzzleCounter();
+}
+
+function updatePuzzleCounter(){ $('puzzleCounter').textContent = `${db.puzzles.length} puzzles`; }
+
+function updateStatsUI(){
+  $('statAttempted').textContent = session.stats.attempted || 0;
+  $('statSolved').textContent = session.stats.solved || 0;
+  const acc = session.stats.attempted ? Math.round(100*(session.stats.solved/session.stats.attempted)) : 0;
+  $('statAccuracy').textContent = acc + '%';
+}
+
+/* ---------- Load / prepare puzzle ---------- */
+function preparePuzzle(puzzle){
+  stopAutoPlay();
+  session.currentPuzzle = puzzle;
+  session.stepIndex = 0;
+  session.inPlay = true;
+  session.selectedSquare = null;
+  engine = new Chess(puzzle.fen || undefined);
+  // If puzzle.moves is empty -> nothing to do
+  renderBoard();
+  renderMovesList();
+  setMsg(`Loaded puzzle: ${puzzle.title}`, 1200);
+  $('fenDisplay').textContent = engine.fen();
+}
+
+function loadPuzzleByIndex(idx){
+  if(idx < 0 || idx >= db.puzzles.length) return;
+  preparePuzzle(db.puzzles[idx]);
+  session.currentIndex = idx;
+  highlightCurrentPuzzleInList();
+}
+
+function highlightCurrentPuzzleInList(){
+  const items = document.querySelectorAll('#puzzleList .puzzle-item');
+  items.forEach((it, i)=>{ it.style.boxShadow = (i===session.currentIndex) ? '0 6px 18px rgba(16,185,129,0.12)' : ''; });
+}
+
+/* ---------- Render board from engine.fen() ---------- */
+function renderBoard(){
+  const boardEl = $('board');
+  const fen = engine.fen();
+  const parts = fen.split(' ');
+  const rows = parts[0].split('/');
+  // ensure board structure exists
+  boardEl.querySelectorAll('.square').forEach(sqEl=>{
+    sqEl.classList.remove('highlight','legal');
+    sqEl.firstElementChild.textContent = '';
+  });
+  for(let r=0;r<8;r++){
+    const rank = 8 - r;
+    let fileIndex = 0;
+    const row = rows[r];
+    for(const ch of row){
+      if(/\d/.test(ch)){ fileIndex += Number(ch); continue; }
+      const sq = fileNames[fileIndex] + rank;
+      const el = boardEl.querySelector(`.square[data-square="${sq}"]`);
+      if(el) el.firstElementChild.textContent = UNICODE_PIECES[ch] || '';
+      fileIndex++;
+    }
+  }
+  $('fenDisplay').textContent = fen;
+  renderLegalHighlights();
+}
+
+/* ---------- Interaction: click-to-move (select source then dest) ---------- */
+function coordToSquare(el){
+  return el && el.dataset ? el.dataset.square : null;
+}
+
+function renderLegalHighlights(){
+  // remove existing legal markers
+  board.querySelectorAll('.square').forEach(sq => {
+    sq.classList.remove('legal','highlight');
+  });
+  // If selectedSquare show legal moves
+  if(session.selectedSquare && engine){
+    const moves = engine.moves({ square: session.selectedSquare, verbose:true });
+    moves.forEach(m=>{
+      const el = board.querySelector(`.square[data-square="${m.to}"]`);
+      if(el) el.classList.add('legal');
+    });
+    const selEl = board.querySelector(`.square[data-square="${session.selectedSquare}"]`);
+    if(selEl) selEl.classList.add('highlight');
+  }
+}
+
+const board = (function(){ return $('board'); })();
+
+board.addEventListener('pointerdown', function(e){
+  const sq = e.target.closest('.square');
+  if(!sq) return;
+  const sqName = coordToSquare(sq);
+  if(!session.inPlay || !engine) return;
+  // two cases: selecting source or trying to play move
+  const piece = engine.get(sqName);
+  if(session.selectedSquare === null){
+    // select only if piece of side to move or allow selecting opponent piece for hints
+    session.selectedSquare = sqName;
+    renderLegalHighlights();
+    return;
+  } else {
+    // attempt move from selectedSquare -> sqName
+    const from = session.selectedSquare;
+    const to = sqName;
+    const promotion = 'q'; // default promotion
+    try{
+      const moveObj = engine.move({ from, to, promotion });
+      if(!moveObj){
+        // invalid by engine
+        setMsg('Illegal move', 1000);
+        session.selectedSquare = null;
+        renderBoard();
+        return;
+      }
+      // check against expected SAN if puzzle has moves
+      const expectedSAN = session.currentPuzzle && session.currentPuzzle.moves[session.stepIndex];
+      if(expectedSAN){
+        // if moveObj.san matches expected, accept and continue
+        if(moveObj.san !== expectedSAN){
+          // wrong move: rollback
+          engine.undo();
+          setMsg(`Wrong move — expected ${expectedSAN}`, 1400);
+          session.selectedSquare = null;
+          // mark attempt
+          markAttempt(false);
+          return;
+        } else {
+          // correct move
+          session.stepIndex++;
+          renderBoard();
+          setMsg('Correct', 900);
+          // if more moves exist, perhaps autoplay opponent, else puzzle solved
+          if(session.stepIndex >= session.currentPuzzle.moves.length){
+            setMsg('Puzzle solved!', 1800);
+            markAttempt(true);
+            session.inPlay = false;
+            session.selectedSquare = null;
+            saveProgress();
+            return;
+          } else {
+            // If it's opponent move next (i.e., engine.turn() != student side), play opponent moves automatically until student to move
+            autoplayOpponentMoves();
+          }
+        }
+      } else {
+        // no expected sequence: free play, just move
+        renderBoard();
+      }
+    }catch(ex){
+      console.error('move error',ex);
+      setMsg('Move error', 1000);
+      session.selectedSquare = null;
+      renderBoard();
+    } finally {
+      session.selectedSquare = null;
+      renderLegalHighlights();
+    }
+  }
+});
+
+/* ---------- Autoplay opponent moves according to solution sequence ---------- */
+let autoplayTimer = null;
+function autoplayOpponentMoves(){
+  stopAutoPlay();
+  const studentColor = 'w'; // assume student plays White; we can derive from puzzle FEN if needed
+  const speed = 500;
+  function step(){
+    if(!session.currentPuzzle) return;
+    if(session.stepIndex >= session.currentPuzzle.moves.length) { stopAutoPlay(); return; }
+    // if engine.turn() equals side that should play next: check expected SAN and play it
+    const expected = session.currentPuzzle.moves[session.stepIndex];
+    const r = engine.move(expected, { sloppy:true });
+    if(!r){
+      console.warn('Autoplay invalid move at', session.stepIndex, expected);
+      stopAutoPlay();
+      setMsg('Solution invalid at step '+(session.stepIndex+1), 2000);
+      return;
+    }
+    session.stepIndex++;
+    renderBoard();
+    if(session.stepIndex < session.currentPuzzle.moves.length && engine.turn() !== studentColor){
+      autoplayTimer = setTimeout(step, speed);
+      return;
+    }
+    // if next is student's move, stop autoplay to let student play
+    stopAutoPlay();
+  }
+  // only start autoplay if it's opponent's turn according to engine
+  if(engine && engine.turn()){
+    // if it's opponent to move (i.e., if engine.turn() != student color) then step
+    if(engine.turn() !== 'w'){ // assuming student white
+      autoplayTimer = setTimeout(step, speed);
+    }
+  }
+}
+
+function stopAutoPlay(){ if(autoplayTimer) { clearTimeout(autoplayTimer); autoplayTimer = null; } }
+
+/* ---------- Mark attempts and progress ---------- */
+function markAttempt(solved){
+  if(!session.currentPuzzle) return;
+  session.stats.attempted++;
+  if(solved) session.stats.solved++;
+  session.currentPuzzle.stats.attempts = (session.currentPuzzle.stats.attempts||0)+1;
+  if(solved) session.currentPuzzle.stats.solved = (session.currentPuzzle.stats.solved||0)+1;
+  session.currentPuzzle.stats.lastAttempt = Date.now();
+  saveDB(); saveProgress(); updateStatsUI();
+  if(!solved){
+    // push into wrong queue for review
+    session.wrongQueue.push(session.currentPuzzle.id);
+    // keep unique
+    session.wrongQueue = Array.from(new Set(session.wrongQueue));
+  }
+}
+
+/* ---------- Render moves list UI ---------- */
+function renderMovesList(){
+  const ml = $('movesList');
+  ml.innerHTML = '';
+  if(!session.currentPuzzle) { ml.innerHTML = '<div class="small muted">No puzzle selected</div>'; return; }
+  if(!session.currentPuzzle.moves || session.currentPuzzle.moves.length===0){
+    ml.innerHTML = '<div class="small muted">No moves / solution provided.</div>'; return;
+  }
+  let html='';
+  for(let i=0;i<session.currentPuzzle.moves.length;i+=2){
+    const no = Math.floor(i/2)+1;
+    html += `<div class="move-row"><strong>${no}.</strong> ${session.currentPuzzle.moves[i]||''} ${session.currentPuzzle.moves[i+1]||''}</div>`;
+  }
+  ml.innerHTML = html;
+}
+
+/* ---------- Controls wiring ---------- */
+$('loadPgnBtn').onclick = function(){
+  const txt = $('pgnInput').value.trim();
+  if(!txt){ setMsg('Paste PGN or FEN first',1300); return; }
+  addPuzzlesFromText(txt);
+};
+
+$('pgnFile').addEventListener('change', function(ev){
+  const file = ev.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const text = e.target.result;
+    addPuzzlesFromText(text);
+  };
+  reader.readAsText(file,'utf-8');
+});
+
+$('clearPgn').onclick = ()=>{ $('pgnInput').value=''; setMsg('Input cleared',900); };
+
+$('addToDbBtn').onclick = function(){
+  const txt = $('pgnInput').value.trim();
+  if(!txt) { setMsg('Paste PGN/FEN first',1300); return; }
+  addPuzzlesFromText(txt);
+  $('pgnInput').value = '';
+};
+
+$('startBtn').onclick = function(){
+  if(db.puzzles.length===0){ setMsg('No puzzles in DB',1200); return; }
+  session.currentIndex = 0;
+  preparePuzzle(db.puzzles[0]);
+};
+
+$('shuffleBtn').onclick = function(){
+  // Fisher-Yates
+  for(let i=db.puzzles.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [db.puzzles[i], db.puzzles[j]] = [db.puzzles[j], db.puzzles[i]];
+  }
+  saveDB(); renderPuzzleList(); setMsg('Shuffled',1000);
+};
+
+$('nextBtn').onclick = function(){
+  if(session.currentIndex < db.puzzles.length - 1){
+    session.currentIndex++;
+    loadPuzzleByIndex(session.currentIndex);
+  } else setMsg('Already at last puzzle', 1200);
+};
+$('prevBtn').onclick = function(){
+  if(session.currentIndex > 0){
+    session.currentIndex--;
+    loadPuzzleByIndex(session.currentIndex);
+  } else setMsg('Already at first puzzle', 1200);
+};
+$('undoBtn').onclick = function(){
+  if(!engine) return;
+  engine.undo();
+  renderBoard();
+};
+$('flipBtn').onclick = function(){
+  boardOrientation = (boardOrientation === 'white') ? 'black' : 'white';
+  // flip board by reversing DOM order of rows and squares
+  flipBoardDom();
+};
+
+function flipBoardDom(){
+  const boardEl = $('board');
+  // reverse rows
+  const rows = Array.from(boardEl.children);
+  rows.reverse();
+  boardEl.innerHTML = '';
+  rows.forEach(row=>{
+    // reverse squares order in row
+    const squares = Array.from(row.children).reverse();
+    row.innerHTML = '';
+    squares.forEach(sq => row.appendChild(sq));
+    boardEl.appendChild(row);
+  });
+}
+
+/* autoplay & hint */
+$('autoPlayBtn').onclick = function(){
+  if(autoplayTimer){ stopAutoPlay(); setMsg('Autoplay stopped',900); return; }
+  setMsg('Autoplaying solution',900);
+  autoplayOpponentMoves();
+};
+$('hintBtn').onclick = function(){
+  if(!session.currentPuzzle) return;
+  const next = session.currentPuzzle.moves[session.stepIndex];
+  if(!next) { setMsg('No hint available',1200); return; }
+  setMsg(`Hint: next move is ${next}`, 3000);
+};
+$('showSolutionBtn').onclick = function(){
+  if(!session.currentPuzzle) return;
+  // Show full solution by applying moves on a copy and rendering sequence
+  const copy = new Chess(session.currentPuzzle.fen || undefined);
+  const sol = session.currentPuzzle.moves.slice();
+  let i=0;
+  const speed = 420;
+  setMsg('Playing solution',900);
+  const t = setInterval(()=>{
+    if(i>=sol.length){ clearInterval(t); renderBoard(); setMsg('Solution complete',1000); return; }
+    try{ copy.move(sol[i], { sloppy:true }); }catch(e){ console.warn('bad sol move', e); clearInterval(t); setMsg('Solution playback error',2000); return; }
+    // update board to copy position for user preview (but do not change working engine)
+    const previewFen = copy.fen();
+    // temporarily render preview by updating squares directly
+    renderPreviewFen(previewFen);
+    i++;
+  }, speed);
+};
+
+function renderPreviewFen(fen){
+  // quick render similar to renderBoard but not change engine
+  const boardEl = $('board');
+  boardEl.querySelectorAll('.square').forEach(sq=> sq.firstElementChild.textContent = '');
+  const rows = fen.split(' ')[0].split('/');
+  for(let r=0;r<8;r++){
+    let fileIndex = 0;
+    const rank = 8 - r;
+    for(const ch of rows[r]){
+      if(/\d/.test(ch)){ fileIndex += Number(ch); continue; }
+      const sq = fileNames[fileIndex] + rank;
+      const el = boardEl.querySelector(`.square[data-square="${sq}"]`);
+      if(el) el.firstElementChild.textContent = UNICODE_PIECES[ch] || '';
+      fileIndex++;
+    }
+  }
+}
+
+/* mark wrong / skip / review wrong */
+$('markWrongBtn').onclick = function(){
+  if(!session.currentPuzzle) return;
+  session.wrongQueue.push(session.currentPuzzle.id);
+  session.wrongQueue = Array.from(new Set(session.wrongQueue));
+  saveProgress();
+  setMsg('Marked for review',1000);
+};
+$('skipBtn').onclick = function(){
+  if(session.currentIndex < db.puzzles.length - 1){ session.currentIndex++; loadPuzzleByIndex(session.currentIndex); } else setMsg('No more puzzles',1000);
+};
+$('reviewWrongBtn').onclick = function(){
+  // load next from wrong queue
+  if(session.wrongQueue.length===0){ setMsg('No wrong puzzles saved',1200); return; }
+  const id = session.wrongQueue.shift();
+  const idx = db.puzzles.findIndex(p=>p.id===id);
+  if(idx>=0) loadPuzzleByIndex(idx);
+  saveProgress();
+};
+
+/* reset progress */
+$('resetProgress').onclick = function(){
+  if(confirm('Reset all progress?')){ session.stats = { attempted:0, solved:0 }; session.wrongQueue = []; saveProgress(); updateStatsUI(); setMsg('Progress reset',1100); }
+};
+
+/* board resizer */
+const boardWrapper = $('board-wrapper');
+const boardSizeRange = $('boardSizeRange');
+const boardSizeLabel = $('boardSizeLabel');
+function setBoardSize(px){
+  const clamped = Math.max(240, Math.min(1200, Number(px)));
+  boardWrapper.style.maxWidth = clamped + 'px';
+  boardSizeRange.value = clamped;
+  boardSizeLabel.textContent = clamped + 'px';
+  // recreate board layout squares to match new size (font scales with board)
+  const root = document.documentElement;
+  // scale piece font size relative to width
+  const pieceSize = Math.max(20, Math.round(clamped * 0.05));
+  root.style.setProperty('--piece-size', pieceSize + 'px');
+  // ensure board DOM present
+  // do not rebuild squares to keep event handlers; just reflow CSS
+}
+boardSizeRange.addEventListener('input', e => setBoardSize(e.target.value));
+$('presetSmall').onclick = ()=> setBoardSize(360);
+$('presetMed').onclick = ()=> setBoardSize(720);
+$('presetLarge').onclick = ()=> setBoardSize(920);
+
+/* ---------- Export / Import DB ---------- */
+$('exportDbBtn').onclick = function(){
+  const data = JSON.stringify(db, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'puzzles_db.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 3000);
+};
+
+$('importDbBtn').onclick = function(){ $('importFile').click(); };
+$('importFile').addEventListener('change', function(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = function(e){
+    try{
+      const j = JSON.parse(e.target.result);
+      if(j && Array.isArray(j.puzzles)){
+        if(confirm('Import will append puzzles to existing DB. Continue?')){
+          db.puzzles = db.puzzles.concat(j.puzzles.map(p => ({ ...p, id: makeId() })));
+          saveDB(); loadDB(); setMsg('Imported puzzles',1200);
+        }
+      } else {
+        alert('Invalid DB JSON');
+      }
+    }catch(ex){ alert('Import failed: ' + ex.message); }
+  };
+  r.readAsText(f,'utf-8');
+});
+
+/* ---------- DB / storage boot ---------- */
+function boot(){
+  // create board DOM squares
+  createBoardElement(720);
+  setBoardSize(720);
+  // wire click handlers via event delegation done earlier
+  loadDB();
+  loadProgress();
+  // initial engine
+  engine = new Chess();
+  renderBoard();
+  updateStatsUI();
+  // house-keeping: keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'ArrowRight'){ $('nextBtn').click(); }
+    if(e.key === 'ArrowLeft'){ $('prevBtn').click(); }
+    if(e.key === ' ') { e.preventDefault(); $('autoPlayBtn').click(); }
+    if(e.key === 'r'){ $('resetProgress').click(); }
+  });
+  setMsg('Trainer ready (offline)', 1200);
+}
+
+/* ---------- Filtering (simple) ---------- */
+$('applyFilter').onclick = function(){
+  const q = $('filterTag').value.trim().toLowerCase();
+  if(!q){ renderPuzzleList(); return; }
+  const filtered = db.puzzles.filter(p => (p.tags||[]).some(t => t.toLowerCase().includes(q)) || (p.title||'').toLowerCase().includes(q));
+  // render filtered list
+  const list = $('puzzleList'); list.innerHTML='';
+  filtered.forEach((p, idx)=>{
+    const el = document.createElement('div');
+    el.className='puzzle-item';
+    el.innerHTML = `<div style="min-width:0">
+      <div style="font-weight:600">${p.title}</div>
+      <div class="small muted" style="margin-top:4px;">moves: ${p.moves.length}</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button data-id="${p.id}" class="loadFilterBtn">Load</button>
+    </div>`;
+    list.appendChild(el);
+  });
+  Array.from(document.getElementsByClassName('loadFilterBtn')).forEach(b=>b.onclick = (ev)=>{
+    const id = ev.currentTarget.dataset.id;
+    const idx = db.puzzles.findIndex(p=>p.id===id);
+    if(idx>=0) loadPuzzleByIndex(idx);
+  });
+};
+
+$('clearFilter').onclick = function(){ $('filterTag').value=''; renderPuzzleList(); };
+
+/* ---------- Initialization ---------- */
+boot();
+
+</script>
+</body>
+</html>
