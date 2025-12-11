@@ -2,21 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Master - 4 Boards List View (Prototype)</title>
+  <title>Master - 4 Boards Grid View</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- chessboard css (same as student.html) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     :root{
       --card-gap: 12px;
       --card-bg: #fff;
       --card-border: #ddd;
       --control-height: 44px;
-      --board-default: 570px;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
       color: #222;
     }
-    body{ margin: 16px; background:#f5f7fb; }
-    h1{ margin-bottom: 12px;}
-    .container{ display:flex; flex-direction:column; gap:16px; max-width:1200px; margin:auto;}
+    html,body{ height:100%; margin:0; background:#f5f7fb; }
+    .container{ margin:16px auto; max-width:1200px; padding-bottom:28px; }
+    h1{ margin:0 0 12px 0; padding:0; font-size:20px; text-align:left; color:#0b1320; }
+    .boards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--card-gap); }
     .board-card{
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -26,408 +28,477 @@
       flex-direction:column;
       gap:10px;
       box-shadow: 0 1px 3px rgba(20,30,40,0.05);
+      min-height: 360px;
     }
+    .student-label{ font-weight:700; text-align:center; }
     .top-strip{
       display:flex;
       align-items:center;
+      justify-content:center;
       gap:8px;
       height: var(--control-height);
     }
-    .top-left-label{ font-weight:600; flex:1; }
-    .controls { display:flex; gap:8px; align-items:center; }
+    .controls { display:flex; gap:8px; align-items:center; justify-content:center; }
     .controls select, .controls button, .controls input[type=range]{
       height:32px; padding:4px 8px; border-radius:6px; border:1px solid #ccc; background: #fff;
+      font-family:inherit;
     }
-    .boards-list{ display:flex; flex-direction:column; gap:var(--card-gap); }
-    .board-row { display:flex; gap:12px; align-items:flex-start; }
-    .board-canvas-wrap { position:relative; user-select:none; }
-    canvas.board { background: linear-gradient(45deg,#f0d9b5,#b58863); display:block; border-radius:6px; }
-    canvas.overlay { position:absolute; left:0; top:0; pointer-events:none; }
-    .stats { font-size:13px; color:#444; display:flex; gap:12px; }
+    .board-inner{ width:100%; display:flex; justify-content:center; }
+    .board-holder { box-sizing:border-box; border-radius:6px; overflow:hidden; background:#fff; display:flex; align-items:center; justify-content:center; }
+    .stats { font-size:13px; color:#444; display:flex; gap:12px; align-items:center; justify-content:space-between; }
     .small { font-size:12px; color:#666; }
-    button.icon{ padding:6px 10px; cursor:pointer; }
+    .footer-actions{ display:flex; justify-content:flex-end; margin-top:18px; gap:8px; }
+    .btn-logout{ background:#ef4444; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    .online-badge{ font-size:11px; padding:4px 8px; border-radius:999px; background:#eef6ff; color:#0b6; border:1px solid #dff3ff; margin-left:8px;}
+    @media(max-width:900px){
+      .boards-grid{ grid-template-columns: 1fr; padding:0 12px; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Master Dashboard — 4 Boards (List view)</h1>
+    <h1>Master Dashboard — 4 Boards (Grid)</h1>
 
-    <div class="boards-list" id="boardsList">
-      <!-- Board cards will be injected here -->
+    <div class="boards-grid" id="boardsGrid" aria-live="polite"></div>
+
+    <div class="footer-actions">
+      <button id="globalLogout" class="btn-logout">Logout</button>
     </div>
   </div>
 
+  <!-- libs: jQuery first (chessboard.js depends on it), then chessboard -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+
+  <!-- Robust chess.js loader: dynamic import then fallback script injection (same approach as student.html) -->
   <script>
-  /*********************************************************************
-   * Prototype: 4 boards list view + arrow/circle interactions per board
-   * - Right-click drag: draw arrow (red)
-   * - Right single-click: place red circle on square
-   * - Left-click: clear drawings
-   * - Flip button flips board visualization
-   * - Size slider controls board px width (default 570)
-   *
-   * Integration points (implement these to sync with Firebase / chess.js):
-   * - onDrawingsChange(boardId, drawings)   <-- call when master or student draws
-   * - onReceiveDrawings(boardId, drawings)  <-- call from firebase listener to update UI
-   * - onMakeMove(boardId, move)             <-- call when move is made (if implementing click-to-move)
-   *********************************************************************/
+  (function(){
+    const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
+    async function loadChessEngine(){
+      if(window._chessEngineLoaded) return;
+      window._chessEngineLoaded = true;
+      // Try dynamic import first
+      try {
+        const mod = await import(CHESS_URL + '?t=' + Date.now());
+        window.Chess = mod.default || mod.Chess || mod;
+        console.log('chess.js loaded via dynamic import');
+        return;
+      }catch(e){
+        console.warn('dynamic import of chess.js failed, trying UMD fallback', e && e.message);
+      }
+      // Fallback: inject script tag
+      await new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = CHESS_URL + '?t=' + Date.now();
+        s.async = true;
+        s.onload = ()=> {
+          console.log('chess.js attempted load via script tag; window.Chess=', !!window.Chess);
+          setTimeout(resolve, 50);
+        };
+        s.onerror = ()=> { console.warn('chess.js script load failed'); setTimeout(resolve, 50); };
+        document.head.appendChild(s);
+        // also timeout in 2.5s to continue even if not loaded
+        setTimeout(resolve, 2500);
+      });
+      if(typeof window.Chess === 'undefined'){
+        console.warn('Chess engine not available after loader; validation may not run.');
+      } else {
+        console.log('chess.js available', !!window.Chess);
+      }
+    }
+    // expose helper to other scripts
+    window.loadChessEngine = loadChessEngine;
+  })();
+  </script>
 
-  // Example student list (IDs and display names). Replace with real data.
-  const STUDENTS = [
-    { id: 'student1', name: 'Student 1' },
-    { id: 'student2', name: 'Student 2' },
-    { id: 'student3', name: 'Student 3' },
-    { id: 'student4', name: 'Student 4' },
-  ];
+  <!-- Firebase compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
-  // State container for drawings per board (arrows and circles)
-  const boardsState = {};
+  <script>
+  (async function(){
+    // Wait for chess engine loader to be ready in background, but don't block UI creation
+    window.loadChessEngine();
 
-  // Helpers for board drawing
-  function createBoardCard(student) {
-    const card = document.createElement('div');
-    card.className = 'board-card';
-    card.dataset.studentId = student.id;
-
-    // Top strip
-    const top = document.createElement('div');
-    top.className = 'top-strip';
-    top.innerHTML = `
-      <div class="top-left-label">${student.name}</div>
-      <div class="controls">
-        <label class="small">Size</label>
-        <input type="range" min="200" max="800" value="${getDefaultSize()}" class="size-slider">
-        <button class="icon flip-btn" title="Flip board">Flip</button>
-        <select class="player-select">
-          <option value="${student.id}">View & Control ${student.name}</option>
-          <option value="student1">Student 1</option>
-          <option value="student2">Student 2</option>
-          <option value="student3">Student 3</option>
-          <option value="student4">Student 4</option>
-        </select>
-      </div>
-    `;
-    card.appendChild(top);
-
-    // Board area (canvas + overlay)
-    const wrap = document.createElement('div');
-    wrap.className = 'board-canvas-wrap';
-    wrap.style.width = getDefaultSize() + 'px';
-
-    const boardCanvas = document.createElement('canvas');
-    boardCanvas.className = 'board';
-    boardCanvas.width = getDefaultSize();
-    boardCanvas.height = getDefaultSize();
-    boardCanvas.style.width = getDefaultSize() + 'px';
-    boardCanvas.style.height = getDefaultSize() + 'px';
-
-    const overlay = document.createElement('canvas');
-    overlay.className = 'overlay';
-    overlay.width = boardCanvas.width;
-    overlay.height = boardCanvas.height;
-    overlay.style.width = boardCanvas.style.width;
-    overlay.style.height = boardCanvas.style.height;
-
-    wrap.appendChild(boardCanvas);
-    wrap.appendChild(overlay);
-    card.appendChild(wrap);
-
-    // Bottom quick stats
-    const stats = document.createElement('div');
-    stats.className = 'stats';
-    stats.innerHTML = `<div class="small">Solved: 0</div><div class="small">Wrong: 0</div><div class="small">Attempted: 0</div>`;
-    card.appendChild(stats);
-
-    // initialize state
-    boardsState[student.id] = {
-      size: getDefaultSize(),
-      flip: false,
-      arrows: [], // {from: [r,c], to: [r,c]}
-      circles: [], // {sq: [r,c]}
-      canvasRefs: { boardCanvas, overlay, wrap, card },
+    // FIREBASE config (same as student.html)
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
+    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){ /* ignore if already initialized */ }
+    const db = firebase.database();
+    const onlineRef = db.ref('online');
 
-    // Attach interaction handlers
-    attachBoardHandlers(student.id);
+    // Master identity
+    const MASTER_ID = sessionStorage.getItem('iq4u_clientId') || ('m_'+Math.random().toString(36).slice(2,10));
+    sessionStorage.setItem('iq4u_clientId', MASTER_ID);
+    const MASTER_NAME = (localStorage.getItem('username') || localStorage.getItem('email') || 'master').toString();
 
-    return card;
-  }
+    // students list (IDs must match how student pages register themselves)
+    const STUDENTS = [
+      { id: 'student1', name: 'Student 1' },
+      { id: 'student2', name: 'Student 2' },
+      { id: 'student3', name: 'Student 3' },
+      { id: 'student4', name: 'Student 4' },
+    ];
 
-  function getDefaultSize(){ return 570; }
+    // piece theme(s)
+    const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
+    const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-  // Add all four boards (list view vertical)
-  const boardsList = document.getElementById('boardsList');
-  STUDENTS.forEach(s => {
-    const card = createBoardCard(s);
-    boardsList.appendChild(card);
-    renderBoard(s.id);
-    renderOverlay(s.id);
-  });
+    // runtime maps
+    const onlineMap = {}; // clientId => { email, ts }
+    const boardsState = {}; // studentId => { game, boardObj, watchedClientId, listeners, domRefs }
 
-  /***********************
-   * Canvas renderers
-   ***********************/
-  function renderBoard(boardId){
-    const st = boardsState[boardId];
-    const canvas = st.canvasRefs.boardCanvas;
-    const ctx = canvas.getContext('2d');
-    const size = st.size;
-    canvas.width = size;
-    canvas.height = size;
-    canvas.style.width = size + 'px';
-    canvas.style.height = size + 'px';
+    // Build UI cards
+    const grid = document.getElementById('boardsGrid');
+    for(const s of STUDENTS){
+      const card = createCardDOM(s);
+      grid.appendChild(card);
+      // init board state structures
+      boardsState[s.id] = { game: null, boardObj: null, watchedClientId: null, listeners: {}, domRefs: {
+        card, labelEl: card.querySelector('.student-label'), selectEl: card.querySelector('.player-select'), holderEl: card.querySelector('.board-holder'), boardDivId: 'board_' + s.id
+      } };
+      // create board DOM placeholder element
+      const boardDiv = document.createElement('div');
+      boardDiv.id = 'board_' + s.id;
+      boardDiv.style.width = '100%';
+      boardDiv.style.height = '100%';
+      boardsState[s.id].domRefs.holderEl.appendChild(boardDiv);
+    }
 
-    // draw 8x8 squares (simple)
-    const sq = size / 8;
-    for(let r=0;r<8;r++){
-      for(let c=0;c<8;c++){
-        const isLight = (r + c) % 2 === 0;
-        ctx.fillStyle = isLight ? '#f0d9b5' : '#b58863';
-        ctx.fillRect(c*sq, r*sq, sq, sq);
+    // Register presence for master so students can see master if needed
+    try{
+      const node = onlineRef.child(MASTER_ID);
+      node.set({ email: MASTER_NAME, role:'master', ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{});
+      node.onDisconnect().remove();
+      setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
+    }catch(e){ console.warn('cannot write presence', e); }
+
+    // Listen for online users
+    onlineRef.on('value', snap => {
+      const val = snap.val() || {};
+      // rebuild onlineMap
+      for(const k in onlineMap) delete onlineMap[k];
+      for(const id in val){
+        if(!val.hasOwnProperty(id)) continue;
+        onlineMap[id] = { email: (val[id].email||id).toString(), ts: val[id].ts || Date.now(), role: val[id].role || null };
+      }
+      populateAllSelects();
+      // update badges for watched boards
+      Object.keys(boardsState).forEach(sid => updateBadge(sid));
+    });
+
+    // create and initialize Chessboard.js mini-boards AFTER jQuery & chessboard loaded.
+    // Also wait shortly for chess engine (if available)
+    await new Promise(r => setTimeout(r, 80));
+    await ensureBoardsInitialized();
+
+    // helper: ensure Chessboard/Chess are ready and init each mini-board
+    async function ensureBoardsInitialized(){
+      // give chess engine loader a bit more time (non-blocking)
+      await window.loadChessEngine().catch(()=>{});
+      // init each board
+      for(const s of STUDENTS){
+        try{ initMiniBoard(s.id); }catch(e){ console.warn('initMiniBoard error', s.id, e); }
       }
     }
 
-    // placeholder pieces (optional) - we'll not draw real pieces in prototype
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    ctx.font = `${Math.round(sq*0.35)}px sans-serif`;
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText('board', size/2, size/2);
-  }
+    /********** UI / DOM helpers **********/
+    function createCardDOM(student){
+      const card = document.createElement('div');
+      card.className = 'board-card';
+      card.dataset.studentId = student.id;
 
-  function renderOverlay(boardId){
-    const st = boardsState[boardId];
-    const overlay = st.canvasRefs.overlay;
-    overlay.width = st.size;
-    overlay.height = st.size;
-    overlay.style.width = st.size + 'px';
-    overlay.style.height = st.size + 'px';
-    const ctx = overlay.getContext('2d');
-    ctx.clearRect(0,0,overlay.width, overlay.height);
+      const label = document.createElement('div');
+      label.className = 'student-label';
+      label.innerHTML = `${student.name} <span class="online-badge" style="display:none">offline</span>`;
+      card.appendChild(label);
 
-    // draw circles
-    const sq = st.size / 8;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'red';
-    st.circles.forEach(circ => {
-      const [r,c] = circ.sq;
-      const cx = c*sq + sq/2;
-      const cy = r*sq + sq/2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(8, sq*0.18), 0, Math.PI*2);
-      ctx.stroke();
-    });
+      const top = document.createElement('div');
+      top.className = 'top-strip';
+      top.innerHTML = `
+        <div class="controls" style="width:100%;max-width:620px;">
+          <span class="label-small">Size</span>
+          <input type="range" min="200" max="800" value="360" class="size-slider" data-sid="${student.id}">
+          <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
+          <select class="player-select" data-sid="${student.id}">
+            <option value="">View students</option>
+          </select>
+        </div>
+      `;
+      card.appendChild(top);
 
-    // draw arrows
-    ctx.strokeStyle = 'red';
-    ctx.fillStyle = 'red';
-    ctx.lineWidth = Math.max(3, st.size * 0.006);
-    st.arrows.forEach(a => {
-      const [r1,c1] = a.from;
-      const [r2,c2] = a.to;
-      const x1 = c1*sq + sq/2;
-      const y1 = r1*sq + sq/2;
-      const x2 = c2*sq + sq/2;
-      const y2 = r2*sq + sq/2;
-      drawArrow(ctx, x1,y1,x2,y2);
-    });
-  }
+      const boardInnerWrap = document.createElement('div');
+      boardInnerWrap.className = 'board-inner';
+      const boardHolder = document.createElement('div');
+      boardHolder.className = 'board-holder';
+      boardHolder.style.width = '360px';
+      boardHolder.style.height = '360px';
+      boardInnerWrap.appendChild(boardHolder);
+      card.appendChild(boardInnerWrap);
 
-  // draw arrow with simple triangle head
-  function drawArrow(ctx, x1,y1,x2,y2){
-    ctx.beginPath();
-    ctx.moveTo(x1,y1);
-    ctx.lineTo(x2,y2);
-    ctx.stroke();
+      const stats = document.createElement('div');
+      stats.className = 'stats';
+      stats.innerHTML = `<div class="small">Solved: 0</div><div class="small">Wrong: 0</div><div class="small">Attempted: 0</div>`;
+      card.appendChild(stats);
 
-    // head triangle
-    const angle = Math.atan2(y2-y1, x2-x1);
-    const headLen = 12;
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - headLen*Math.cos(angle - Math.PI/6), y2 - headLen*Math.sin(angle - Math.PI/6));
-    ctx.lineTo(x2 - headLen*Math.cos(angle + Math.PI/6), y2 - headLen*Math.sin(angle + Math.PI/6));
-    ctx.closePath();
-    ctx.fill();
-  }
+      // wire controls
+      top.querySelector('.size-slider').addEventListener('input', e=>{
+        const sid = e.target.dataset.sid;
+        const val = Number(e.target.value);
+        setMiniSize(sid, val);
+      });
+      top.querySelector('.flip-btn').addEventListener('click', e=>{
+        const sid = e.currentTarget.dataset.sid;
+        const st = boardsState[sid];
+        if(st && st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
+      });
+      top.querySelector('.player-select').addEventListener('change', e=>{
+        const sid = e.target.getAttribute('data-sid');
+        const cid = e.target.value || null;
+        if(!cid) stopWatching(sid);
+        else startWatching(sid, cid);
+      });
 
-  /***********************
-   * Interaction handlers
-   ***********************/
-  function attachBoardHandlers(boardId){
-    const st = boardsState[boardId];
-    const { boardCanvas, overlay, wrap, card } = st.canvasRefs;
+      return card;
+    }
 
-    // Controls inside card
-    const sizeSlider = card.querySelector('.size-slider');
-    const flipBtn = card.querySelector('.flip-btn');
-    const playerSelect = card.querySelector('.player-select');
+    function setMiniSize(studentId, px){
+      const st = boardsState[studentId];
+      const holder = st && st.domRefs && st.domRefs.holderEl;
+      if(holder){ holder.style.width = px + 'px'; holder.style.height = px + 'px'; }
+      // attempt to resize chessboard
+      try{ if(st.boardObj && typeof st.boardObj.resize === 'function') st.boardObj.resize(); else if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game ? st.game.fen() : 'start'); }catch(e){ console.warn('resize failed', e); }
+    }
 
-    sizeSlider.addEventListener('input', e => {
-      const sz = Number(e.target.value);
-      st.size = sz;
-      wrap.style.width = sz + 'px';
-      renderBoard(boardId);
-      renderOverlay(boardId);
-      // persist this as master-only view preference if needed (call Firebase)
-      // e.g., onViewSettingChange(boardId, { size: sz })
-    });
+    // Clean username label to hide appended "(c_xxx)" pattern if present
+    function cleanLabel(email){
+      if(!email) return '';
+      // remove trailing " (c_xxx)" patterns
+      return email.replace(/\s*\(c_[^)]+\)\s*$/,'').trim();
+    }
 
-    flipBtn.addEventListener('click', () => {
-      st.flip = !st.flip;
-      // In this simple render, flip would mirror the overlay drawing coordinates.
-      // We'll flip by setting CSS transform on the board canvas wrapper
-      if(st.flip){
-        wrap.style.transform = 'rotate(180deg)';
-      } else {
-        wrap.style.transform = '';
-      }
-      renderOverlay(boardId);
-    });
+    // populate selects with online clients (excluding master)
+    function populateAllSelects(){
+      const selects = document.querySelectorAll('.player-select');
+      selects.forEach(sel => {
+        const sid = sel.getAttribute('data-sid');
+        const prev = sel.value;
+        sel.innerHTML = '';
+        const titleOpt = document.createElement('option');
+        titleOpt.value = '';
+        titleOpt.textContent = 'View students';
+        sel.appendChild(titleOpt);
 
-    playerSelect.addEventListener('change', (e) => {
-      // selected student to control/view - implementation dependent
-      console.log('selected player for control:', e.target.value);
-      // Optionally open control modal for that student
-    });
-
-    // prevent default context menu for the board area
-    boardCanvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
-
-    // Right mouse handling: differentiate click vs drag
-    let rightDown = false;
-    let rightDragStarted = false;
-    let dragFrom = null; // square from
-    let lastMousePos = null;
-
-    overlay.addEventListener('mousedown', (ev) => {
-      if (ev.button === 2) { // right button down
-        rightDown = true;
-        rightDragStarted = false;
-        lastMousePos = getMousePosOnCanvas(ev, overlay, st.flip);
-        dragFrom = coordsToSquare(lastMousePos.x, lastMousePos.y, st.size);
-        // stop propagation to avoid selecting page elements
-        ev.preventDefault();
-      } else if (ev.button === 0) { // left click -> clear drawings
-        st.arrows = [];
-        st.circles = [];
-        renderOverlay(boardId);
-        // Send update to remote (Firebase)
-        onDrawingsChange(boardId, { arrows: st.arrows, circles: st.circles });
-      }
-    });
-
-    overlay.addEventListener('mousemove', (ev) => {
-      if(!rightDown) return;
-      const pos = getMousePosOnCanvas(ev, overlay, st.flip);
-      const sqPos = coordsToSquare(pos.x, pos.y, st.size);
-      // if moved sufficiently, treat as drag/draw
-      if(!rightDragStarted){
-        const dx = pos.x - (lastMousePos ? lastMousePos.x : pos.x);
-        const dy = pos.y - (lastMousePos ? lastMousePos.y : pos.y);
-        if(Math.hypot(dx,dy) > 6){
-          rightDragStarted = true;
+        const ids = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
+        if(ids.length === 0){
+          const none = document.createElement('option');
+          none.value = '';
+          none.disabled = true;
+          none.textContent = 'No online';
+          sel.appendChild(none);
+          sel.value = '';
+          return;
         }
-      }
-      lastMousePos = pos;
-    });
-
-    overlay.addEventListener('mouseup', (ev) => {
-      if (ev.button !== 2) return;
-      rightDown = false;
-      const pos = getMousePosOnCanvas(ev, overlay, st.flip);
-      const squareTo = coordsToSquare(pos.x, pos.y, st.size);
-      if(rightDragStarted){
-        // add an arrow from dragFrom -> squareTo
-        st.arrows.push({ from: dragFrom, to: squareTo });
-        renderOverlay(boardId);
-        onDrawingsChange(boardId, { arrows: st.arrows, circles: st.circles });
-      } else {
-        // it's a single right-click (no drag) => toggle circle on that square
-        // remove if exists or add
-        const existingIdx = st.circles.findIndex(c=>c.sq[0]===squareTo[0] && c.sq[1]===squareTo[1]);
-        if(existingIdx >= 0) st.circles.splice(existingIdx,1);
-        else st.circles.push({ sq: squareTo });
-        renderOverlay(boardId);
-        onDrawingsChange(boardId, { arrows: st.arrows, circles: st.circles });
-      }
-      rightDragStarted = false;
-      dragFrom = null;
-      ev.preventDefault();
-    });
-
-    // If the user releases the right button outside the canvas, catch it globally to avoid stuck state.
-    window.addEventListener('mouseup', (ev) => {
-      if(ev.button === 2 && rightDown){
-        rightDown = false;
-        rightDragStarted = false;
-        dragFrom = null;
-      }
-    });
-
-    // Prevent context menu on overlay too
-    overlay.addEventListener('contextmenu', (ev)=> ev.preventDefault());
-  }
-
-  /***********************
-   * Utilities
-   ***********************/
-  function getMousePosOnCanvas(ev, canvas, flipped){
-    const rect = canvas.getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    const y = ev.clientY - rect.top;
-    // convert to canvas coordinate (accounting for CSS scaled sizes)
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const cx = x * scaleX;
-    const cy = y * scaleY;
-    if(flipped){
-      return { x: canvas.width - cx, y: canvas.height - cy };
+        ids.forEach(id => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = cleanLabel(onlineMap[id].email || id);
+          sel.appendChild(opt);
+        });
+        // restore previous selection if still present
+        if(prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+        else sel.value = '';
+      });
     }
-    return { x: cx, y: cy };
-  }
 
-  function coordsToSquare(x, y, size){
-    const sq = size / 8;
-    let c = Math.floor(x / sq);
-    let r = Math.floor(y / sq);
-    // clamp
-    c = Math.max(0, Math.min(7, c));
-    r = Math.max(0, Math.min(7, r));
-    return [r, c];
-  }
+    function updateBadge(studentId){
+      const st = boardsState[studentId];
+      if(!st || !st.domRefs) return;
+      const labelEl = st.domRefs.labelEl;
+      const badge = labelEl.querySelector('.online-badge');
+      if(!st.watchedClientId){ badge.style.display = 'none'; return; }
+      const online = !!onlineMap[st.watchedClientId];
+      badge.style.display = 'inline-block';
+      badge.textContent = online ? 'online' : 'offline';
+    }
 
-  /***********************
-   * Sync hooks (stubs)
-   ***********************/
-  // Called whenever the local master (or local student) changes drawings for a board.
-  // Implement this to push drawings to Firebase (or other realtime service).
-  function onDrawingsChange(boardId, drawings){
-    console.log('[onDrawingsChange] board:', boardId, drawings);
-    // Example: firebase.database().ref(`/games/${boardId}/drawings`).set(drawings);
-  }
+    /********** Board init / watch / sync **********/
+    function initMiniBoard(studentId){
+      const st = boardsState[studentId];
+      const boardDivId = 'board_' + studentId;
+      const el = document.getElementById(boardDivId);
+      if(!el) { console.error('board element missing for', studentId); return; }
 
-  // Called when external updates arrive (from Firebase listener).
-  // Use this to update local state and re-render (called by your firebase listener code).
-  function onReceiveDrawings(boardId, drawings){
-    const st = boardsState[boardId];
-    if(!st) return;
-    st.arrows = drawings.arrows || [];
-    st.circles = drawings.circles || [];
-    renderOverlay(boardId);
-  }
+      // create chess engine if available
+      try{
+        st.game = (typeof Chess !== 'undefined') ? new Chess() : null;
+      }catch(e){
+        st.game = null;
+        console.warn('Chess engine not available; moves validation may not run.', e);
+      }
 
-  // Called when a move is made by master in the control UI (not implemented here).
-  // Implement integration with chess.js or your move pipeline.
-  function onMakeMove(boardId, move){
-    console.log('[onMakeMove] board:', boardId, 'move:', move);
-    // Example: validate with chess.js then push to DB
-    // firebase.database().ref(`/games/${boardId}/moves`).push(move);
-  }
+      // instantiate chessboard.js
+      try{
+        st.boardObj = Chessboard(boardDivId, {
+          draggable: true,
+          position: st.game && typeof st.game.fen === 'function' ? st.game.fen() : 'start',
+          pieceTheme: CUSTOM_PIECE_THEME,
+          onDrop: function(source, target){
+            return onMiniDrop(studentId, source, target);
+          }
+        });
+      }catch(e){
+        console.error('Chessboard create failed for', studentId, e);
+      }
 
-  // Example: How you would wire an incoming firebase update to onReceiveDrawings
-  // firebase.database().ref(`/games/${boardId}/drawings`).on('value', snap => onReceiveDrawings(boardId, snap.val()));
+      // deferred ensure position (fix empty pieces in some environments)
+      setTimeout(()=>{
+        try{ if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game ? st.game.fen() : 'start'); }catch(e){ console.warn('deferred position failed', e); }
+      }, 120);
+    }
 
+    // start watching a student's clientId (receive moves & drawings)
+    function startWatching(studentId, clientId){
+      const st = boardsState[studentId];
+      if(!st) return;
+      // remove previous watchers
+      stopWatching(studentId);
+      st.watchedClientId = clientId;
+      updateBadge(studentId);
+
+      // drawings listener (optional)
+      const drawingsRef = db.ref('games/' + clientId + '/drawings');
+      const drawingsCb = snap => {
+        const d = snap.val();
+        if(!d) return;
+        // TODO: implement applyDrawingsToOverlay(st, d) to render arrows/circles overlay if desired
+        // console.log('drawings for', studentId, clientId, d);
+      };
+      drawingsRef.on('value', drawingsCb);
+      st.listeners.drawingsRef = { ref: drawingsRef, cb: drawingsCb };
+
+      // moves listener
+      const movesRef = db.ref('games/' + clientId + '/moves');
+      const movesCb = snap => {
+        const m = snap.val();
+        if(!m) return;
+        if(m.by && m.by === MASTER_ID) return; // ignore master's own emitted moves
+        try{
+          if(m.payload && m.payload.move){
+            const mv = m.payload.move;
+            if(st.game && typeof st.game.move === 'function'){
+              const applied = st.game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined });
+              if(applied === null){
+                if(m.payload.fen && typeof st.game.load === 'function') st.game.load(m.payload.fen);
+              }
+            } else if(m.payload.fen && st.game && typeof st.game.load === 'function'){
+              st.game.load(m.payload.fen);
+            }
+            if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game ? st.game.fen() : (m.payload && m.payload.fen) || 'start');
+          } else if(m.payload && m.payload.fen){
+            if(st.game && typeof st.game.load === 'function'){ st.game.load(m.payload.fen); if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); }
+          } else if(m.fen){
+            if(st.game && typeof st.game.load === 'function'){ st.game.load(m.fen); if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); }
+          }
+        }catch(e){ console.warn('apply incoming move failed', e); }
+      };
+      movesRef.on('child_added', movesCb);
+      st.listeners.movesRef = { ref: movesRef, cb: movesCb };
+
+      // fetch recent moves to set initial position if present
+      movesRef.limitToLast(30).once('value').then(snapshot=>{
+        const v = snapshot.val() || {};
+        const keys = Object.keys(v);
+        keys.sort();
+        for(const k of keys.reverse()){
+          const rec = v[k];
+          if(rec && rec.payload && rec.payload.fen && st.game && typeof st.game.load === 'function'){
+            try{ st.game.load(rec.payload.fen); if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); break; }catch(e){}
+          } else if(rec && rec.fen && st.game && typeof st.game.load === 'function'){
+            try{ st.game.load(rec.fen); if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); break; }catch(e){}
+          }
+        }
+      }).catch(()=>{});
+    }
+
+    function stopWatching(studentId){
+      const st = boardsState[studentId];
+      if(!st) return;
+      if(st.listeners.drawingsRef){ try{ st.listeners.drawingsRef.ref.off('value', st.listeners.drawingsRef.cb); }catch(e){} st.listeners.drawingsRef = null; }
+      if(st.listeners.movesRef){ try{ st.listeners.movesRef.ref.off('child_added', st.listeners.movesRef.cb); }catch(e){} st.listeners.movesRef = null; }
+      st.watchedClientId = null;
+      updateBadge(studentId);
+    }
+
+    // when master drops a piece on a mini-board, emit move to that student's moves path
+    function onMiniDrop(studentId, source, target){
+      const st = boardsState[studentId];
+      if(!st) return 'snapback';
+      if(!st.watchedClientId){
+        alert('Select which online student to View before controlling this board.');
+        return 'snapback';
+      }
+      if(!st.game){
+        // if engine not available, still allow sending a raw move (no validation)
+        try{
+          const node = db.ref('games/' + st.watchedClientId + '/moves').push();
+          const payload = { payload: { fen: null, move: { from: source, to: target, promotion: null } }, by: MASTER_ID, ts: firebase.database.ServerValue.TIMESTAMP };
+          node.set(payload).catch(err => console.error('emit move failed', err));
+          // optimistic UI: update boardObj via its position API if possible (we don't have fen)
+          if(st.boardObj && typeof st.boardObj.move === 'function'){
+            try{ st.boardObj.move(source + '-' + target); }catch(e){}
+          }
+          return;
+        }catch(e){ return 'snapback'; }
+      }
+
+      // We have an engine — attempt to play move
+      try{
+        const legal = st.game.moves({ verbose:true }) || [];
+        const candidate = legal.find(m => m.from === source && m.to === target && m.promotion);
+        const mvObj = { from: source, to: target };
+        if(candidate) mvObj.promotion = 'q';
+        const applied = st.game.move(mvObj);
+        if(applied === null) return 'snapback';
+        // update board UI
+        if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen());
+        // emit move to student's games path
+        const node = db.ref('games/' + st.watchedClientId + '/moves').push();
+        const payload = { payload: { fen: st.game.fen(), move: { from: mvObj.from, to: mvObj.to, promotion: mvObj.promotion || null } }, by: MASTER_ID, ts: firebase.database.ServerValue.TIMESTAMP };
+        node.set(payload).catch(err => console.error('emit move failed', err));
+        return;
+      }catch(e){
+        console.warn('mini drop handling failed', e);
+        return 'snapback';
+      }
+    }
+
+    // Logout: clear identity and presence
+    document.getElementById('globalLogout').addEventListener('click', ()=>{
+      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); sessionStorage.removeItem('iq4u_clientId'); }catch(e){}
+      try{ onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
+      window.location.href = 'index.html';
+    });
+
+    // initial populate selects (may be empty until presence loaded)
+    populateAllSelects();
+
+    // cleanup on unload
+    window.addEventListener('beforeunload', ()=> {
+      try{ onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
+      STUDENTS.forEach(s => stopWatching(s.id));
+    });
+
+  })(); // end outer IIFE
   </script>
 </body>
 </html>
+
+
