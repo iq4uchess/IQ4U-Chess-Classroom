@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Master — 4 Boards (List view)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Master Dashboard - IQ 4U Academy</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     :root{ --card-gap:12px; --card-bg:#fff; --card-border:#ddd; --control-height:44px; font-family:Arial,Helvetica,sans-serif; color:#222;}
@@ -12,22 +12,29 @@
     .container{ margin:16px auto; max-width:1200px; padding-bottom:28px; }
     h1{ margin:0 0 12px 0; font-size:20px; }
     .boards-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--card-gap); }
-    .board-card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px; min-height:140px; box-shadow:0 1px 3px rgba(20,30,40,0.05); }
-    .top-strip{ display:flex; align-items:center; justify-content:center; gap:8px; height:var(--control-height); }
+    .board-card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px; min-height:260px; box-shadow:0 1px 3px rgba(20,30,40,0.05); }
+    .top-strip{ display:flex; align-items:center; justify-content:flex-start; gap:8px; height:var(--control-height); }
     .student-label{ font-weight:600; text-align:center; display:flex; align-items:center; gap:8px; justify-content:center; }
-    .controls{ display:flex; gap:8px; align-items:center; }
+    .controls{ display:flex; gap:8px; align-items:center; width:100%; }
     .controls select, .controls button, .controls input[type=range]{ height:32px; padding:4px 8px; border-radius:6px; border:1px solid #ccc; background:#fff; }
     .board-inner{ width:100%; display:flex; justify-content:center; }
     .board-holder{ box-sizing:border-box; border-radius:6px; overflow:hidden; background:#fff; }
-    .debug{ font-family:monospace; font-size:12px; background:#fbfcfd; border:1px solid #eef2f6; padding:6px; border-radius:6px; max-height:80px; overflow:auto; }
+    .debug{ font-family:monospace; font-size:12px; background:#fbfcfd; border:1px solid #eef2f6; padding:6px; border-radius:6px; max-height:80px; overflow:auto; display:none; } /* kept hidden */
+    .notif-area{ display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; width:100%; }
+    .notifications { flex: 1 1 260px; min-width:160px; max-width:460px; background:#fff; border:1px solid #eef2f6; padding:8px; border-radius:6px; font-size:13px; color:#333; box-sizing:border-box; max-height:88px; overflow:auto; }
+    .notation { flex:1 1 200px; min-width:160px; max-width:999px; background:#fbfdff; border:1px solid #eef2ff; padding:8px; border-radius:6px; font-family:monospace; font-size:13px; white-space:normal; display:flex; flex-wrap:wrap; gap:8px; align-items:center; box-sizing:border-box; min-height:44px; }
+    .notation .move { padding:4px 8px; border-radius:6px; background:transparent; }
     .footer-actions{ display:flex; justify-content:flex-end; margin-top:18px; gap:8px; }
     .btn-logout{ background:#ef4444; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
-    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } }
+    .multiplayer-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; }
+    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } }
+    .status-small { font-size:12px; color:#666; min-width:150px; }
+    .notif-item { font-size:12px; padding:4px 6px; border-radius:4px; background:#f7f9fc; margin-bottom:6px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Master Dashboard — Spectate Mode (Read-Only)</h1>
+    <h1>Master Dashboard - IQ 4U Academy</h1>
 
     <div class="boards-grid" id="boardsGrid"></div>
 
@@ -46,7 +53,6 @@
 
   <script>
   (async function(){
-    // ---------- CONFIG ----------
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
@@ -54,12 +60,12 @@
       projectId: "iq4u-chess-classroom",
       storageBucket: "iq4uchess-classroom.firebasedestorage.app",
       messagingSenderId: "833620718306",
-      appId: "1:833620718306:web:b599bb6936fe0da4bb"
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
     try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
     const db = firebase.database();
     const onlineRef = db.ref('online');
-    const gamesRef = db.ref('games'); // we'll use for queries
+    const gamesRef = db.ref('games');
 
     const MASTER_ID = sessionStorage.getItem('iq4u_clientId') || ('m_'+Math.random().toString(36).slice(2,10));
     sessionStorage.setItem('iq4u_clientId', MASTER_ID);
@@ -74,11 +80,16 @@
       { id: 'student3', name: 'Student 3' },
       { id: 'student4', name: 'Student 4' }
     ];
+    const STUDENT_IDS = STUDENTS.map(s => s.id.toLowerCase());
+    const STUDENT_NAMES = STUDENTS.map(s => s.name.toLowerCase());
 
     const onlineMap = {};   // clientId => {email, role, ts}
     const boardsState = {}; // per-board state
 
-    // ---------- ensure chess.js loaded ----------
+    // track last online count to avoid duplicate "Players online" messages
+    let lastOnlineCount = null;
+
+    // ---------- ensure chess.js ----------
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
     async function ensureChess(){
       if(typeof Chess !== 'undefined') return;
@@ -102,31 +113,47 @@
       try{ const r = await fetch(test, { method:'HEAD', cache:'no-store' }); return r.ok ? CUSTOM_PIECE_THEME : FALLBACK_THEME; }catch(e){ return FALLBACK_THEME; }
     }
 
-    // ---------- build UI (DOM only) ----------
+    // ---------- build UI ----------
     const grid = document.getElementById('boardsGrid');
     const theme = await pickPieceTheme();
-    for(const s of STUDENTS){
-      const card = createCard(s, theme);
+    for(let i=0;i<STUDENTS.length;i++){
+      const s = STUDENTS[i];
+      const card = createCard(s, theme, i);
       grid.appendChild(card);
     }
 
-    // wait and then initialize engines & chessboards
     await ensureChess();
-    for(const s of STUDENTS){
-      initEngineAndBoard(s.id);
-    }
+    for(const s of STUDENTS) initEngineAndBoard(s.id);
 
-    // presence -> populate selects + badges
+    // ---------- presence handling (only count recent entries) ----------
     onlineRef.on('value', snap => {
       const val = snap.val() || {};
       for(const k in onlineMap) delete onlineMap[k];
-      for(const id in val){ if(!val.hasOwnProperty(id)) continue; onlineMap[id] = { email: val[id].email || id, role: val[id].role || null, ts: val[id].ts || Date.now() }; }
+      let countRecent = 0;
+      const now = Date.now();
+      // treat an entry as online if ts within last 45s
+      const ONLINE_WINDOW_MS = 45_000;
+      for(const id in val){
+        if(!val.hasOwnProperty(id)) continue;
+        const rec = val[id] || {};
+        const ts = rec.ts || 0;
+        onlineMap[id] = { email: rec.email || id, role: rec.role || null, ts };
+        if(Number(ts) > (now - ONLINE_WINDOW_MS)) countRecent++;
+      }
+
+      // only notify when true count changes
+      if(lastOnlineCount === null || lastOnlineCount !== countRecent){
+        lastOnlineCount = countRecent;
+        // update per-card notification once (dedupe in addNotification)
+        STUDENTS.forEach(s => addNotification(s.id, `Players online: ${countRecent}`));
+      }
+
       STUDENTS.forEach(s => populateSelectForBoard(s.id));
       STUDENTS.forEach(s => updateMasterStudentsList(s.id));
       STUDENTS.forEach(s => refreshBadge(s.id));
     });
 
-    // publish master presence
+    // publish master presence (as before)
     try{
       const n = onlineRef.child(MASTER_ID);
       n.set({ email: MASTER_NAME, role: 'master', ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{});
@@ -134,19 +161,18 @@
       setInterval(()=> n.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
     }catch(e){}
 
-    // ---------- helpers: UI build ----------
-    function createCard(student, pieceTheme){
+    // ---------- helpers ----------
+    function createCard(student, pieceTheme, index){
       const card = document.createElement('div'); card.className = 'board-card'; card.dataset.studentId = student.id;
 
       const label = document.createElement('div'); label.className = 'student-label';
-      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder"></span><span class="path-holder" style="margin-left:8px;font-size:11px;color:#666"></span>`;
+      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="path-holder" style="margin-left:8px;font-size:11px;color:#666"></span>`;
       card.appendChild(label);
 
       const top = document.createElement('div'); top.className = 'top-strip';
-      top.innerHTML = `<div class="controls"><span class="label-small">Size</span>
-        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="360" class="size-slider" data-sid="${student.id}">
+      top.innerHTML = `<div class="controls"><span class="label-small" style="margin-right:6px;">Size</span>
+        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
         <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
-        <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}"><option value="">View students</option></select>
       </div>`;
       card.appendChild(top);
 
@@ -155,88 +181,64 @@
       const boardDiv = document.createElement('div'); boardDiv.id = 'board_' + student.id;
       boardHolder.appendChild(boardDiv); boardInnerWrap.appendChild(boardHolder); card.appendChild(boardInnerWrap);
 
-      const debug = document.createElement('div'); debug.className = 'debug'; debug.textContent = 'ready';
-      card.appendChild(debug);
+      const notifArea = document.createElement('div'); notifArea.className = 'notif-area';
+      notifArea.innerHTML = `
+        <div class="notifications" id="notif_${student.id}"></div>
+        <div class="notation" id="notation_${student.id}">No moves.</div>
+      `;
+      card.appendChild(notifArea);
 
-      // Add multiplayer panel at bottom of each card
+      const debug = document.createElement('div'); debug.className = 'debug'; debug.id = 'debug_' + student.id; debug.textContent = 'ready'; card.appendChild(debug);
+
       const multiplayPanel = document.createElement('div');
       multiplayPanel.className = 'multiplayer-panel';
-      multiplayPanel.style.cssText = 'margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-width:100%;';
       multiplayPanel.innerHTML = `
-        <input id="master-username-${student.id}" name="master-username" type="text" placeholder="Your name" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; flex:1; min-width:120px;">
-        <button id="master-join-${student.id}" name="master-join-btn" style="padding:8px 12px; border-radius:6px; background:#0f172a; color:#fff; border:none; cursor:pointer;">Join Online</button>
-        <select id="master-students-${student.id}" name="master-students" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; flex:1; min-width:120px;"><option value="">Select student</option></select>
+        <select id="master-students-${student.id}" name="master-students" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; min-width:180px;"><option value="">Select student</option></select>
         <button id="master-spectate-${student.id}" name="master-spectate-btn" style="padding:8px 12px; border-radius:6px; background:#0f172a; color:#fff; border:none; cursor:pointer;">Spectate</button>
-        <span id="master-status-${student.id}" style="font-size:12px; color:#666; flex:1; min-width:150px;"></span>
+        <span id="master-status-${student.id}" class="status-small">ready</span>
       `;
       card.appendChild(multiplayPanel);
 
-      // Initialize state for this board
+      // default sizes: top two bigger
+      const defaultSize = (index < 2) ? 570 : 360;
+
       boardsState[student.id] = {
-        size: 360,
+        size: defaultSize,
         flip: false,
         watchedClientId: null,
-        listeners: {}, // path -> { ref, handlers }
+        listeners: {},
         boardObj: null,
         game: null,
         pieceTheme,
-        masterUsername: '',
-        masterJoined: false,
-        // extra: track gameMoveListeners for moves/{gameId}
-        gameMoveListeners: {}
+        gameMoveListeners: {},
+        moveRecords: {},
+        processedMoveKeys: new Set(),
+        lastNotif: null
       };
 
-      // controls wiring
       const sizeSlider = top.querySelector('.size-slider');
-      const flipBtn = top.querySelector('.flip-btn');
-      const playerSelect = top.querySelector('.player-select');
-
+      sizeSlider.value = defaultSize;
       sizeSlider.addEventListener('input', e => {
         const px = Number(e.target.value);
         boardsState[student.id].size = px;
         setBoardSize(student.id, px);
       });
-      flipBtn.addEventListener('click', () => {
+      top.querySelector('.flip-btn').addEventListener('click', () => {
         const st = boardsState[student.id];
         st.flip = !st.flip;
         if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
       });
-      playerSelect.addEventListener('change', e => {
-        const client = e.target.value || null;
-        if(!client) stopWatching(student.id);
-        else {
-          // Send spectate invite to student first
-          sendSpectateInvite(student.id, client);
-          const debug = getDebugElem(student.id); debugText(debug, `Invite sent -> waiting for response from ${client}`);
-        }
-      });
 
-      // Multiplayer panel event listeners for this board
-      const masterUsernameInput = multiplayPanel.querySelector(`#master-username-${student.id}`);
-      const masterJoinBtn = multiplayPanel.querySelector(`#master-join-${student.id}`);
       const masterStudentsSelect = multiplayPanel.querySelector(`#master-students-${student.id}`);
       const masterSpectateBtn = multiplayPanel.querySelector(`#master-spectate-${student.id}`);
       const masterStatus = multiplayPanel.querySelector(`#master-status-${student.id}`);
 
-      masterJoinBtn.addEventListener('click', () => {
-        const username = (masterUsernameInput.value || '').trim();
-        if(!username) { alert('Enter your name'); return; }
-        boardsState[student.id].masterUsername = username;
-        boardsState[student.id].masterJoined = true;
-        masterStatus.textContent = `Joined as ${username}`;
-        masterJoinBtn.disabled = true;
-        masterUsernameInput.disabled = true;
-        // Populate students list
-        updateMasterStudentsList(student.id);
-      });
-
       masterSpectateBtn.addEventListener('click', () => {
         const selectedStudent = masterStudentsSelect.value;
-        if(!selectedStudent) { alert('Select a student'); return; }
-        // Send spectate invite
+        if(!selectedStudent){ alert('Select a student'); return; }
         sendSpectateInvite(student.id, selectedStudent);
-        masterStatus.textContent = `Spectate invite sent to ${selectedStudent}`;
-        const debug = getDebugElem(student.id); debugText(debug, `Invite sent -> waiting for response from ${selectedStudent}`);
+        masterStatus.textContent = `Invite sent to ${selectedStudent}`;
+        addNotification(student.id, `Invite sent to ${selectedStudent}`);
       });
 
       return card;
@@ -247,7 +249,6 @@
       if(!st) return;
       try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : null; }catch(e){ st.game = null; console.warn('Chess engine init failed', e); }
       try{
-        // create board as read-only spectate mode (draggable: false, no onDrop)
         st.boardObj = Chessboard('board_' + studentId, {
           draggable: false,
           position: st.game && typeof st.game.fen === 'function' ? st.game.fen() : 'start',
@@ -267,29 +268,43 @@
       try{ if(st.boardObj && typeof st.boardObj.resize === 'function') st.boardObj.resize(); }catch(e){}
     }
 
-    // ---------- populate select & badge ----------
+    // ---------- select population (only true online students) ----------
+    function isLikelyStudentEntry(email){
+      if(!email) return false;
+      const e = String(email).toLowerCase().trim();
+      return STUDENT_IDS.includes(e) || STUDENT_NAMES.includes(e) || STUDENT_NAMES.some(n => e.indexOf(n) !== -1) || STUDENT_IDS.some(id => e.indexOf(id) !== -1);
+    }
+
     function populateSelectForBoard(boardId){
-      const st = boardsState[boardId];
-      if(!st) return;
-      const sel = document.querySelector(`.player-select[data-sid="${boardId}"]`);
+      const sel = document.querySelector(`#master-students-${boardId}`);
       if(!sel) return;
       const prev = sel.value;
       sel.innerHTML = '';
-      const title = document.createElement('option'); title.value=''; title.textContent='View students'; sel.appendChild(title);
+      const title = document.createElement('option'); title.value=''; title.textContent='Select student'; sel.appendChild(title);
 
-      // Include all online clients except the master itself. Prefer entries where role==='student'.
-      const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
+      const now = Date.now();
+      const ONLINE_WINDOW_MS = 45_000;
+      const onlineIds = Object.keys(onlineMap || {}).filter(id => {
+        const entry = onlineMap[id] || {};
+        // only include if ts is recent
+        if(!entry.ts || Number(entry.ts) < (now - ONLINE_WINDOW_MS)) return false;
+        return (entry.role && String(entry.role).toLowerCase() === 'student') || isLikelyStudentEntry(entry.email);
+      });
+
       if(onlineIds.length === 0){
-        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); sel.value=''; return;
+        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online students'; sel.appendChild(none); return;
       }
-      const studentsFirst = onlineIds.filter(id => onlineMap[id] && onlineMap[id].role === 'student');
-      const others = onlineIds.filter(id => !(onlineMap[id] && onlineMap[id].role === 'student'));
-      const listToRender = studentsFirst.concat(others);
-      listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; sel.appendChild(opt); });
-
-      const prefer = st.watchedClientId || prev;
-      if(prefer && Array.from(sel.options).some(o => o.value === prefer)) sel.value = prefer; else sel.value = '';
+      onlineIds.forEach(id => {
+        const e = onlineMap[id];
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `${e && e.email ? e.email : id} (${id.slice(0,6)})`;
+        sel.appendChild(opt);
+      });
+      if(prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value = prev;
     }
+
+    function updateMasterStudentsList(boardId){ populateSelectForBoard(boardId); }
 
     function refreshBadge(boardId){
       const st = boardsState[boardId];
@@ -306,255 +321,138 @@
       badgeHolder.appendChild(span);
     }
 
-    function updateMasterStudentsList(boardId){
+    // ---------- notifications ----------
+    function addNotification(boardId, msg){
+      const el = document.getElementById('notif_' + boardId);
+      if(!el) return;
       const st = boardsState[boardId];
-      if(!st) return;
-      const sel = document.querySelector(`#master-students-${boardId}`);
-      if(!sel) return;
-      sel.innerHTML = '';
-      const title = document.createElement('option'); title.value=''; title.textContent='Select student'; sel.appendChild(title);
-      const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
-      if(onlineIds.length === 0){
-        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); return;
-      }
-      const studentsFirst = onlineIds.filter(id => onlineMap[id] && onlineMap[id].role === 'student');
-      const others = onlineIds.filter(id => !(onlineMap[id] && onlineMap[id].role === 'student'));
-      const listToRender = studentsFirst.concat(others);
-      listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${online_map_label(id)}`; sel.appendChild(opt); });
-
-      function online_map_label(id){ return `${onlineMap[id] ? onlineMap[id].email : id} (${id.slice(0,6)})`; }
+      // dedupe: skip if identical to last shown notification
+      if(st && st.lastNotif === msg) return;
+      st.lastNotif = msg;
+      const item = document.createElement('div');
+      item.className = 'notif-item';
+      item.textContent = `${new Date().toLocaleTimeString()} — ${msg}`;
+      el.insertBefore(item, el.firstChild);
+      while(el.children.length > 10) el.removeChild(el.lastChild);
+      // remove after 10s
+      setTimeout(() => {
+        try{
+          if(item && item.parentElement) item.parentElement.removeChild(item);
+          if(st && st.lastNotif === msg) st.lastNotif = null;
+        }catch(e){}
+      }, 10000);
     }
 
-    // ---------- robust watching: attach to multiple candidate paths ----------
-    const CANDIDATE_PATHS = ['','game','move','moves']; // will map to games/<id>/{path}
-
-    // Send spectate invite to a student (deterministic key under spectateInvites/<studentId>/<MASTER_ID>)
+    // ---------- spectate invite flow ----------
     function sendSpectateInvite(boardId, clientId){
+      if(!clientId) return;
       try{
-        if(!clientId) return;
         const inviteRef = db.ref(`spectateInvites/${clientId}/${MASTER_ID}`);
-        const payload = {
-          type: 'spectate',
-          fromId: MASTER_ID,
-          fromEmail: MASTER_NAME,
-          boardId: boardId || null,
-          ts: firebase.database.ServerValue.TIMESTAMP
-        };
-        inviteRef.set(payload)
-          .then(() => {
-            const debug = getDebugElem(boardId);
-            if(debug) debugText(debug, `✓ Spectate invite sent to ${clientId}`);
-          })
-          .catch(err => {
-            const debug = getDebugElem(boardId);
-            if(debug) debugText(debug, `✗ Invite failed: ${err && err.message}`);
-          });
-
-        // auto-expire after 60s (optional)
-        setTimeout(() => { inviteRef.remove().catch(()=>{}); }, 60000);
-      }catch(e){
-        console.error('[MASTER] sendSpectateInvite error:', e);
-      }
+        const payload = { type:'spectate', fromId:MASTER_ID, fromEmail:MASTER_NAME, boardId:boardId||null, ts: firebase.database.ServerValue.TIMESTAMP };
+        inviteRef.set(payload).then(()=> addNotification(boardId, `Invite sent to ${clientId}`)).catch(err=> addNotification(boardId, `Invite send failed: ${err && err.message}`));
+        setTimeout(()=> inviteRef.remove().catch(()=>{}), 60000);
+      }catch(e){ addNotification(boardId, 'Invite send error'); }
     }
 
-    // Listen for student responses to invites and auto-start watching accepted responses
+    // Listen for responses (spectateResponses/<MASTER_ID>) -> show accepted/declined notifications and start watching when accepted
     (function listenForSpectateResponses(){
-      try{
-        const respPath = `spectateResponses/${MASTER_ID}`;
-        const respRef = db.ref(respPath);
-        respRef.on('child_added', snap => {
-          const resp = snap.val();
-          if(!resp) return;
-          const studentId = resp.studentId || snap.key;
-          const accepted = !!resp.accepted;
-          const boardId = resp.boardId || null;
-          const debugBoard = boardId || STUDENTS[0].id;
-          const debug = getDebugElem(debugBoard);
-          debugText(debug, `response from ${studentId}: accepted=${accepted}, boardId=${boardId}`);
-          if(accepted){
-            const targetBoardId = boardId || findBoardForStudentId(studentId) || STUDENTS[0].id;
-            boardsState[targetBoardId].watchedClientId = studentId;
-            refreshBadge(targetBoardId);
-
-            // ensure the player's select contains the option and set it
-            const sel = document.querySelector(`.player-select[data-sid="${targetBoardId}"]`);
-            if(sel){
-              if(!Array.from(sel.options).some(o => o.value === studentId)){
-                const opt = document.createElement('option');
-                opt.value = studentId;
-                opt.textContent = `${studentId} (auto)`;
-                sel.appendChild(opt);
-              }
-              sel.value = studentId;
-            }
-
-            // Start listening to student's moves (including moves/{gameId} streams)
-            startWatching(targetBoardId, studentId);
-          } else {
-            debugText(getDebugElem(STUDENTS[0].id), `Spectate declined by ${studentId}`);
+      const respRef = db.ref(`spectateResponses/${MASTER_ID}`);
+      respRef.on('child_added', snap => {
+        const resp = snap.val();
+        if(!resp) return;
+        const studentId = resp.studentId || resp.fromId || snap.key;
+        const accepted = !!resp.accepted;
+        const boardId = resp.boardId || null;
+        const targetBoard = boardId || findBoardForStudentId(studentId) || STUDENTS[0].id;
+        if(accepted){
+          addNotification(targetBoard, `Invite accepted by ${studentId}`);
+          boardsState[targetBoard].watchedClientId = studentId;
+          refreshBadge(targetBoard);
+          const sel = document.querySelector(`#master-students-${targetBoard}`);
+          if(sel && !Array.from(sel.options).some(o => o.value === studentId)){
+            const opt = document.createElement('option');
+            opt.value = studentId;
+            opt.textContent = `${onlineMap[studentId] ? onlineMap[studentId].email : studentId} (${studentId.slice(0,6)})`;
+            sel.appendChild(opt);
           }
-          // remove the response node after handling
-          snap.ref.remove().catch(()=>{});
-        }, err => {
-          console.error('[MASTER] spectateResponses listener error', err);
-        });
-      }catch(e){ console.error('[MASTER] listenForSpectateResponses error', e); }
-
-      function findBoardForStudentId(studentId){
-        if(!studentId) return null;
-        for(const s of STUDENTS) if(s.id === studentId) return s.id;
-        return null;
-      }
+          if(sel) sel.value = studentId;
+          // *** IMPORTANT: clear previous moveRecords for this board when starting to watch a new client
+          boardsState[targetBoard].moveRecords = {};
+          boardsState[targetBoard].processedMoveKeys = new Set();
+          startWatching(targetBoard, studentId);
+        } else {
+          addNotification(targetBoard, `Invite declined by ${studentId}`);
+          // keep selection - do not clear select
+        }
+        snap.ref.remove().catch(()=>{});
+      });
+      function findBoardForStudentId(id){ for(const s of STUDENTS) if(s.id === id) return s.id; return null; }
     })();
 
-    // MAIN: startWatching now attaches to:
-    // - games/<clientId> paths (existing)
-    // - moves/<clientId>
-    // - AND moves/<gameId> for any game record where white===clientId || black===clientId
-    // - listens for new games created later that include this client and attaches dynamically
+    // ---------- watching & replay (core logic kept intact) ----------
+    const CANDIDATE_PATHS = ['','game','move','moves'];
+
     function startWatching(boardId, clientId){
       const st = boardsState[boardId];
       if(!st) return;
-      stopWatching(boardId); // teardown previous
+      // clear previous listeners but keep moveRecords cleared above on accept; if needed you can preserve
+      stopWatching(boardId, {clearRecords:false});
       st.watchedClientId = clientId;
-      try{ const sel = document.querySelector(`.player-select[data-sid="${boardId}"]`); if(sel) sel.value = clientId; }catch(e){}
       refreshBadge(boardId);
-      const debug = getDebugElem(boardId); debugText(debug, `startWatching -> ${clientId}`);
-
-      // Attach the original candidate path listeners (games/<clientId> variants)
-      st.listeners = {}; // reset
+      addNotification(boardId, `Start watching ${clientId}`);
+      st.listeners = {};
       CANDIDATE_PATHS.forEach(p => {
         const path = p ? `games/${clientId}/${p}` : `games/${clientId}`;
         const ref = db.ref(path);
-        const onValue = snap => {
-          debugText(debug, `value @ ${path}`);
-          const v = snap.val();
-          if(!v) return;
-          normalizeAndApply(boardId, v);
-        };
-        ref.on('value', onValue, err => debugText(debug, `value error @ ${path}: ${err && err.message}`));
-
-        const onChildAdded = snap => {
-          debugText(debug, `child_added @ ${path}/${snap.key}`);
-          const v = snap.val();
-          if(p === 'moves' || typeof v === 'object'){
-            const candidate = v && (v.payload || v);
-            if(candidate && (candidate.move || candidate.fen || candidate.from)){
-              normalizeAndApply(boardId, v);
-            } else {
-              try{ ref.limitToLast(500).once('value').then(snap2 => { const ordered = {}; snap2.forEach(child => ordered[child.key] = child.val()); normalizeAndApply(boardId, { moves: ordered }); }).catch(()=>{}); }catch(e){}
-            }
-          } else {
-            normalizeAndApply(boardId, v);
-          }
-        };
-        ref.on('child_added', onChildAdded, err => debugText(debug, `child_added error @ ${path}: ${err && err.message}`));
-
-        const onChildChanged = snap => {
-          debugText(debug, `child_changed @ ${path}/${snap.key}`);
-          normalizeAndApply(boardId, snap.val());
-        };
-        ref.on('child_changed', onChildChanged, err => debugText(debug, `child_changed error @ ${path}: ${err && err.message}`));
-
-        st.listeners[path] = { ref, handlers: { value: onValue, child_added: onChildAdded, child_changed: onChildChanged } };
+        const onValue = snap => { const v = snap.val(); if(!v) return; ingestPayload(boardId, snap.key || path, v); };
+        ref.on('value', onValue, err => addNotification(boardId, `Listener error @ ${path}: ${err && err.message}`));
+        const onChildAdded = snap => { const v = snap.val(); const key = snap.key || (path + '/' + Math.random().toString(36).slice(2,6)); ingestPayloadWithMeta(boardId, key, v); };
+        ref.on('child_added', onChildAdded, err=>{});
+        st.listeners[path] = { ref, handlers:{ value:onValue, child_added:onChildAdded } };
       });
 
-      // Listen to moves/{clientId} (fast path)
+      // moves/{clientId}
       try{
         const movesPath = `moves/${clientId}`;
         const movesRef = db.ref(movesPath);
-        const onMoveAdded = snap => {
-          debugText(debug, `child_added @ ${movesPath}/${snap.key}`);
-          const m = snap.val();
-          if(!m) return;
-          if(m.by === MASTER_ID) return;
-          const candidate = m.payload || m;
-          if(candidate && (candidate.move || candidate.fen)){
-            normalizeAndApply(boardId, candidate);
-          }
-        };
-        movesRef.on('child_added', onMoveAdded, err => debugText(debug, `moves child_added error: ${err && err.message}`));
-        if(!st.listeners[movesPath]) st.listeners[movesPath] = { ref: movesRef, handlers: { child_added: onMoveAdded } };
-      }catch(e){ debugText(debug, `moves listener setup failed: ${e.message}`); }
+        const onMoveAdded = snap => { const key = snap.key; const v = snap.val(); ingestPayloadWithMeta(boardId, key, v); };
+        movesRef.on('child_added', onMoveAdded, err=>{});
+        st.listeners[movesPath] = { ref: movesRef, handlers:{ child_added:onMoveAdded } };
+      }catch(e){ addNotification(boardId, 'Moves listener failed'); }
 
-      // --- NEW: attach to any active games where this client is white or black ---
       attachGameMoveListenersForStudent(clientId, boardId);
-
-      // Also listen for new games being created that include the client and attach dynamically
-      const gamesAddedRef = gamesRef;
-      const onGameChildAdded = snap => {
-        const data = snap.val();
-        if(!data) return;
-        const id = snap.key;
-        const involved = (data.white === clientId) || (data.black === clientId);
-        if(involved){
-          debugText(debug, `game created with id=${id} involving ${clientId} -> attaching moves/${id}`);
-          attachMovesListenerForGame(id, boardId);
-        }
-      };
-      gamesAddedRef.on('child_added', onGameChildAdded);
-      // save the games child_added so we can remove it on stop
-      st.listeners[`games_root_child_added_for_${clientId}`] = { ref: gamesAddedRef, handlers: { child_added: onGameChildAdded } };
+      const onGameChildAdded = snap => { const data = snap.val(); if(!data) return; const id = snap.key; const involved = (data.white === clientId)||(data.black === clientId); if(involved) attachMovesListenerForGame(id, boardId); };
+      gamesRef.on('child_added', onGameChildAdded);
+      st.listeners[`games_root_child_added_for_${clientId}`] = { ref: gamesRef, handlers:{ child_added:onGameChildAdded } };
     }
 
     function attachGameMoveListenersForStudent(clientId, boardId){
-      // query existing games where white===clientId OR black===clientId and attach to moves/{gameId}
-      const debug = getDebugElem(boardId);
+      const st = boardsState[boardId];
       try{
-        // helper to attach for a found gameId
-        const attachIfNot = (gameId) => {
-          if(!gameId) return;
-          const st = boardsState[boardId];
-          if(!st) return;
-          if(st.gameMoveListeners && st.gameMoveListeners[gameId]) return; // already attached
-          attachMovesListenerForGame(gameId, boardId);
-        };
-
-        // query where white === clientId
-        gamesRef.orderByChild('white').equalTo(clientId).once('value').then(snap => {
-          snap.forEach(child => attachIfNot(child.key));
-        }).catch(e => debugText(debug, `games query (white) failed: ${e && e.message}`));
-
-        // query where black === clientId
-        gamesRef.orderByChild('black').equalTo(clientId).once('value').then(snap => {
-          snap.forEach(child => attachIfNot(child.key));
-        }).catch(e => debugText(debug, `games query (black) failed: ${e && e.message}`));
-      }catch(e){ debugText(debug, `attachGameMoveListenersForStudent error: ${e && e.message}`); }
+        const attachIfNot = (gameId) => { if(!gameId) return; if(st.gameMoveListeners && st.gameMoveListeners[`moves/${gameId}`]) return; attachMovesListenerForGame(gameId, boardId); };
+        gamesRef.orderByChild('white').equalTo(clientId).once('value').then(snap => { snap.forEach(child => attachIfNot(child.key)); }).catch(()=>{});
+        gamesRef.orderByChild('black').equalTo(clientId).once('value').then(snap => { snap.forEach(child => attachIfNot(child.key)); }).catch(()=>{});
+      }catch(e){}
     }
 
     function attachMovesListenerForGame(gameId, boardId){
       if(!gameId) return;
       const st = boardsState[boardId];
       if(!st) return;
-      const debug = getDebugElem(boardId);
-      try{
-        const path = `moves/${gameId}`;
-        if(st.gameMoveListeners[path]) return; // already listening
-        const ref = db.ref(path);
-        const onChildAdded = snap => {
-          debugText(debug, `game-moves child_added @ ${path}/${snap.key}`);
-          const m = snap.val();
-          if(!m) return;
-          // ignore messages from this master
-          if(m.by === MASTER_ID) return;
-          const candidate = m.payload || m;
-          if(candidate && (candidate.move || candidate.fen)){
-            normalizeAndApply(boardId, candidate);
-          }
-        };
-        ref.on('child_added', onChildAdded, err => debugText(debug, `game-moves child_added error @ ${path}: ${err && err.message}`));
-        st.gameMoveListeners[path] = { ref, handlers: { child_added: onChildAdded } };
-        debugText(debug, `attached game moves listener -> ${path}`);
-      }catch(e){ debugText(debug, `attachMovesListenerForGame error: ${e && e.message}`); }
+      const path = `moves/${gameId}`;
+      if(st.gameMoveListeners && st.gameMoveListeners[path]) return;
+      const ref = db.ref(path);
+      const onChildAdded = snap => { const key = snap.key; const v = snap.val(); ingestPayloadWithMeta(boardId, key, v); };
+      ref.on('child_added', onChildAdded, err=>{});
+      st.gameMoveListeners[path] = { ref, handlers:{ child_added:onChildAdded } };
+      addNotification(boardId, `Attached to game moves/${gameId}`);
     }
 
-    function stopWatching(boardId){
+    function stopWatching(boardId, opts){
       const st = boardsState[boardId];
       if(!st) return;
-      const debug = getDebugElem(boardId);
-      debugText(debug, `stopWatching (was ${st.watchedClientId || '-'})`);
+      opts = opts || {};
       try{
-        // detach generic listeners
         Object.keys(st.listeners || {}).forEach(path => {
           const L = st.listeners[path];
           if(L && L.ref && L.handlers){
@@ -563,8 +461,7 @@
             if(L.handlers.child_changed) L.ref.off('child_changed', L.handlers.child_changed);
           }
         });
-      }catch(e){ console.warn('teardown error', e); }
-      // detach game-move listeners
+      }catch(e){}
       try{
         Object.keys(st.gameMoveListeners || {}).forEach(path => {
           const L = st.gameMoveListeners[path];
@@ -572,142 +469,114 @@
             if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
           }
         });
-      }catch(e){ console.warn('gameMove teardown error', e); }
+      }catch(e){}
       st.listeners = {};
       st.gameMoveListeners = {};
       st.watchedClientId = null;
       refreshBadge(boardId);
-      try{ if(st.game && typeof st.game.load === 'function'){ st.game.load('start'); } if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position('start'); }catch(e){}
+      addNotification(boardId, 'Stopped watching');
+      clearNotation(boardId);
+      if(!opts.clearRecords){
+        // keep moveRecords if desired (we clear them when accepting a new invite to avoid cross-contamination)
+      } else {
+        st.moveRecords = {};
+        st.processedMoveKeys = new Set();
+      }
     }
 
-    // ---------- normalization & apply (robust) ----------
-    function normalizeAndApply(boardId, record){
+    // ---------- ingestion + replay ----------
+    function ingestPayloadWithMeta(boardId, key, value){
+      const payload = (value && value.payload) ? value.payload : value;
+      const ts = value && (value.ts || (value.payload && value.payload.ts)) ? (value.ts || (value.payload && value.payload.ts)) : Date.now();
       const st = boardsState[boardId];
-      const debug = getDebugElem(boardId);
       if(!st) return;
-      try{
-        if(record === null || typeof record === 'undefined'){ debugText(debug, 'normalize: empty'); return; }
-        if(typeof record === 'string'){ debugText(debug, 'normalize: string -> fen?'); applyFenToBoard(boardId, record); return; }
-        if(record.payload && typeof record.payload === 'object') record = record.payload;
+      // store per-board (keys isolated)
+      st.moveRecords[key] = { payload, ts: Number(ts) || Date.now() };
+      replayMoveRecords(boardId);
+    }
 
-        if(record.moves && typeof record.moves === 'object' && Object.keys(record.moves).length > 0){
-          debugText(debug, 'normalize: moves child-list detected');
-          applyMovesChildList(boardId, record.moves);
+    function ingestPayload(boardId, key, value){
+      if(!value) return;
+      const st = boardsState[boardId];
+      if(!st) return;
+      if(typeof value === 'object' && !Array.isArray(value)){
+        if(value.moves && typeof value.moves === 'object'){
+          Object.keys(value.moves).forEach(k => ingestPayloadWithMeta(boardId, k, value.moves[k]));
           return;
         }
-
-        const fenCandidates = ['fen','FEN','sfen','currentFen','position','board_fen','board'];
-        for(const k of fenCandidates){ if(record[k] && typeof record[k] === 'string'){ debugText(debug, `normalize: found fen '${k}'`); applyFenToBoard(boardId, record[k]); return; } }
-
-        if(record.move){ debugText(debug, 'normalize: record.move'); tryApplyMoveShape(boardId, record.move, record.fen || null); return; }
-
-        const directMoveFields = ['lastMove','last_move','last','moveString','move_uci','uci','from','to'];
-        for(const k of directMoveFields){ if(record[k]){ debugText(debug, `normalize: found move field ${k}`); tryApplyMoveShape(boardId, record, record.fen || null); return; } }
-
-        const keys = Object.keys(record || {});
-        for(let i = keys.length - 1; i >= 0; i--){
-          const cand = record[keys[i]];
-          if(cand && (cand.payload || cand.fen || cand.move || typeof cand === 'string')){ debugText(debug, 'normalize: probing nested ' + keys[i]); normalizeAndApply(boardId, cand); return; }
-        }
-
-        debugText(debug, 'normalize: unrecognized shape - dumped to debug');
-      }catch(e){ debugText(debug, 'normalize error: ' + (e && e.message)); }
+        const syntheticKey = key || ('snap_'+Math.random().toString(36).slice(2,8));
+        ingestPayloadWithMeta(boardId, syntheticKey, value);
+      } else {
+        const syntheticKey = key || ('snap_'+Math.random().toString(36).slice(2,8));
+        ingestPayloadWithMeta(boardId, syntheticKey, { fen: value, ts: Date.now() });
+      }
     }
 
-    function applyMovesChildList(boardId, movesObj){
+    function replayMoveRecords(boardId){
       const st = boardsState[boardId];
-      const debug = getDebugElem(boardId);
       if(!st) return;
       try{
-        const entries = Object.keys(movesObj).map(k => {
-          const rec = movesObj[k] || {};
-          const payload = rec.payload || rec;
-          const ts = rec.ts || (payload && payload.ts) || 0;
-          return { key: k, ts: Number(ts) || 0, payload, raw: rec };
-        });
+        const entries = Object.keys(st.moveRecords).map(k => ({ key:k, ts: st.moveRecords[k].ts || 0, payload: st.moveRecords[k].payload }));
         entries.sort((a,b) => (a.ts - b.ts) || (a.key < b.key ? -1 : (a.key > b.key ? 1 : 0)));
-        debugText(debug, `replaying ${entries.length} moves`);
-        try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : st.game; }catch(e){ debugText(debug, 'engine reset failed'); }
+        try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : st.game; }catch(e){}
+        st.processedMoveKeys = new Set();
         for(const e of entries){
-          const mv = (e.payload && e.payload.move) || e.payload;
-          if(!mv) continue;
-          if(typeof mv === 'string'){
-            const s = mv.replace(/[^a-h1-8qnbrk]/ig,'');
-            if(s.length >= 4){
-              const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : undefined;
-              if(st.game && typeof st.game.move === 'function') st.game.move({ from, to, promotion: prom || undefined });
+          const mv = e.payload && (e.payload.move || e.payload);
+          if(e.payload && e.payload.fen && (!mv || (typeof mv === 'object' && !mv.from && !mv.to))){
+            try{ if(st.game && typeof st.game.load === 'function') st.game.load(e.payload.fen); }catch(_){}
+            st.processedMoveKeys.add(e.key);
+            continue;
+          }
+          if(mv){
+            if(typeof mv === 'string'){
+              const s = mv.replace(/[^a-h1-8qnbrk]/ig,'');
+              if(s.length >= 4){
+                const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : undefined;
+                try{ st.game.move({ from, to, promotion: prom || undefined }); st.processedMoveKeys.add(e.key); }catch(_){}
+                continue;
+              }
+            } else if(typeof mv === 'object'){
+              const from = mv.from || mv.f || (mv.u && mv.u.slice && mv.u.slice(0,2));
+              const to = mv.to || mv.t || (mv.u && mv.u.slice && mv.u.slice(2,4));
+              const promotion = mv.promotion || mv.prom || null;
+              if(from && to && typeof st.game.move === 'function'){
+                try{ const applied = st.game.move({ from, to, promotion: promotion || undefined }); if(applied) st.processedMoveKeys.add(e.key); }catch(_){}
+                continue;
+              }
             }
-          } else if(typeof mv === 'object' && mv.from && mv.to){
-            if(st.game && typeof st.game.move === 'function') st.game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined });
           }
         }
         const pos = st.game && typeof st.game.fen === 'function' ? st.game.fen() : null;
-        if(pos && st.boardObj && typeof st.boardObj.position === 'function'){ st.boardObj.position(pos); debugText(debug, 'replay->position set'); } else debugText(debug, 'replay complete but position unavailable');
-      }catch(e){ debugText(debug, 'applyMovesChildList error: ' + (e && e.message)); }
+        if(pos && st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(pos);
+        updateNotation(boardId);
+      }catch(e){ addNotification(boardId, 'Replay error: ' + (e && e.message)); }
     }
 
-    function tryApplyMoveShape(boardId, m, fallbackFen){
+    function updateNotation(boardId){
       const st = boardsState[boardId];
-      const debug = getDebugElem(boardId);
-      if(!st) return false;
+      const notEl = document.getElementById('notation_' + boardId);
+      if(!st || !notEl) return;
       try{
-        if(!m) return false;
-        if(typeof m === 'string'){
-          const s = m.replace(/[^a-h1-8qnbrk]/ig,'');
-          if(s.length >= 4){ const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : null; applyMoveToBoard(boardId, { from, to, promotion: prom }, fallbackFen); return true; }
-          const m2 = m.match(/([a-h][1-8]).*?([a-h][1-8])/i);
-          if(m2){ applyMoveToBoard(boardId, { from: m2[1], to: m2[2] }, fallbackFen); return true; }
-          return false;
+        if(!st.game || typeof st.game.history !== 'function'){ notEl.innerHTML = 'No moves.'; return; }
+        const hist = st.game.history() || [];
+        if(hist.length === 0){ notEl.innerHTML = 'No moves.'; return; }
+        notEl.innerHTML = '';
+        for(let i=0;i<hist.length;i+=2){
+          const no = Math.floor(i/2)+1;
+          const w = hist[i]||'';
+          const b = hist[i+1]||'';
+          const div = document.createElement('div');
+          div.className = 'move';
+          div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${ b ? ('\u00A0' + b) : '' }`;
+          notEl.appendChild(div);
         }
-        if(typeof m === 'object'){
-          const from = m.from || m.f || (m.u && m.u.slice(0,2));
-          const to = m.to || m.t || (m.u && m.u.slice(2,4));
-          const promotion = m.promotion || m.prom || null;
-          if(from && to){ applyMoveToBoard(boardId, { from, to, promotion }, fallbackFen); return true; }
-          if(m.payload) return tryApplyMoveShape(boardId, m.payload, fallbackFen);
-        }
-        return false;
-      }catch(e){ debugText(debug, 'tryApplyMoveShape error: ' + (e && e.message)); return false; }
+      }catch(e){ console.warn('updateNotation error', e); }
     }
+    function clearNotation(boardId){ const notEl = document.getElementById('notation_' + boardId); if(notEl) notEl.innerHTML = 'No moves.'; }
 
-    function applyFenToBoard(boardId, fen){
-      const st = boardsState[boardId];
-      const debug = getDebugElem(boardId);
-      if(!st || !fen) return;
-      try{
-        if(st.game && typeof st.game.load === 'function'){ st.game.load(fen); if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); debugText(debug, 'fen applied'); }
-        else if(st.boardObj && typeof st.boardObj.position === 'function'){ st.boardObj.position(fen); debugText(debug,'fen applied via board.position'); }
-      }catch(e){ debugText(debug, 'applyFenToBoard error: ' + (e && e.message)); }
-    }
+    // ---------- utilities ----------
+    function getDebugElem(boardId){ return document.getElementById('debug_' + boardId); }
 
-    function applyMoveToBoard(boardId, mv, fallbackFen){
-      const st = boardsState[boardId];
-      const debug = getDebugElem(boardId);
-      if(!st || !mv || !mv.from || !mv.to){ debugText(debug, 'applyMoveToBoard: invalid move'); return; }
-      try{
-        if(st.game && typeof st.game.move === 'function'){
-          const applied = st.game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined });
-          if(applied === null){
-            debugText(debug, `engine rejected ${mv.from}->${mv.to}`);
-            if(fallbackFen) applyFenToBoard(boardId, fallbackFen);
-            return;
-          } else {
-            if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen());
-            debugText(debug, `applied ${mv.from}->${mv.to}`);
-          }
-        } else {
-          if(st.boardObj && typeof st.boardObj.move === 'function'){
-            try{ st.boardObj.move(mv.from + '-' + mv.to); }catch(e){ debugText(debug,'board.move failed'); }
-          }
-          if(fallbackFen) applyFenToBoard(boardId, fallbackFen);
-        }
-      }catch(e){ debugText(debug, 'applyMoveToBoard error: ' + (e && e.message)); }
-    }
-
-    function getDebugElem(boardId){ const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId); if(!card) return null; return card.querySelector('.debug'); }
-    function debugText(el, msg){ if(!el) return console.debug('[master debug]', msg); el.textContent = (new Date()).toISOString() + ' - ' + msg + '\n' + el.textContent; console.debug('[master debug]', msg); }
-
-    // ---------- small utilities ----------
     document.getElementById('globalLogout').addEventListener('click', () => {
       try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); sessionStorage.removeItem('iq4u_clientId'); }catch(e){}
       try{ onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
