@@ -59,6 +59,7 @@
     try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
     const db = firebase.database();
     const onlineRef = db.ref('online');
+    const gamesRef = db.ref('games'); // we'll use for queries
 
     const MASTER_ID = sessionStorage.getItem('iq4u_clientId') || ('m_'+Math.random().toString(36).slice(2,10));
     sessionStorage.setItem('iq4u_clientId', MASTER_ID);
@@ -180,7 +181,9 @@
         game: null,
         pieceTheme,
         masterUsername: '',
-        masterJoined: false
+        masterJoined: false,
+        // extra: track gameMoveListeners for moves/{gameId}
+        gameMoveListeners: {}
       };
 
       // controls wiring
@@ -204,7 +207,6 @@
         else {
           // Send spectate invite to student first
           sendSpectateInvite(student.id, client);
-          // Do not auto-start watching here — wait for student's acceptance which will trigger response listener
           const debug = getDebugElem(student.id); debugText(debug, `Invite sent -> waiting for response from ${client}`);
         }
       });
@@ -280,13 +282,11 @@
       if(onlineIds.length === 0){
         const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); sel.value=''; return;
       }
-      // first add those flagged as role === 'student', then others (so master sees students first)
       const studentsFirst = onlineIds.filter(id => onlineMap[id] && onlineMap[id].role === 'student');
       const others = onlineIds.filter(id => !(onlineMap[id] && onlineMap[id].role === 'student'));
       const listToRender = studentsFirst.concat(others);
       listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; sel.appendChild(opt); });
 
-      // prefer previously selected or the tracked watchedClientId
       const prefer = st.watchedClientId || prev;
       if(prefer && Array.from(sel.options).some(o => o.value === prefer)) sel.value = prefer; else sel.value = '';
     }
@@ -313,7 +313,6 @@
       if(!sel) return;
       sel.innerHTML = '';
       const title = document.createElement('option'); title.value=''; title.textContent='Select student'; sel.appendChild(title);
-      // include all online except master (prefer role==='student')
       const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
       if(onlineIds.length === 0){
         const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); return;
@@ -321,7 +320,9 @@
       const studentsFirst = onlineIds.filter(id => onlineMap[id] && onlineMap[id].role === 'student');
       const others = onlineIds.filter(id => !(onlineMap[id] && onlineMap[id].role === 'student'));
       const listToRender = studentsFirst.concat(others);
-      listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; sel.appendChild(opt); });
+      listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${online_map_label(id)}`; sel.appendChild(opt); });
+
+      function online_map_label(id){ return `${onlineMap[id] ? onlineMap[id].email : id} (${id.slice(0,6)})`; }
     }
 
     // ---------- robust watching: attach to multiple candidate paths ----------
@@ -371,9 +372,7 @@
           const debug = getDebugElem(debugBoard);
           debugText(debug, `response from ${studentId}: accepted=${accepted}, boardId=${boardId}`);
           if(accepted){
-            // choose target board: prefer explicit boardId, else try to map studentId to same-named board
             const targetBoardId = boardId || findBoardForStudentId(studentId) || STUDENTS[0].id;
-            // set watchedClientId & refresh UI
             boardsState[targetBoardId].watchedClientId = studentId;
             refreshBadge(targetBoardId);
 
@@ -389,7 +388,7 @@
               sel.value = studentId;
             }
 
-            // Start listening to student's moves
+            // Start listening to student's moves (including moves/{gameId} streams)
             startWatching(targetBoardId, studentId);
           } else {
             debugText(getDebugElem(STUDENTS[0].id), `Spectate declined by ${studentId}`);
@@ -408,6 +407,11 @@
       }
     })();
 
+    // MAIN: startWatching now attaches to:
+    // - games/<clientId> paths (existing)
+    // - moves/<clientId>
+    // - AND moves/<gameId> for any game record where white===clientId || black===clientId
+    // - listens for new games created later that include this client and attaches dynamically
     function startWatching(boardId, clientId){
       const st = boardsState[boardId];
       if(!st) return;
@@ -417,12 +421,11 @@
       refreshBadge(boardId);
       const debug = getDebugElem(boardId); debugText(debug, `startWatching -> ${clientId}`);
 
-      // Attach listeners for each candidate path
+      // Attach the original candidate path listeners (games/<clientId> variants)
       st.listeners = {}; // reset
       CANDIDATE_PATHS.forEach(p => {
         const path = p ? `games/${clientId}/${p}` : `games/${clientId}`;
         const ref = db.ref(path);
-        // value listener (captures whole node or fen)
         const onValue = snap => {
           debugText(debug, `value @ ${path}`);
           const v = snap.val();
@@ -431,7 +434,6 @@
         };
         ref.on('value', onValue, err => debugText(debug, `value error @ ${path}: ${err && err.message}`));
 
-        // child_added for move streams (only meaningful for /moves)
         const onChildAdded = snap => {
           debugText(debug, `child_added @ ${path}/${snap.key}`);
           const v = snap.val();
@@ -446,26 +448,22 @@
             normalizeAndApply(boardId, v);
           }
         };
-        // attach child_added
         ref.on('child_added', onChildAdded, err => debugText(debug, `child_added error @ ${path}: ${err && err.message}`));
 
-        // child_changed - apply updates
         const onChildChanged = snap => {
           debugText(debug, `child_changed @ ${path}/${snap.key}`);
           normalizeAndApply(boardId, snap.val());
         };
         ref.on('child_changed', onChildChanged, err => debugText(debug, `child_changed error @ ${path}: ${err && err.message}`));
 
-        // save for teardown
         st.listeners[path] = { ref, handlers: { value: onValue, child_added: onChildAdded, child_changed: onChildChanged } };
       });
 
-      // Also attach listener to moves/{clientId} for real-time move syncing
+      // Listen to moves/{clientId} (fast path)
       try{
         const movesPath = `moves/${clientId}`;
         const movesRef = db.ref(movesPath);
         const onMoveAdded = snap => {
-          const debug = getDebugElem(boardId);
           debugText(debug, `child_added @ ${movesPath}/${snap.key}`);
           const m = snap.val();
           if(!m) return;
@@ -476,23 +474,78 @@
           }
         };
         movesRef.on('child_added', onMoveAdded, err => debugText(debug, `moves child_added error: ${err && err.message}`));
-        
-        // Store for teardown
-        if(!st.listeners[movesPath]){
-          st.listeners[movesPath] = { ref: movesRef, handlers: { child_added: onMoveAdded } };
-        }
+        if(!st.listeners[movesPath]) st.listeners[movesPath] = { ref: movesRef, handlers: { child_added: onMoveAdded } };
       }catch(e){ debugText(debug, `moves listener setup failed: ${e.message}`); }
 
-      // initial one-shot fetch for moves if present
+      // --- NEW: attach to any active games where this client is white or black ---
+      attachGameMoveListenersForStudent(clientId, boardId);
+
+      // Also listen for new games being created that include the client and attach dynamically
+      const gamesAddedRef = gamesRef;
+      const onGameChildAdded = snap => {
+        const data = snap.val();
+        if(!data) return;
+        const id = snap.key;
+        const involved = (data.white === clientId) || (data.black === clientId);
+        if(involved){
+          debugText(debug, `game created with id=${id} involving ${clientId} -> attaching moves/${id}`);
+          attachMovesListenerForGame(id, boardId);
+        }
+      };
+      gamesAddedRef.on('child_added', onGameChildAdded);
+      // save the games child_added so we can remove it on stop
+      st.listeners[`games_root_child_added_for_${clientId}`] = { ref: gamesAddedRef, handlers: { child_added: onGameChildAdded } };
+    }
+
+    function attachGameMoveListenersForStudent(clientId, boardId){
+      // query existing games where white===clientId OR black===clientId and attach to moves/{gameId}
+      const debug = getDebugElem(boardId);
       try{
-        const movesRef = db.ref(`games/${clientId}/moves`);
-        movesRef.limitToLast(500).once('value').then(snap => {
-          if(!snap.exists()) return;
-          const ordered = {};
-          snap.forEach(child => ordered[child.key] = child.val());
-          normalizeAndApply(boardId, { moves: ordered });
-        }).catch(()=>{});
-      }catch(e){}
+        // helper to attach for a found gameId
+        const attachIfNot = (gameId) => {
+          if(!gameId) return;
+          const st = boardsState[boardId];
+          if(!st) return;
+          if(st.gameMoveListeners && st.gameMoveListeners[gameId]) return; // already attached
+          attachMovesListenerForGame(gameId, boardId);
+        };
+
+        // query where white === clientId
+        gamesRef.orderByChild('white').equalTo(clientId).once('value').then(snap => {
+          snap.forEach(child => attachIfNot(child.key));
+        }).catch(e => debugText(debug, `games query (white) failed: ${e && e.message}`));
+
+        // query where black === clientId
+        gamesRef.orderByChild('black').equalTo(clientId).once('value').then(snap => {
+          snap.forEach(child => attachIfNot(child.key));
+        }).catch(e => debugText(debug, `games query (black) failed: ${e && e.message}`));
+      }catch(e){ debugText(debug, `attachGameMoveListenersForStudent error: ${e && e.message}`); }
+    }
+
+    function attachMovesListenerForGame(gameId, boardId){
+      if(!gameId) return;
+      const st = boardsState[boardId];
+      if(!st) return;
+      const debug = getDebugElem(boardId);
+      try{
+        const path = `moves/${gameId}`;
+        if(st.gameMoveListeners[path]) return; // already listening
+        const ref = db.ref(path);
+        const onChildAdded = snap => {
+          debugText(debug, `game-moves child_added @ ${path}/${snap.key}`);
+          const m = snap.val();
+          if(!m) return;
+          // ignore messages from this master
+          if(m.by === MASTER_ID) return;
+          const candidate = m.payload || m;
+          if(candidate && (candidate.move || candidate.fen)){
+            normalizeAndApply(boardId, candidate);
+          }
+        };
+        ref.on('child_added', onChildAdded, err => debugText(debug, `game-moves child_added error @ ${path}: ${err && err.message}`));
+        st.gameMoveListeners[path] = { ref, handlers: { child_added: onChildAdded } };
+        debugText(debug, `attached game moves listener -> ${path}`);
+      }catch(e){ debugText(debug, `attachMovesListenerForGame error: ${e && e.message}`); }
     }
 
     function stopWatching(boardId){
@@ -501,6 +554,7 @@
       const debug = getDebugElem(boardId);
       debugText(debug, `stopWatching (was ${st.watchedClientId || '-'})`);
       try{
+        // detach generic listeners
         Object.keys(st.listeners || {}).forEach(path => {
           const L = st.listeners[path];
           if(L && L.ref && L.handlers){
@@ -510,16 +564,23 @@
           }
         });
       }catch(e){ console.warn('teardown error', e); }
+      // detach game-move listeners
+      try{
+        Object.keys(st.gameMoveListeners || {}).forEach(path => {
+          const L = st.gameMoveListeners[path];
+          if(L && L.ref && L.handlers){
+            if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
+          }
+        });
+      }catch(e){ console.warn('gameMove teardown error', e); }
       st.listeners = {};
+      st.gameMoveListeners = {};
       st.watchedClientId = null;
       refreshBadge(boardId);
       try{ if(st.game && typeof st.game.load === 'function'){ st.game.load('start'); } if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position('start'); }catch(e){}
     }
 
     // ---------- normalization & apply (robust) ----------
-    // Copy here your normalizeAndApply, applyMovesChildList, tryApplyMoveShape, applyFenToBoard, applyMoveToBoard, getDebugElem, debugText
-    // (IDENTICAL to what you had in the original master.html). For brevity I include them below verbatim.
-
     function normalizeAndApply(boardId, record){
       const st = boardsState[boardId];
       const debug = getDebugElem(boardId);
