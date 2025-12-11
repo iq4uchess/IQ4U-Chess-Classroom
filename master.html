@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>Master — 4 Boards (List view)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     :root{ --card-gap:12px; --card-bg:#fff; --card-border:#ddd; --control-height:44px; font-family:Arial,Helvetica,sans-serif; color:#222;}
@@ -26,7 +27,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Master Dashboard — 4 Boards (List view)</h1>
+    <h1>Master Dashboard — Spectate Mode (Read-Only)</h1>
 
     <div class="boards-grid" id="boardsGrid"></div>
 
@@ -53,7 +54,7 @@
       projectId: "iq4u-chess-classroom",
       storageBucket: "iq4uchess-classroom.firebasedestorage.app",
       messagingSenderId: "833620718306",
-      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
+      appId: "1:833620718306:web:b599bb6936fe0da4bb"
     };
     try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
     const db = firebase.database();
@@ -118,8 +119,9 @@
     onlineRef.on('value', snap => {
       const val = snap.val() || {};
       for(const k in onlineMap) delete onlineMap[k];
-      for(const id in val){ if(!val.hasOwnProperty(id)) continue; onlineMap[id] = { email: val[id].email || id, role: val[id].role || 'student', ts: val[id].ts || Date.now() }; }
+      for(const id in val){ if(!val.hasOwnProperty(id)) continue; onlineMap[id] = { email: val[id].email || id, role: val[id].role || null, ts: val[id].ts || Date.now() }; }
       STUDENTS.forEach(s => populateSelectForBoard(s.id));
+      STUDENTS.forEach(s => updateMasterStudentsList(s.id));
       STUDENTS.forEach(s => refreshBadge(s.id));
     });
 
@@ -141,9 +143,9 @@
 
       const top = document.createElement('div'); top.className = 'top-strip';
       top.innerHTML = `<div class="controls"><span class="label-small">Size</span>
-        <input type="range" min="200" max="800" value="360" class="size-slider" data-sid="${student.id}">
+        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="360" class="size-slider" data-sid="${student.id}">
         <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
-        <select class="player-select" data-sid="${student.id}"><option value="">View students</option></select>
+        <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}"><option value="">View students</option></select>
       </div>`;
       card.appendChild(top);
 
@@ -155,7 +157,20 @@
       const debug = document.createElement('div'); debug.className = 'debug'; debug.textContent = 'ready';
       card.appendChild(debug);
 
-      // initialize state placeholder
+      // Add multiplayer panel at bottom of each card
+      const multiplayPanel = document.createElement('div');
+      multiplayPanel.className = 'multiplayer-panel';
+      multiplayPanel.style.cssText = 'margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-width:100%;';
+      multiplayPanel.innerHTML = `
+        <input id="master-username-${student.id}" name="master-username" type="text" placeholder="Your name" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; flex:1; min-width:120px;">
+        <button id="master-join-${student.id}" name="master-join-btn" style="padding:8px 12px; border-radius:6px; background:#0f172a; color:#fff; border:none; cursor:pointer;">Join Online</button>
+        <select id="master-students-${student.id}" name="master-students" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; flex:1; min-width:120px;"><option value="">Select student</option></select>
+        <button id="master-spectate-${student.id}" name="master-spectate-btn" style="padding:8px 12px; border-radius:6px; background:#0f172a; color:#fff; border:none; cursor:pointer;">Spectate</button>
+        <span id="master-status-${student.id}" style="font-size:12px; color:#666; flex:1; min-width:150px;"></span>
+      `;
+      card.appendChild(multiplayPanel);
+
+      // Initialize state for this board
       boardsState[student.id] = {
         size: 360,
         flip: false,
@@ -163,7 +178,9 @@
         listeners: {}, // path -> { ref, handlers }
         boardObj: null,
         game: null,
-        pieceTheme
+        pieceTheme,
+        masterUsername: '',
+        masterJoined: false
       };
 
       // controls wiring
@@ -184,7 +201,40 @@
       playerSelect.addEventListener('change', e => {
         const client = e.target.value || null;
         if(!client) stopWatching(student.id);
-        else startWatching(student.id, client);
+        else {
+          // Send spectate invite to student first
+          sendSpectateInvite(student.id, client);
+          // Do not auto-start watching here — wait for student's acceptance which will trigger response listener
+          const debug = getDebugElem(student.id); debugText(debug, `Invite sent -> waiting for response from ${client}`);
+        }
+      });
+
+      // Multiplayer panel event listeners for this board
+      const masterUsernameInput = multiplayPanel.querySelector(`#master-username-${student.id}`);
+      const masterJoinBtn = multiplayPanel.querySelector(`#master-join-${student.id}`);
+      const masterStudentsSelect = multiplayPanel.querySelector(`#master-students-${student.id}`);
+      const masterSpectateBtn = multiplayPanel.querySelector(`#master-spectate-${student.id}`);
+      const masterStatus = multiplayPanel.querySelector(`#master-status-${student.id}`);
+
+      masterJoinBtn.addEventListener('click', () => {
+        const username = (masterUsernameInput.value || '').trim();
+        if(!username) { alert('Enter your name'); return; }
+        boardsState[student.id].masterUsername = username;
+        boardsState[student.id].masterJoined = true;
+        masterStatus.textContent = `Joined as ${username}`;
+        masterJoinBtn.disabled = true;
+        masterUsernameInput.disabled = true;
+        // Populate students list
+        updateMasterStudentsList(student.id);
+      });
+
+      masterSpectateBtn.addEventListener('click', () => {
+        const selectedStudent = masterStudentsSelect.value;
+        if(!selectedStudent) { alert('Select a student'); return; }
+        // Send spectate invite
+        sendSpectateInvite(student.id, selectedStudent);
+        masterStatus.textContent = `Spectate invite sent to ${selectedStudent}`;
+        const debug = getDebugElem(student.id); debugText(debug, `Invite sent -> waiting for response from ${selectedStudent}`);
       });
 
       return card;
@@ -195,12 +245,11 @@
       if(!st) return;
       try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : null; }catch(e){ st.game = null; console.warn('Chess engine init failed', e); }
       try{
-        // create board with safe start state and piece theme
+        // create board as read-only spectate mode (draggable: false, no onDrop)
         st.boardObj = Chessboard('board_' + studentId, {
-          draggable: true,
+          draggable: false,
           position: st.game && typeof st.game.fen === 'function' ? st.game.fen() : 'start',
-          pieceTheme: st.pieceTheme,
-          onDrop: (source, target) => onMasterDrop(studentId, source, target)
+          pieceTheme: st.pieceTheme
         });
       }catch(e){ console.error('Chessboard init failed', e); }
       setBoardSize(studentId, st.size);
@@ -225,11 +274,19 @@
       const prev = sel.value;
       sel.innerHTML = '';
       const title = document.createElement('option'); title.value=''; title.textContent='View students'; sel.appendChild(title);
-      const onlineIds = Object.keys(onlineMap).filter(id => onlineMap[id].role && onlineMap[id].role.indexOf('student') !== -1);
+
+      // Include all online clients except the master itself. Prefer entries where role==='student'.
+      const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
       if(onlineIds.length === 0){
         const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); sel.value=''; return;
       }
-      onlineIds.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; sel.appendChild(opt); });
+      // first add those flagged as role === 'student', then others (so master sees students first)
+      const studentsFirst = onlineIds.filter(id => onlineMap[id] && onlineMap[id].role === 'student');
+      const others = onlineIds.filter(id => !(onlineMap[id] && onlineMap[id].role === 'student'));
+      const listToRender = studentsFirst.concat(others);
+      listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; sel.appendChild(opt); });
+
+      // prefer previously selected or the tracked watchedClientId
       const prefer = st.watchedClientId || prev;
       if(prefer && Array.from(sel.options).some(o => o.value === prefer)) sel.value = prefer; else sel.value = '';
     }
@@ -241,7 +298,7 @@
       const badgeHolder = card.querySelector('.badge-holder');
       const pathHolder = card.querySelector('.path-holder');
       badgeHolder.innerHTML = '';
-      pathHolder.textContent = st.watchedClientId ? `games/${st.watchedClientId}` : '';
+      pathHolder.textContent = st.watchedClientId ? `moves/${st.watchedClientId}` : '';
       if(!st.watchedClientId) return;
       const span = document.createElement('span');
       span.className = onlineMap[st.watchedClientId] ? 'online-badge' : 'offline-badge';
@@ -249,15 +306,113 @@
       badgeHolder.appendChild(span);
     }
 
+    function updateMasterStudentsList(boardId){
+      const st = boardsState[boardId];
+      if(!st) return;
+      const sel = document.querySelector(`#master-students-${boardId}`);
+      if(!sel) return;
+      sel.innerHTML = '';
+      const title = document.createElement('option'); title.value=''; title.textContent='Select student'; sel.appendChild(title);
+      // include all online except master (prefer role==='student')
+      const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
+      if(onlineIds.length === 0){
+        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); return;
+      }
+      const studentsFirst = onlineIds.filter(id => onlineMap[id] && onlineMap[id].role === 'student');
+      const others = onlineIds.filter(id => !(onlineMap[id] && onlineMap[id].role === 'student'));
+      const listToRender = studentsFirst.concat(others);
+      listToRender.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; sel.appendChild(opt); });
+    }
+
     // ---------- robust watching: attach to multiple candidate paths ----------
     const CANDIDATE_PATHS = ['','game','move','moves']; // will map to games/<id>/{path}
+
+    // Send spectate invite to a student (deterministic key under spectateInvites/<studentId>/<MASTER_ID>)
+    function sendSpectateInvite(boardId, clientId){
+      try{
+        if(!clientId) return;
+        const inviteRef = db.ref(`spectateInvites/${clientId}/${MASTER_ID}`);
+        const payload = {
+          type: 'spectate',
+          fromId: MASTER_ID,
+          fromEmail: MASTER_NAME,
+          boardId: boardId || null,
+          ts: firebase.database.ServerValue.TIMESTAMP
+        };
+        inviteRef.set(payload)
+          .then(() => {
+            const debug = getDebugElem(boardId);
+            if(debug) debugText(debug, `✓ Spectate invite sent to ${clientId}`);
+          })
+          .catch(err => {
+            const debug = getDebugElem(boardId);
+            if(debug) debugText(debug, `✗ Invite failed: ${err && err.message}`);
+          });
+
+        // auto-expire after 60s (optional)
+        setTimeout(() => { inviteRef.remove().catch(()=>{}); }, 60000);
+      }catch(e){
+        console.error('[MASTER] sendSpectateInvite error:', e);
+      }
+    }
+
+    // Listen for student responses to invites and auto-start watching accepted responses
+    (function listenForSpectateResponses(){
+      try{
+        const respPath = `spectateResponses/${MASTER_ID}`;
+        const respRef = db.ref(respPath);
+        respRef.on('child_added', snap => {
+          const resp = snap.val();
+          if(!resp) return;
+          const studentId = resp.studentId || snap.key;
+          const accepted = !!resp.accepted;
+          const boardId = resp.boardId || null;
+          const debugBoard = boardId || STUDENTS[0].id;
+          const debug = getDebugElem(debugBoard);
+          debugText(debug, `response from ${studentId}: accepted=${accepted}, boardId=${boardId}`);
+          if(accepted){
+            // choose target board: prefer explicit boardId, else try to map studentId to same-named board
+            const targetBoardId = boardId || findBoardForStudentId(studentId) || STUDENTS[0].id;
+            // set watchedClientId & refresh UI
+            boardsState[targetBoardId].watchedClientId = studentId;
+            refreshBadge(targetBoardId);
+
+            // ensure the player's select contains the option and set it
+            const sel = document.querySelector(`.player-select[data-sid="${targetBoardId}"]`);
+            if(sel){
+              if(!Array.from(sel.options).some(o => o.value === studentId)){
+                const opt = document.createElement('option');
+                opt.value = studentId;
+                opt.textContent = `${studentId} (auto)`;
+                sel.appendChild(opt);
+              }
+              sel.value = studentId;
+            }
+
+            // Start listening to student's moves
+            startWatching(targetBoardId, studentId);
+          } else {
+            debugText(getDebugElem(STUDENTS[0].id), `Spectate declined by ${studentId}`);
+          }
+          // remove the response node after handling
+          snap.ref.remove().catch(()=>{});
+        }, err => {
+          console.error('[MASTER] spectateResponses listener error', err);
+        });
+      }catch(e){ console.error('[MASTER] listenForSpectateResponses error', e); }
+
+      function findBoardForStudentId(studentId){
+        if(!studentId) return null;
+        for(const s of STUDENTS) if(s.id === studentId) return s.id;
+        return null;
+      }
+    })();
 
     function startWatching(boardId, clientId){
       const st = boardsState[boardId];
       if(!st) return;
       stopWatching(boardId); // teardown previous
       st.watchedClientId = clientId;
-      // reflect selection immediately
       try{ const sel = document.querySelector(`.player-select[data-sid="${boardId}"]`); if(sel) sel.value = clientId; }catch(e){}
       refreshBadge(boardId);
       const debug = getDebugElem(boardId); debugText(debug, `startWatching -> ${clientId}`);
@@ -272,7 +427,6 @@
           debugText(debug, `value @ ${path}`);
           const v = snap.val();
           if(!v) return;
-          // normalize and apply
           normalizeAndApply(boardId, v);
         };
         ref.on('value', onValue, err => debugText(debug, `value error @ ${path}: ${err && err.message}`));
@@ -281,23 +435,18 @@
         const onChildAdded = snap => {
           debugText(debug, `child_added @ ${path}/${snap.key}`);
           const v = snap.val();
-          // If path is moves or looks like a child-list, build small ordered object for safety
           if(p === 'moves' || typeof v === 'object'){
-            // If child looks like a move record, apply it; otherwise fetch full moves snapshot
-            // Try fast-apply first:
             const candidate = v && (v.payload || v);
             if(candidate && (candidate.move || candidate.fen || candidate.from)){
               normalizeAndApply(boardId, v);
             } else {
-              // fallback: re-fetch entire moves list
               try{ ref.limitToLast(500).once('value').then(snap2 => { const ordered = {}; snap2.forEach(child => ordered[child.key] = child.val()); normalizeAndApply(boardId, { moves: ordered }); }).catch(()=>{}); }catch(e){}
             }
           } else {
-            // non-moves child -> treat as a nested update
             normalizeAndApply(boardId, v);
           }
         };
-        // attach child_added only for list-like paths (moves) and non-root children; safe to attach everywhere
+        // attach child_added
         ref.on('child_added', onChildAdded, err => debugText(debug, `child_added error @ ${path}: ${err && err.message}`));
 
         // child_changed - apply updates
@@ -310,6 +459,29 @@
         // save for teardown
         st.listeners[path] = { ref, handlers: { value: onValue, child_added: onChildAdded, child_changed: onChildChanged } };
       });
+
+      // Also attach listener to moves/{clientId} for real-time move syncing
+      try{
+        const movesPath = `moves/${clientId}`;
+        const movesRef = db.ref(movesPath);
+        const onMoveAdded = snap => {
+          const debug = getDebugElem(boardId);
+          debugText(debug, `child_added @ ${movesPath}/${snap.key}`);
+          const m = snap.val();
+          if(!m) return;
+          if(m.by === MASTER_ID) return;
+          const candidate = m.payload || m;
+          if(candidate && (candidate.move || candidate.fen)){
+            normalizeAndApply(boardId, candidate);
+          }
+        };
+        movesRef.on('child_added', onMoveAdded, err => debugText(debug, `moves child_added error: ${err && err.message}`));
+        
+        // Store for teardown
+        if(!st.listeners[movesPath]){
+          st.listeners[movesPath] = { ref: movesRef, handlers: { child_added: onMoveAdded } };
+        }
+      }catch(e){ debugText(debug, `moves listener setup failed: ${e.message}`); }
 
       // initial one-shot fetch for moves if present
       try{
@@ -345,48 +517,42 @@
     }
 
     // ---------- normalization & apply (robust) ----------
+    // Copy here your normalizeAndApply, applyMovesChildList, tryApplyMoveShape, applyFenToBoard, applyMoveToBoard, getDebugElem, debugText
+    // (IDENTICAL to what you had in the original master.html). For brevity I include them below verbatim.
+
     function normalizeAndApply(boardId, record){
       const st = boardsState[boardId];
       const debug = getDebugElem(boardId);
       if(!st) return;
       try{
         if(record === null || typeof record === 'undefined'){ debugText(debug, 'normalize: empty'); return; }
-        // If record is a string -> try fen
         if(typeof record === 'string'){ debugText(debug, 'normalize: string -> fen?'); applyFenToBoard(boardId, record); return; }
-        // If record has payload wrapper
         if(record.payload && typeof record.payload === 'object') record = record.payload;
 
-        // moves child-list shape
         if(record.moves && typeof record.moves === 'object' && Object.keys(record.moves).length > 0){
           debugText(debug, 'normalize: moves child-list detected');
-          // ensure ordered object by sorting keys by ts when possible
           applyMovesChildList(boardId, record.moves);
           return;
         }
 
-        // fen candidates
         const fenCandidates = ['fen','FEN','sfen','currentFen','position','board_fen','board'];
         for(const k of fenCandidates){ if(record[k] && typeof record[k] === 'string'){ debugText(debug, `normalize: found fen '${k}'`); applyFenToBoard(boardId, record[k]); return; } }
 
-        // single move shapes
         if(record.move){ debugText(debug, 'normalize: record.move'); tryApplyMoveShape(boardId, record.move, record.fen || null); return; }
 
         const directMoveFields = ['lastMove','last_move','last','moveString','move_uci','uci','from','to'];
         for(const k of directMoveFields){ if(record[k]){ debugText(debug, `normalize: found move field ${k}`); tryApplyMoveShape(boardId, record, record.fen || null); return; } }
 
-        // probe nested children (most-recent)
         const keys = Object.keys(record || {});
         for(let i = keys.length - 1; i >= 0; i--){
           const cand = record[keys[i]];
           if(cand && (cand.payload || cand.fen || cand.move || typeof cand === 'string')){ debugText(debug, 'normalize: probing nested ' + keys[i]); normalizeAndApply(boardId, cand); return; }
         }
 
-        // unknown shape - dump
         debugText(debug, 'normalize: unrecognized shape - dumped to debug');
       }catch(e){ debugText(debug, 'normalize error: ' + (e && e.message)); }
     }
 
-    // replay moves child-list object to reconstruct FEN (ordered by ts or key)
     function applyMovesChildList(boardId, movesObj){
       const st = boardsState[boardId];
       const debug = getDebugElem(boardId);
@@ -400,7 +566,6 @@
         });
         entries.sort((a,b) => (a.ts - b.ts) || (a.key < b.key ? -1 : (a.key > b.key ? 1 : 0)));
         debugText(debug, `replaying ${entries.length} moves`);
-        // reset engine and replay
         try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : st.game; }catch(e){ debugText(debug, 'engine reset failed'); }
         for(const e of entries){
           const mv = (e.payload && e.payload.move) || e.payload;
@@ -420,7 +585,6 @@
       }catch(e){ debugText(debug, 'applyMovesChildList error: ' + (e && e.message)); }
     }
 
-    // try to apply move shape strings / objects
     function tryApplyMoveShape(boardId, m, fallbackFen){
       const st = boardsState[boardId];
       const debug = getDebugElem(boardId);
@@ -479,22 +643,6 @@
       }catch(e){ debugText(debug, 'applyMoveToBoard error: ' + (e && e.message)); }
     }
 
-    // ---------- master move -> push into student's moves (same shape as student.html) ----------
-    function onMasterDrop(boardId, source, target){
-      const st = boardsState[boardId];
-      if(!st) return 'snapback';
-      if(!st.watchedClientId){ alert('Select a student in the "View students" select before making moves on this board.'); return 'snapback'; }
-      if(!st.game) return 'snapback';
-      const attempted = st.game.move({ from: source, to: target, promotion: 'q' });
-      if(attempted === null) return 'snapback';
-      if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen());
-      const node = db.ref('games/' + st.watchedClientId + '/moves').push();
-      const payload = { payload: { fen: st.game.fen(), move: { from: attempted.from, to: attempted.to, san: attempted.san, promotion: attempted.promotion || null } }, by: MASTER_ID, ts: Date.now() };
-      node.set(payload).catch(err => console.error('emit move failed', err));
-      return;
-    }
-
-    // ---------- debug helpers ----------
     function getDebugElem(boardId){ const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId); if(!card) return null; return card.querySelector('.debug'); }
     function debugText(el, msg){ if(!el) return console.debug('[master debug]', msg); el.textContent = (new Date()).toISOString() + ' - ' + msg + '\n' + el.textContent; console.debug('[master debug]', msg); }
 
