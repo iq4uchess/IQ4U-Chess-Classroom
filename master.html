@@ -1,1 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Master - 4 Boards List View (Prototype)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --card-gap: 12px;
+      --card-bg: #fff;
+      --card-border: #ddd;
+      --control-height: 44px;
+      --board-default: 570px;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #222;
+    }
+    body{ margin: 16px; background:#f5f7fb; }
+    h1{ margin-bottom: 12px;}
+    .container{ display:flex; flex-direction:column; gap:16px; max-width:1200px; margin:auto;}
+    .board-card{
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      box-shadow: 0 1px 3px rgba(20,30,40,0.05);
+    }
+    .top-strip{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      height: var(--control-height);
+    }
+    .top-left-label{ font-weight:600; flex:1; }
+    .controls { display:flex; gap:8px; align-items:center; }
+    .controls select, .controls button, .controls input[type=range]{
+      height:32px; padding:4px 8px; border-radius:6px; border:1px solid #ccc; background: #fff;
+    }
+    .boards-list{ display:flex; flex-direction:column; gap:var(--card-gap); }
+    .board-row { display:flex; gap:12px; align-items:flex-start; }
+    .board-canvas-wrap { position:relative; user-select:none; }
+    canvas.board { background: linear-gradient(45deg,#f0d9b5,#b58863); display:block; border-radius:6px; }
+    canvas.overlay { position:absolute; left:0; top:0; pointer-events:none; }
+    .stats { font-size:13px; color:#444; display:flex; gap:12px; }
+    .small { font-size:12px; color:#666; }
+    button.icon{ padding:6px 10px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Master Dashboard — 4 Boards (List view)</h1>
 
+    <div class="boards-list" id="boardsList">
+      <!-- Board cards will be injected here -->
+    </div>
+  </div>
+
+  <script>
+  /*********************************************************************
+   * Prototype: 4 boards list view + arrow/circle interactions per board
+   * - Right-click drag: draw arrow (red)
+   * - Right single-click: place red circle on square
+   * - Left-click: clear drawings
+   * - Flip button flips board visualization
+   * - Size slider controls board px width (default 570)
+   *
+   * Integration points (implement these to sync with Firebase / chess.js):
+   * - onDrawingsChange(boardId, drawings)   <-- call when master or student draws
+   * - onReceiveDrawings(boardId, drawings)  <-- call from firebase listener to update UI
+   * - onMakeMove(boardId, move)             <-- call when move is made (if implementing click-to-move)
+   *********************************************************************/
+
+  // Example student list (IDs and display names). Replace with real data.
+  const STUDENTS = [
+    { id: 'student1', name: 'Student 1' },
+    { id: 'student2', name: 'Student 2' },
+    { id: 'student3', name: 'Student 3' },
+    { id: 'student4', name: 'Student 4' },
+  ];
+
+  // State container for drawings per board (arrows and circles)
+  const boardsState = {};
+
+  // Helpers for board drawing
+  function createBoardCard(student) {
+    const card = document.createElement('div');
+    card.className = 'board-card';
+    card.dataset.studentId = student.id;
+
+    // Top strip
+    const top = document.createElement('div');
+    top.className = 'top-strip';
+    top.innerHTML = `
+      <div class="top-left-label">${student.name}</div>
+      <div class="controls">
+        <label class="small">Size</label>
+        <input type="range" min="200" max="800" value="${getDefaultSize()}" class="size-slider">
+        <button class="icon flip-btn" title="Flip board">Flip</button>
+        <select class="player-select">
+          <option value="${student.id}">View & Control ${student.name}</option>
+          <option value="student1">Student 1</option>
+          <option value="student2">Student 2</option>
+          <option value="student3">Student 3</option>
+          <option value="student4">Student 4</option>
+        </select>
+      </div>
+    `;
+    card.appendChild(top);
+
+    // Board area (canvas + overlay)
+    const wrap = document.createElement('div');
+    wrap.className = 'board-canvas-wrap';
+    wrap.style.width = getDefaultSize() + 'px';
+
+    const boardCanvas = document.createElement('canvas');
+    boardCanvas.className = 'board';
+    boardCanvas.width = getDefaultSize();
+    boardCanvas.height = getDefaultSize();
+    boardCanvas.style.width = getDefaultSize() + 'px';
+    boardCanvas.style.height = getDefaultSize() + 'px';
+
+    const overlay = document.createElement('canvas');
+    overlay.className = 'overlay';
+    overlay.width = boardCanvas.width;
+    overlay.height = boardCanvas.height;
+    overlay.style.width = boardCanvas.style.width;
+    overlay.style.height = boardCanvas.style.height;
+
+    wrap.appendChild(boardCanvas);
+    wrap.appendChild(overlay);
+    card.appendChild(wrap);
+
+    // Bottom quick stats
+    const stats = document.createElement('div');
+    stats.className = 'stats';
+    stats.innerHTML = `<div class="small">Solved: 0</div><div class="small">Wrong: 0</div><div class="small">Attempted: 0</div>`;
+    card.appendChild(stats);
+
+    // initialize state
+    boardsState[student.id] = {
+      size: getDefaultSize(),
+      flip: false,
+      arrows: [], // {from: [r,c], to: [r,c]}
+      circles: [], // {sq: [r,c]}
+      canvasRefs: { boardCanvas, overlay, wrap, card },
+    };
+
+    // Attach interaction handlers
+    attachBoardHandlers(student.id);
+
+    return card;
+  }
+
+  function getDefaultSize(){ return 570; }
+
+  // Add all four boards (list view vertical)
+  const boardsList = document.getElementById('boardsList');
+  STUDENTS.forEach(s => {
+    const card = createBoardCard(s);
+    boardsList.appendChild(card);
+    renderBoard(s.id);
+    renderOverlay(s.id);
+  });
+
+  /***********************
+   * Canvas renderers
+   ***********************/
+  function renderBoard(boardId){
+    const st = boardsState[boardId];
+    const canvas = st.canvasRefs.boardCanvas;
+    const ctx = canvas.getContext('2d');
+    const size = st.size;
+    canvas.width = size;
+    canvas.height = size;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+
+    // draw 8x8 squares (simple)
+    const sq = size / 8;
+    for(let r=0;r<8;r++){
+      for(let c=0;c<8;c++){
+        const isLight = (r + c) % 2 === 0;
+        ctx.fillStyle = isLight ? '#f0d9b5' : '#b58863';
+        ctx.fillRect(c*sq, r*sq, sq, sq);
+      }
+    }
+
+    // placeholder pieces (optional) - we'll not draw real pieces in prototype
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.font = `${Math.round(sq*0.35)}px sans-serif`;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText('board', size/2, size/2);
+  }
+
+  function renderOverlay(boardId){
+    const st = boardsState[boardId];
+    const overlay = st.canvasRefs.overlay;
+    overlay.width = st.size;
+    overlay.height = st.size;
+    overlay.style.width = st.size + 'px';
+    overlay.style.height = st.size + 'px';
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0,0,overlay.width, overlay.height);
+
+    // draw circles
+    const sq = st.size / 8;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'red';
+    st.circles.forEach(circ => {
+      const [r,c] = circ.sq;
+      const cx = c*sq + sq/2;
+      const cy = r*sq + sq/2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(8, sq*0.18), 0, Math.PI*2);
+      ctx.stroke();
+    });
+
+    // draw arrows
+    ctx.strokeStyle = 'red';
+    ctx.fillStyle = 'red';
+    ctx.lineWidth = Math.max(3, st.size * 0.006);
+    st.arrows.forEach(a => {
+      const [r1,c1] = a.from;
+      const [r2,c2] = a.to;
+      const x1 = c1*sq + sq/2;
+      const y1 = r1*sq + sq/2;
+      const x2 = c2*sq + sq/2;
+      const y2 = r2*sq + sq/2;
+      drawArrow(ctx, x1,y1,x2,y2);
+    });
+  }
+
+  // draw arrow with simple triangle head
+  function drawArrow(ctx, x1,y1,x2,y2){
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
+
+    // head triangle
+    const angle = Math.atan2(y2-y1, x2-x1);
+    const headLen = 12;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen*Math.cos(angle - Math.PI/6), y2 - headLen*Math.sin(angle - Math.PI/6));
+    ctx.lineTo(x2 - headLen*Math.cos(angle + Math.PI/6), y2 - headLen*Math.sin(angle + Math.PI/6));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /***********************
+   * Interaction handlers
+   ***********************/
+  function attachBoardHandlers(boardId){
+    const st = boardsState[boardId];
+    const { boardCanvas, overlay, wrap, card } = st.canvasRefs;
+
+    // Controls inside card
+    const sizeSlider = card.querySelector('.size-slider');
+    const flipBtn = card.querySelector('.flip-btn');
+    const playerSelect = card.querySelector('.player-select');
+
+    sizeSlider.addEventListener('input', e => {
+      const sz = Number(e.target.value);
+      st.size = sz;
+      wrap.style.width = sz + 'px';
+      renderBoard(boardId);
+      renderOverlay(boardId);
+      // persist this as master-only view preference if needed (call Firebase)
+      // e.g., onViewSettingChange(boardId, { size: sz })
+    });
+
+    flipBtn.addEventListener('click', () => {
+      st.flip = !st.flip;
+      // In this simple render, flip would mirror the overlay drawing coordinates.
+      // We'll flip by setting CSS transform on the board canvas wrapper
+      if(st.flip){
+        wrap.style.transform = 'rotate(180deg)';
+      } else {
+        wrap.style.transform = '';
+      }
+      renderOverlay(boardId);
+    });
+
+    playerSelect.addEventListener('change', (e) => {
+      // selected student to control/view - implementation dependent
+      console.log('selected player for control:', e.target.value);
+      // Optionally open control modal for that student
+    });
+
+    // prevent default context menu for the board area
+    boardCanvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
+
+    // Right mouse handling: differentiate click vs drag
+    let rightDown = false;
+    let rightDragStarted = false;
+    let dragFrom = null; // square from
+    let lastMousePos = null;
+
+    overlay.addEventListener('mousedown', (ev) => {
+      if (ev.button === 2) { // right button down
+        rightDown = true;
+        rightDragStarted = false;
+        lastMousePos = getMousePosOnCanvas(ev, overlay, st.flip);
+        dragFrom = coordsToSquare(lastMousePos.x, lastMousePos.y, st.size);
+        // stop propagation to avoid selecting page elements
+        ev.preventDefault();
+      } else if (ev.button === 0) { // left click -> clear drawings
+        st.arrows = [];
+        st.circles = [];
+        renderOverlay(boardId);
+        // Send update to remote (Firebase)
+        onDrawingsChange(boardId, { arrows: st.arrows, circles: st.circles });
+      }
+    });
+
+    overlay.addEventListener('mousemove', (ev) => {
+      if(!rightDown) return;
+      const pos = getMousePosOnCanvas(ev, overlay, st.flip);
+      const sqPos = coordsToSquare(pos.x, pos.y, st.size);
+      // if moved sufficiently, treat as drag/draw
+      if(!rightDragStarted){
+        const dx = pos.x - (lastMousePos ? lastMousePos.x : pos.x);
+        const dy = pos.y - (lastMousePos ? lastMousePos.y : pos.y);
+        if(Math.hypot(dx,dy) > 6){
+          rightDragStarted = true;
+        }
+      }
+      lastMousePos = pos;
+    });
+
+    overlay.addEventListener('mouseup', (ev) => {
+      if (ev.button !== 2) return;
+      rightDown = false;
+      const pos = getMousePosOnCanvas(ev, overlay, st.flip);
+      const squareTo = coordsToSquare(pos.x, pos.y, st.size);
+      if(rightDragStarted){
+        // add an arrow from dragFrom -> squareTo
+        st.arrows.push({ from: dragFrom, to: squareTo });
+        renderOverlay(boardId);
+        onDrawingsChange(boardId, { arrows: st.arrows, circles: st.circles });
+      } else {
+        // it's a single right-click (no drag) => toggle circle on that square
+        // remove if exists or add
+        const existingIdx = st.circles.findIndex(c=>c.sq[0]===squareTo[0] && c.sq[1]===squareTo[1]);
+        if(existingIdx >= 0) st.circles.splice(existingIdx,1);
+        else st.circles.push({ sq: squareTo });
+        renderOverlay(boardId);
+        onDrawingsChange(boardId, { arrows: st.arrows, circles: st.circles });
+      }
+      rightDragStarted = false;
+      dragFrom = null;
+      ev.preventDefault();
+    });
+
+    // If the user releases the right button outside the canvas, catch it globally to avoid stuck state.
+    window.addEventListener('mouseup', (ev) => {
+      if(ev.button === 2 && rightDown){
+        rightDown = false;
+        rightDragStarted = false;
+        dragFrom = null;
+      }
+    });
+
+    // Prevent context menu on overlay too
+    overlay.addEventListener('contextmenu', (ev)=> ev.preventDefault());
+  }
+
+  /***********************
+   * Utilities
+   ***********************/
+  function getMousePosOnCanvas(ev, canvas, flipped){
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    // convert to canvas coordinate (accounting for CSS scaled sizes)
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = x * scaleX;
+    const cy = y * scaleY;
+    if(flipped){
+      return { x: canvas.width - cx, y: canvas.height - cy };
+    }
+    return { x: cx, y: cy };
+  }
+
+  function coordsToSquare(x, y, size){
+    const sq = size / 8;
+    let c = Math.floor(x / sq);
+    let r = Math.floor(y / sq);
+    // clamp
+    c = Math.max(0, Math.min(7, c));
+    r = Math.max(0, Math.min(7, r));
+    return [r, c];
+  }
+
+  /***********************
+   * Sync hooks (stubs)
+   ***********************/
+  // Called whenever the local master (or local student) changes drawings for a board.
+  // Implement this to push drawings to Firebase (or other realtime service).
+  function onDrawingsChange(boardId, drawings){
+    console.log('[onDrawingsChange] board:', boardId, drawings);
+    // Example: firebase.database().ref(`/games/${boardId}/drawings`).set(drawings);
+  }
+
+  // Called when external updates arrive (from Firebase listener).
+  // Use this to update local state and re-render (called by your firebase listener code).
+  function onReceiveDrawings(boardId, drawings){
+    const st = boardsState[boardId];
+    if(!st) return;
+    st.arrows = drawings.arrows || [];
+    st.circles = drawings.circles || [];
+    renderOverlay(boardId);
+  }
+
+  // Called when a move is made by master in the control UI (not implemented here).
+  // Implement integration with chess.js or your move pipeline.
+  function onMakeMove(boardId, move){
+    console.log('[onMakeMove] board:', boardId, 'move:', move);
+    // Example: validate with chess.js then push to DB
+    // firebase.database().ref(`/games/${boardId}/moves`).push(move);
+  }
+
+  // Example: How you would wire an incoming firebase update to onReceiveDrawings
+  // firebase.database().ref(`/games/${boardId}/drawings`).on('value', snap => onReceiveDrawings(boardId, snap.val()));
+
+  </script>
+</body>
+</html>
