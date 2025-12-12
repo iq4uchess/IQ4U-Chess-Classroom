@@ -4,31 +4,37 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Puzzle (student2)</title>
+  <title>IQ4U — Student Puzzle (student2) — fallback-enabled</title>
 
-  <!-- chessboard CSS -->
+  <!-- chessboard CSS (kept; used when chessboard works) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
   <style>
     html,body{ overscroll-behavior-y: contain; height:100%; }
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
-    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:920px; width:100%; box-sizing:border-box; }
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; margin-bottom:10px; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .small{ font-size:13px; color:#555; }
     .muted{ color:#666; font-size:13px; }
-    .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
     #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; }
-    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; min-width:320px; min-height:320px; }
-    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
+    #board{ width:100%; aspect-ratio:1/1; border:1px solid #e6eefc; background:#fff; box-sizing:border-box; max-height:80vh; min-width:320px; min-height:320px; display:block; }
     .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-    .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
-    .promote-modal .row{ display:flex; gap:8px; align-items:center; justify-content:center; }
-    .promote-modal button{ min-width:44px; min-height:44px; font-weight:700; }
-    .logout-btn { background:#dc2626; }
-    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
-    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
-    .chessboard-1x1 .piece { max-width:100%; height:auto; display:block; }
-    @media (max-width:900px){ #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; } .resizer .range{ width:140px; } }
+    .promote-modal{ display:none; }
+    .fallback-board { display:grid; grid-template-columns: repeat(8, 1fr); width:100%; height:100%; }
+    .square {
+      position:relative; box-sizing:border-box; display:flex; align-items:center; justify-content:center; font-size:32px;
+      user-select:none;
+    }
+    .light { background:#f0d9b5; }
+    .dark { background:#b58863; color:#111; }
+    .coord { position:absolute; bottom:4px; left:4px; font-size:10px; opacity:0.7; }
+    .flip { transform: rotate(180deg); }
+    /* responsive font for pieces */
+    @media (max-width:900px){
+      .square { font-size: calc(12px + 3vw); }
+    }
+    .controls .status { margin-left:auto; font-size:13px; color:#666; }
   </style>
 </head>
 <body>
@@ -44,76 +50,56 @@
     })();
   </script>
 
-  <div class="panel" style="width:100%; max-width:920px;">
-    <div id="board-wrapper">
-      <div id="board" aria-label="Chessboard container"></div>
+  <div class="panel" style="max-width:920px;">
+    <div class="controls">
+      <button id="undoBtn">Undo</button>
+      <button id="flipBtn">Flip</button>
+      <button id="resignBtn" style="background:#8b0f0f;">Resign</button>
+      <button id="logoutBtn" style="background:#dc2626;">Logout</button>
+      <div class="status" id="libStatus">Initializing…</div>
     </div>
 
-    <div class="info" id="msg" aria-live="polite"></div>
+    <div id="board-wrapper" class="panel" style="padding:10px;">
+      <!-- chessboard.js target -->
+      <div id="board" aria-label="Chessboard container"></div>
+      <!-- fallback board will be inserted dynamically into #board when needed -->
+    </div>
+
+    <div id="msg" class="info" aria-live="polite"></div>
 
     <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
   </div>
 
-  <div class="panel" id="puzzlePanel" style="max-width:920px; margin-top:18px;">
+  <!-- puzzle panel -->
+  <div class="panel" style="margin-top:18px; max-width:920px;">
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <label class="small" for="tacticSelect">Tactic:</label>
-      <select id="tacticSelect"><option value="">— Loading tactics —</option></select>
+      <label class="small">Tactic:</label>
+      <select id="tacticSelect"><option>— Loading —</option></select>
 
-      <label class="small" for="ratingMin">Min rating:</label>
-      <select id="ratingMin" title="Minimum rating">
-        <option>0</option><option>600</option><option>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option>
-      </select>
+      <label class="small">Min rating:</label>
+      <select id="ratingMin"><option>0</option><option>600</option><option selected>800</option><option>1000</option><option>1200</option></select>
 
-      <label class="small" for="ratingMax">Max rating:</label>
-      <select id="ratingMax" title="Maximum rating">
-        <option>99999</option><option>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option><option>2400</option>
-      </select>
+      <label class="small">Max rating:</label>
+      <select id="ratingMax"><option>99999</option><option>1000</option><option selected>2200</option><option>2400</option></select>
 
-      <button id="loadPuzzleBtn">Load (first match)</button>
+      <button id="loadPuzzleBtn">Load (first)</button>
       <button id="randomPuzzleBtn">Random</button>
     </div>
-    <div id="puzzleInfo" class="muted small">No puzzle loaded</div>
+    <div id="puzzleInfo" class="muted small" style="margin-top:8px;">No puzzle loaded</div>
   </div>
 
-  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;">
-    <div style="display:flex; gap:8px; align-items:center;">
-      <label for="emailInputBottom" class="small">Your username:</label>
-      <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
-      <button id="joinBtnBottom">Join Online</button>
-    </div>
-    <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
-      <div id="multiplayStatus" class="muted">Not connected</div>
-      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
-    </div>
-  </div>
-
-  <div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
-    <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
-    <div class="row">
-      <button data-piece="q">Q</button>
-      <button data-piece="r">R</button>
-      <button data-piece="b">B</button>
-      <button data-piece="n">N</button>
-    </div>
-  </div>
-
-  <!-- libs: jQuery, chessboard -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- libs (chessboard.js and chess.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
-
-  <!-- IMPORTANT: load chess.js (engine) BEFORE main script that uses Chess.
-       Using a stable CDN version that exports global `Chess`. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
-  <!-- Main page script (puzzle loader + board init). It waits for Chess & Chessboard. -->
   <script>
   (function(){
-    // config: update these if your site path differs
-    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
-    const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
+    // --- CONFIG ---
+    const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json'; // Option A list
+    // --------------
 
     // DOM refs
-    const boardWrapper = document.getElementById('board-wrapper');
+    const libStatus = document.getElementById('libStatus');
     const boardEl = document.getElementById('board');
     const msgEl = document.getElementById('msg');
     const movesList = document.getElementById('movesList');
@@ -123,233 +109,221 @@
     const loadPuzzleBtn = document.getElementById('loadPuzzleBtn');
     const randomPuzzleBtn = document.getElementById('randomPuzzleBtn');
     const puzzleInfo = document.getElementById('puzzleInfo');
-
-    // controls
     const undoBtn = document.getElementById('undoBtn');
     const flipBtn = document.getElementById('flipBtn');
     const resignBtn = document.getElementById('resignBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
 
     // state
-    let board = null, game = null, pendingPromo = null;
+    let boardInstance = null;     // chessboard.js instance if created
+    let useFallback = false;      // whether fallback renderer is active
+    let fallbackFlip = false;
+    let game = null;              // chess.js game instance (if loaded)
     let currentCandidateList = [];
-    let lastMoveSquares = [];
+
+    // unicode mapping for pieces (chess symbols)
+    const UNICODE = {
+      'P':'♙','N':'♘','B':'♗','R':'♖','Q':'♕','K':'♔',
+      'p':'♟','n':'♞','b':'♝','r':'♜','q':'♛','k':'♚'
+    };
 
     function setMsg(t, ms=0){
-      if(msgEl) msgEl.textContent = t||'';
+      if(msgEl) msgEl.textContent = t || '';
       if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
     }
 
-    // pieceTheme uses same-origin SVGs in repository
-    function pieceThemeFn(piece) {
-      return PIECES_BASE + piece + '.svg';
-    }
-
-    // ensure libs are present (Chessboard and Chess)
-    function libReady(timeout=3000){
-      return new Promise(resolve=>{
-        const start = Date.now();
-        (function check(){
-          if(typeof Chessboard !== 'undefined' && typeof Chess !== 'undefined') return resolve(true);
-          if(Date.now() - start > timeout) return resolve(false);
-          setTimeout(check,50);
-        })();
-      });
-    }
-
-    // create board; waits for libs; uses pieceTheme function
-    async function createBoard(initialFen){
-      const ok = await libReady(3000);
-      if(!ok){
-        console.warn('Libraries not ready: Chessboard or Chess missing.');
+    // Try to create normal chessboard.js board. If it fails or images blocked, fallback.
+    async function tryCreateBoard(){
+      // ensure chess.js exists
+      if(typeof Chess === 'undefined'){
+        libStatus.textContent = 'Chess lib missing';
+        useFallback = true;
+        createFallbackBoard();
+        return;
       }
-      if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
-      if(typeof game === 'undefined' || game===null){
-        if(typeof Chess !== 'undefined') game = new Chess();
-        else game = null;
-      }
-      if(initialFen && game && typeof game.load === 'function'){
-        try{ game.load(initialFen); }catch(e){}
-      }
-      try{
-        board = Chessboard('board', {
-          draggable: true,
-          position: game ? game.fen() : (initialFen || 'start'),
-          pieceTheme: pieceThemeFn,
-          onDrop: onDrop,
-          onSnapEnd: onSnapEnd
-        });
-      }catch(err){
-        console.error('Failed to create chessboard:', err);
-      }
-      setTimeout(()=>{ try{ if(board && typeof board.resize === 'function') board.resize(); }catch(e){} }, 60);
-      refreshNotation();
-    }
 
-    function onSnapEnd(){ if(board && game) board.position(game.fen()); }
-
-    // promotion dialog handlers
-    function showPromotionDialog(){ document.getElementById('promoteModal').style.display = 'block'; }
-    function hidePromotionDialog(){ document.getElementById('promoteModal').style.display = 'none'; }
-    document.getElementById('promoteModal').addEventListener('click', function(e){
-      if(e.target && e.target.dataset && e.target.dataset.piece){
-        const p = e.target.dataset.piece;
-        if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(p);
-        pendingPromo = null;
-        hidePromotionDialog();
+      // attempt to create chessboard (images may be blocked later)
+      try {
+        game = new Chess();
+      } catch(e){
+        game = null;
+        libStatus.textContent = 'Chess engine failed';
       }
-    });
 
-    // onDrop with promotion support
-    async function onDrop(source, target){
-      if(!game){ setMsg('Game engine not ready',900); return 'snapback'; }
-      const legal = game.moves({ verbose:true }) || [];
-      const candidate = legal.find(m => m.from === source && m.to === target && m.promotion);
-      let chosenPromo = null;
-      if(candidate){
-        chosenPromo = await new Promise(resolve => { pendingPromo = { from:source, to:target, resolve }; showPromotionDialog(); });
-        pendingPromo = null;
-        if(!chosenPromo) chosenPromo = 'q';
-      }
-      const moveObj = { from: source, to: target };
-      if(chosenPromo) moveObj.promotion = chosenPromo;
-      const mv = game.move(moveObj);
-      if(mv === null){ setMsg('Illegal move',900); return 'snapback'; }
-      if(board) board.position(game.fen());
-      refreshNotation();
-      setPersistentLastMove(mv.from, mv.to);
-      return;
-    }
-
-    // notation
-    function refreshNotation(){
-      try{
-        if(!movesList) return;
-        if(!game) { movesList.innerHTML = 'No moves yet.'; return; }
-        const hist = game.history() || [];
-        if(hist.length === 0){ movesList.innerHTML = 'No moves yet.'; return; }
-        movesList.innerHTML = '';
-        for(let i=0;i<hist.length;i+=2){
-          const no = Math.floor(i/2)+1;
-          const w = hist[i]||'';
-          const b = hist[i+1]||'';
-          const div = document.createElement('div');
-          div.className = 'move';
-          div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${ b ? ('\u00A0' + b) : '' }`;
-          movesList.appendChild(div);
-        }
-        movesList.scrollLeft = movesList.scrollWidth;
-      }catch(e){ console.warn('refreshNotation error', e); }
-    }
-
-    function setPersistentLastMove(src, tgt){
-      try{
-        lastMoveSquares.forEach(sq => {
-          const el = document.querySelector('.square-' + sq);
-          if(el) el.classList.remove('cb-last-move');
-        });
-      }catch(e){}
-      lastMoveSquares = [];
-      if(!src || !tgt) return;
-      ['square-' + src, 'square-' + tgt].forEach(cls => {
-        const el = document.querySelector('.' + cls);
-        if(el) el.classList.add('cb-last-move');
-        lastMoveSquares.push(cls.replace('square-',''));
-      });
-    }
-
-    // -------------------------
-    // Puzzle list (Option A)
-    // -------------------------
-    function normalizeHeaderCell(h){ return (h||'').toString().trim().toLowerCase().replace(/\s+/g,''); }
-    function splitCsvHeader(line){
-      const cols = [];
-      let cur = '', inQuote=false;
-      for (let i=0;i<line.length;i++){
-        const ch = line[i];
-        if(ch === '"'){ inQuote = !inQuote; continue; }
-        if(ch === ',' && !inQuote){ cols.push(normalizeHeaderCell(cur)); cur=''; continue; }
-        cur += ch;
-      }
-      cols.push(normalizeHeaderCell(cur));
-      return cols;
-    }
-    function parseCsvRowToObject(cols, line){
-      const vals = [];
-      let cur = '', inQuote=false;
-      for (let i=0;i<line.length;i++){
-        const ch = line[i];
-        if(ch === '"'){
-          if(inQuote && line[i+1] === '"'){ cur += '"'; i++; continue; }
-          inQuote = !inQuote; continue;
-        }
-        if(ch === ',' && !inQuote){ vals.push(cur); cur = ''; continue; }
-        cur += ch;
-      }
-      vals.push(cur);
-      const obj = {};
-      for(let i=0;i<cols.length;i++){
-        obj[cols[i]] = (vals[i] !== undefined) ? vals[i].trim() : '';
-      }
-      return obj;
-    }
-
-    async function streamCsvFilter(fileUrl, {minRating=0,maxRating=99999,onMatch=null,maxMatches=200} = {}){
-      try{
-        const resp = await fetch(fileUrl, {cache:'no-cache'});
-        if(!resp.ok) throw new Error('Fetch failed: ' + resp.status);
-        const reader = resp.body.getReader();
-        const dec = new TextDecoder('utf-8');
-        let { value, done } = await reader.read();
-        let buf = '';
-        let cols = null;
-        let rowNum = 0;
-        let matches = 0;
-        while(!done){
-          buf += dec.decode(value, {stream:true});
-          let lines = buf.split(/\r?\n/);
-          buf = lines.pop();
-          for(const line of lines){
-            if(!line) continue;
-            if(!cols){
-              cols = splitCsvHeader(line);
-              continue;
+      try {
+        if(typeof Chessboard !== 'undefined'){
+          // create board with a safe pieceTheme pointing to local path (if available).
+          // We still may be blocked if images are cross-origin; that's ok.
+          boardInstance = Chessboard('board', {
+            draggable: true,
+            position: game ? game.fen() : 'start',
+            pieceTheme: function(piece){ return '/IQ4U-Chess-Classroom/assets/pieces/cburnett/' + piece + '.svg'; },
+            onDrop: async function(s,t){
+              // default behavior: try move using chess.js; if not legal, snapback
+              if(!game) return 'snapback';
+              const mv = game.move({ from: s, to: t, promotion: 'q' });
+              if(mv === null) return 'snapback';
+              if(boardInstance) boardInstance.position(game.fen());
+              refreshNotation();
+            },
+            onSnapEnd: function(){ if(boardInstance && game) boardInstance.position(game.fen()); }
+          });
+          libStatus.textContent = 'Chessboard initialized';
+          // probe if piece images load (request wK as a quick test)
+          probePieceImage('/IQ4U-Chess-Classroom/assets/pieces/cburnett/wK.svg', (ok)=>{
+            if(!ok){
+              // try fallback to inline unicode
+              console.warn('Piece images failed to load; switching to fallback renderer.');
+              destroyChessboardIfAny();
+              useFallback = true;
+              createFallbackBoard();
+            } else {
+              // success: keep chessboard
+              useFallback = false;
             }
-            rowNum++;
-            try{
-              const rowObj = parseCsvRowToObject(cols, line);
-              const rstr = (rowObj['rating'] || '0').replace(/[^0-9]/g,'');
-              const rating = parseInt(rstr,10) || 0;
-              if(rating >= minRating && rating <= maxRating){
-                if(onMatch){
-                  const stop = await onMatch(rowObj, {fileUrl, rowNum});
-                  matches++;
-                  if(matches >= maxMatches) { reader.cancel().catch(()=>{}); return matches; }
-                  if(stop) { reader.cancel().catch(()=>{}); return matches; }
-                }
-              }
-            }catch(e){ console.warn('parse row error', e); }
+          });
+          return;
+        } else {
+          libStatus.textContent = 'Chessboard.js missing';
+          useFallback = true;
+          createFallbackBoard();
+        }
+      } catch(err){
+        console.warn('Chessboard init error', err);
+        useFallback = true;
+        createFallbackBoard();
+      }
+    }
+
+    function destroyChessboardIfAny(){
+      if(boardInstance && typeof boardInstance.destroy === 'function'){
+        try{ boardInstance.destroy(); }catch(e){}
+      }
+      boardInstance = null;
+      // clear DOM inside #board
+      while(boardEl.firstChild) boardEl.removeChild(boardEl.firstChild);
+    }
+
+    function probePieceImage(url, cb){
+      // probe the same-origin path (SVGs) or any URL — onerror indicates not available or blocked
+      const img = new Image();
+      let done=false;
+      img.onload = function(){ if(done) return; done=true; cb(true); };
+      img.onerror = function(){ if(done) return; done=true; cb(false); };
+      // set a timeout to avoid waiting forever
+      const to = setTimeout(()=>{ if(done) return; done=true; cb(false); }, 1500);
+      img.src = url + '?t=' + Date.now();
+    }
+
+    // ---- Fallback board renderer (grid + unicode) ----
+    function createFallbackBoard(){
+      destroyChessboardIfAny();
+      useFallback = true;
+      // create grid
+      const fallback = document.createElement('div');
+      fallback.className = 'fallback-board' + (fallbackFlip ? ' flip' : '');
+      fallback.style.width = '100%';
+      fallback.style.height = '100%';
+      // build 8x8 with coordinates a1 bottom-left
+      const files = ['a','b','c','d','e','f','g','h'];
+      const ranks = [8,7,6,5,4,3,2,1];
+      for(let r=0;r<8;r++){
+        for(let f=0;f<8;f++){
+          const sq = document.createElement('div');
+          const file = files[f], rank = ranks[r];
+          const coord = file + rank;
+          sq.className = 'square ' + (((r+f)%2===0)?'light':'dark');
+          // coord label
+          const coordSpan = document.createElement('div');
+          coordSpan.className = 'coord';
+          coordSpan.textContent = coord;
+          sq.appendChild(coordSpan);
+          sq.dataset.coord = coord;
+          fallback.appendChild(sq);
+        }
+      }
+      boardEl.appendChild(fallback);
+      // draw pieces based on current FEN (if Chess available)
+      renderPositionFromGame();
+      libStatus.textContent = 'Fallback board active';
+    }
+
+    function renderPositionFromGame(){
+      // find fallback grid
+      const fallback = boardEl.querySelector('.fallback-board');
+      if(!fallback) return;
+      // clear pieces (leave coord)
+      Array.from(fallback.children).forEach(cell=>{
+        // remove previous piece nodes but keep coord span
+        Array.from(cell.childNodes).forEach(n=>{
+          if(n.nodeType===3) cell.removeChild(n);
+        });
+        // remove any element with class 'pieceGlyph'
+        Array.from(cell.querySelectorAll('.pieceGlyph')).forEach(n=>n.remove());
+      });
+
+      let fenParts = null;
+      if(game && typeof game.fen === 'function'){
+        fenParts = game.fen().split(' ')[0];
+      } else {
+        // default start position FEN
+        fenParts = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
+      }
+      const rows = fenParts.split('/');
+      // rows correspond to ranks 8..1
+      for(let r=0;r<8;r++){
+        const row = rows[r];
+        let fileIndex = 0;
+        for(let i=0;i<row.length;i++){
+          const ch = row[i];
+          if(/[1-8]/.test(ch)){
+            fileIndex += parseInt(ch,10);
+          } else {
+            const files = ['a','b','c','d','e','f','g','h'];
+            const rank = 8 - r;
+            const file = files[fileIndex];
+            const coord = file + rank;
+            const cell = boardEl.querySelector('[data-coord="'+coord+'"]');
+            if(cell){
+              const glyph = document.createElement('div');
+              glyph.className = 'pieceGlyph';
+              glyph.style.fontSize = '1.6em';
+              glyph.textContent = UNICODE[ch] || '';
+              // insert before coord label
+              cell.insertBefore(glyph, cell.firstChild);
+            }
+            fileIndex++;
           }
-          ({ value, done } = await reader.read());
         }
-        if(buf && cols){
-          try{
-            const rowObj = parseCsvRowToObject(cols, buf);
-            const rstr = (rowObj['rating'] || '0').replace(/[^0-9]/g,'');
-            const rating = parseInt(rstr,10) || 0;
-            if(rating >= minRating && rating <= maxRating){
-              if(onMatch) await onMatch(rowObj, {fileUrl, rowNum});
-            }
-          }catch(e){}
-        }
-        return 0;
-      }catch(e){
-        console.warn('streamCsvFilter error', e);
-        return 0;
       }
     }
 
-    // load list and populate tactic select (manifest derived from filenames)
+    // flip fallback board
+    function flipFallbackBoard(){
+      const fallback = boardEl.querySelector('.fallback-board');
+      if(!fallback) return;
+      fallbackFlip = !fallbackFlip;
+      if(fallbackFlip) fallback.classList.add('flip'); else fallback.classList.remove('flip');
+    }
+
+    // update notation listing
+    function refreshNotation(){
+      if(!movesList) return;
+      if(!game || typeof game.history !== 'function'){ movesList.innerHTML = 'No moves yet.'; return; }
+      const hist = game.history() || [];
+      if(hist.length === 0){ movesList.innerHTML = 'No moves yet.'; return; }
+      movesList.innerHTML = '';
+      for(let i=0;i<hist.length;i+=2){
+        const no = Math.floor(i/2)+1;
+        const w = hist[i]||'';
+        const b = hist[i+1]||'';
+        const div = document.createElement('div');
+        div.className = 'move';
+        div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${ b ? ('\u00A0' + b) : '' }`;
+        movesList.appendChild(div);
+      }
+    }
+
+    // load puzzles_list.json (Option A) and populate tactics (derived from filenames)
     async function loadListAndPopulate(){
       try{
         const r = await fetch(LIST_URL, {cache:'no-cache'});
@@ -363,170 +337,234 @@
           manifest.tactics[key] = manifest.tactics[key] || [];
           manifest.tactics[key].push(fn);
         });
-
-        const tacticNames = Object.keys(manifest.tactics).sort((a,b)=>a.localeCompare(b));
         tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
-        tacticNames.forEach(t => {
+        Object.keys(manifest.tactics).sort().forEach(t=>{
           const opt = document.createElement('option');
           opt.value = t;
-          opt.textContent = t + ' (' + (manifest.tactics[t]||[]).length + ')';
+          opt.textContent = t + ' (' + manifest.tactics[t].length + ')';
           tacticSelect.appendChild(opt);
         });
-        if(tacticNames.length === 0) tacticSelect.innerHTML = '<option value="">No tactics available</option>';
-        puzzleInfo.textContent = 'List loaded (' + files.length + ' files).';
         window._clientManifest = manifest;
       }catch(e){
-        tacticSelect.innerHTML = '<option value="">List not available</option>';
-        puzzleInfo.textContent = 'Puzzle list could not be loaded. Ensure puzzles_list.json is present at: ' + LIST_URL;
         console.warn('list load failed', e);
+        tacticSelect.innerHTML = '<option>No list</option>';
       }
     }
 
-    async function buildCandidatesForTactic(tacticName){
-      puzzleInfo.textContent = 'Scanning puzzles for "'+tacticName+'" …';
-      currentCandidateList = [];
-      if(!window._clientManifest || !window._clientManifest.tactics || !window._clientManifest.tactics[tacticName]){
-        puzzleInfo.textContent = 'No files for that tactic available.';
-        return;
+    // CSV parsing helpers (same code as before)
+    function normalizeHeaderCell(h){ return (h||'').toString().trim().toLowerCase().replace(/\s+/g,''); }
+    function splitCsvHeader(line){
+      const cols = []; let cur=''; let inQuote=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(ch==='"'){ inQuote=!inQuote; continue; }
+        if(ch===',' && !inQuote){ cols.push(normalizeHeaderCell(cur)); cur=''; continue; }
+        cur += ch;
       }
-      const filenames = window._clientManifest.tactics[tacticName].slice();
-      const minR = parseInt(ratingMin.value,10) || 0;
-      const maxR = parseInt(ratingMax.value,10) || 99999;
-      const MAX_TOTAL = 400;
-      let total = 0;
-
-      for(const fname of filenames){
-        if(total >= MAX_TOTAL) break;
-        const entry = (window._clientManifest.entries||[]).find(e=>e.filename===fname) || {};
-        let fileUrl = entry.fileUrl || ('/IQ4U-Chess-Classroom/assets/puzzle/' + fname);
-        try{
-          await streamCsvFilter(fileUrl, {
-            minRating: minR,
-            maxRating: maxR,
-            maxMatches: 200,
-            onMatch: async (row, meta) => {
-              currentCandidateList.push({ row, meta:{ file: fname, fileUrl: fileUrl, rowNum: meta.rowNum } });
-              total++;
-              if(total >= MAX_TOTAL) return true;
-              return false;
-            }
-          });
-        }catch(e){
-          console.warn('stream error for', fileUrl, e);
+      cols.push(normalizeHeaderCell(cur));
+      return cols;
+    }
+    function parseCsvRowToObject(cols,line){
+      const vals=[]; let cur=''; let inQuote=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(ch==='"'){
+          if(inQuote && line[i+1]==='"'){ cur+='"'; i++; continue; }
+          inQuote=!inQuote; continue;
         }
+        if(ch===',' && !inQuote){ vals.push(cur); cur=''; continue; }
+        cur+=ch;
       }
-
-      if(currentCandidateList.length === 0){
-        puzzleInfo.textContent = 'No puzzles found for that tactic + rating.';
-      }else{
-        puzzleInfo.textContent = `${currentCandidateList.length} puzzles ready for "${tacticName}" (rating ${minR}-${maxR}). Use Load or Random to open one.`;
-      }
+      vals.push(cur);
+      const obj={};
+      for(let i=0;i<cols.length;i++) obj[cols[i]] = (vals[i]!==undefined)? vals[i].trim() : '';
+      return obj;
     }
 
-    async function loadPuzzleByCandidateIndex(idx){
-      const cand = currentCandidateList[idx];
-      if(!cand){ puzzleInfo.textContent = 'Invalid candidate index'; return; }
-      const raw = cand.row;
-      const fen = (raw['fen'] || '').trim();
-      const pgn = (raw['pgn'] || '').trim();
-      const movesCol = (raw['moves'] || '').trim();
-      const pid = raw['puzzleid'] || '';
-      const desc = pid || (raw['openingtags'] || raw['themes'] || '').slice(0,40) || ('Puzzle ' + (idx+1));
-      puzzleInfo.textContent = 'Loading ' + desc + ' …';
-
+    async function streamCsvFilter(fileUrl, {minRating=0,maxRating=99999,onMatch=null,maxMatches=200} = {}){
       try{
-        if(fen){
-          try{
-            if(typeof game !== 'undefined' && game && typeof game.load === 'function'){
-              game.load(fen);
-            } else if(typeof Chess !== 'undefined'){
-              game = new Chess(fen);
-            } else throw new Error('Chess library not available');
-            if(board) board.position(game.fen());
-            refreshNotation();
-            setPersistentLastMove('','');
-            puzzleInfo.textContent = `Loaded ${desc} (FEN)`;
-            return;
-          }catch(e){ console.warn('FEN load failed', e); }
-        }
-        if(pgn){
-          try{
-            if(typeof game !== 'undefined' && game && typeof game.load_pgn === 'function'){
-              game.reset();
-              const ok = game.load_pgn(pgn);
-              if(!ok) {
-                game.reset();
+        const resp = await fetch(fileUrl, {cache:'no-cache'});
+        if(!resp.ok) throw new Error('fetch failed ' + resp.status);
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder('utf-8');
+        let { value, done } = await reader.read();
+        let buf=''; let cols=null; let matches=0; let rowNum=0;
+        while(!done){
+          buf += dec.decode(value,{stream:true});
+          let lines = buf.split(/\r?\n/);
+          buf = lines.pop();
+          for(const line of lines){
+            if(!line) continue;
+            if(!cols){ cols = splitCsvHeader(line); continue; }
+            rowNum++;
+            const rowObj = parseCsvRowToObject(cols,line);
+            const rstr = (rowObj['rating']||'0').replace(/[^0-9]/g,'');
+            const rating = parseInt(rstr,10)||0;
+            if(rating >= minRating && rating <= maxRating){
+              if(onMatch){
+                const stop = await onMatch(rowObj, {fileUrl,rowNum});
+                matches++;
+                if(matches >= maxMatches){ reader.cancel().catch(()=>{}); return matches; }
+                if(stop){ reader.cancel().catch(()=>{}); return matches; }
               }
-            } else if(typeof Chess !== 'undefined'){
-              game = new Chess();
-              try{ game.load_pgn(pgn); }catch(e){}
-            } else throw new Error('Chess lib not available');
-            if(board) board.position(game.fen());
-            refreshNotation();
-            puzzleInfo.textContent = `Loaded ${desc} (PGN)`;
-            return;
-          }catch(e){ console.warn('PGN load failed', e); }
-        }
-        if(movesCol){
-          const sanOnly = movesCol.replace(/\d+\.+/g,'').replace(/\(/g,'').replace(/\)/g,'').replace(/,+/g,' ').trim();
-          const tokens = sanOnly.split(/\s+/).filter(t=>t && t.length>0);
-          if(tokens.length>0){
-            if(typeof Chess === 'undefined') throw new Error('Chess lib missing');
-            game = new Chess();
-            game.reset();
-            for(const san of tokens){
-              try{ game.move(san, { sloppy:true }); }catch(e){}
             }
-            if(board) board.position(game.fen());
-            refreshNotation();
-            puzzleInfo.textContent = `Loaded ${desc} (Moves)`;
-            return;
+          }
+          ({value,done} = await reader.read());
+        }
+        if(buf && cols){
+          const rowObj = parseCsvRowToObject(cols,buf);
+          const rstr = (rowObj['rating']||'0').replace(/[^0-9]/g,'');
+          const rating = parseInt(rstr,10)||0;
+          if(rating >= minRating && rating <= maxRating){
+            if(onMatch) await onMatch(rowObj, {fileUrl,rowNum});
           }
         }
-        puzzleInfo.textContent = 'Puzzle has no usable FEN/PGN/Moves';
+        return 0;
+      }catch(e){ console.warn('stream error', e); return 0; }
+    }
+
+    // build candidate list for selected tactic
+    async function buildCandidatesForTactic(tacticName){
+      puzzleInfo.textContent = 'Scanning…';
+      currentCandidateList = [];
+      if(!window._clientManifest || !window._clientManifest.tactics || !window._clientManifest.tactics[tacticName]){ puzzleInfo.textContent='None'; return; }
+      const files = window._clientManifest.tactics[tacticName];
+      const minR = parseInt(ratingMin.value,10)||0;
+      const maxR = parseInt(ratingMax.value,10)||99999;
+      let total = 0;
+      for(const fname of files){
+        if(total >= 400) break;
+        const fileUrl = '/IQ4U-Chess-Classroom/assets/puzzle/' + fname;
+        await streamCsvFilter(fileUrl, {
+          minRating: minR, maxRating: maxR, maxMatches:200,
+          onMatch: async (row,meta)=>{
+            currentCandidateList.push({row,meta});
+            total++;
+            if(total >= 400) return true;
+            return false;
+          }
+        });
+      }
+      puzzleInfo.textContent = `${currentCandidateList.length} puzzles found`;
+    }
+
+    // load puzzle by index (first/random)
+    async function loadPuzzleByCandidateIndex(idx){
+      const cand = currentCandidateList[idx];
+      if(!cand){ puzzleInfo.textContent='No puzzle'; return; }
+      const raw = cand.row;
+      const fen = (raw['fen']||'').trim();
+      const pgn = (raw['pgn']||'').trim();
+      const moves = (raw['moves']||'').trim();
+      const desc = raw['puzzleid'] || raw['themes'] || 'Puzzle';
+      puzzleInfo.textContent = 'Loading ' + desc;
+      // ensure chess engine exists
+      if(typeof Chess === 'undefined'){
+        // no chess engine: show quick FEN fallback by drawing fen string (render pieces from fen)
+        try{
+          // create minimal fen->grid rendering without chess.js
+          // parse fen and update fallback board
+          parseFenToFallback(fen);
+        }catch(e){ console.warn('fallback fen render failed', e); }
+        return;
+      }
+      // use chess.js to load fen/pgn/moves
+      try{
+        if(fen){
+          if(!game) game = new Chess();
+          game.load(fen);
+        } else if(pgn){
+          if(!game) game = new Chess();
+          try{ game.load_pgn(pgn); }catch(e){ console.warn('load_pgn failed', e); game.reset(); }
+        } else if(moves){
+          if(!game) game = new Chess();
+          game.reset();
+          const sanOnly = moves.replace(/\d+\.+/g,'').replace(/\(/g,'').replace(/\)/g,'').replace(/,+/g,' ').trim();
+          const tokens = sanOnly.split(/\s+/).filter(t=>t);
+          for(const san of tokens) try{ game.move(san, { sloppy:true }); }catch(e){}
+        } else {
+          // nothing usable
+          puzzleInfo.textContent = 'Puzzle has no FEN/PGN/Moves';
+          return;
+        }
+
+        // update board (chessboard.js or fallback)
+        if(boardInstance && typeof boardInstance.position === 'function'){
+          boardInstance.position(game.fen());
+        } else {
+          // ensure fallback board exists
+          if(!boardEl.querySelector('.fallback-board')) createFallbackBoard();
+          renderPositionFromGame();
+        }
+        refreshNotation();
+        puzzleInfo.textContent = 'Loaded: ' + desc;
       }catch(e){
-        console.warn('load candidate error', e);
-        puzzleInfo.textContent = 'Error loading puzzle: ' + (e.message || e);
+        console.warn('load puzzle error', e);
+        puzzleInfo.textContent = 'Load error: ' + (e.message||'');
       }
     }
 
-    function loadFirstCandidate(){ if(currentCandidateList.length===0){ puzzleInfo.textContent='No candidate puzzles.'; return; } loadPuzzleByCandidateIndex(0); }
-    function loadRandomCandidate(){ if(currentCandidateList.length===0){ puzzleInfo.textContent='No candidate puzzles.'; return; } const idx = Math.floor(Math.random()*currentCandidateList.length); loadPuzzleByCandidateIndex(idx); }
+    // if chess.js missing parse FEN and display on fallback board
+    function parseFenToFallback(fen){
+      if(!fen) return;
+      // create fallback if needed
+      if(!boardEl.querySelector('.fallback-board')) createFallbackBoard();
+      // temporary fake game: create minimal structure with fen
+      // reuse renderPositionFromGame by creating a temporary game-like object:
+      try{
+        // quick replacement: create a minimal object whose fen() returns fen
+        const savedGame = game;
+        game = { fen: () => fen, history: () => [] };
+        renderPositionFromGame();
+        game = savedGame;
+      }catch(e){ console.warn(e); }
+    }
 
-    // UI wiring
-    tacticSelect.addEventListener('change', function(){ const t = tacticSelect.value; if(!t){ puzzleInfo.textContent = 'Pick a tactic'; currentCandidateList = []; return; } buildCandidatesForTactic(t); });
-    ratingMin.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
-    ratingMax.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
-
-    loadPuzzleBtn.addEventListener('click', loadFirstCandidate);
-    randomPuzzleBtn.addEventListener('click', loadRandomCandidate);
+    // UI events
+    tacticSelect.addEventListener('change', ()=>{ const t = tacticSelect.value; if(!t) return; buildCandidatesForTactic(t); });
+    loadPuzzleBtn.addEventListener('click', ()=>{ loadPuzzleByCandidateIndex(0); });
+    randomPuzzleBtn.addEventListener('click', ()=>{ if(currentCandidateList.length===0) { puzzleInfo.textContent='No puzzles'; return; } const i = Math.floor(Math.random()*currentCandidateList.length); loadPuzzleByCandidateIndex(i); });
 
     // basic controls
-    undoBtn.addEventListener('click', ()=>{ if(!game) return; const mv = game.undo(); if(mv){ if(board) board.position(game.fen()); refreshNotation(); setMsg('Undid move',900); } });
-    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(()=>{ try{ if(board && typeof board.resize === 'function') board.resize(); }catch(e){} }, 30); });
-    resignBtn.addEventListener('click', ()=>{ if(!game) return; game.reset(); if(board) board.position('start'); refreshNotation(); setMsg('You resigned — game reset',1500); currentCandidateList=[]; puzzleInfo.textContent='No puzzle loaded'; });
-    logoutBtn.addEventListener('click', ()=>{ try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){} window.location.href = 'index.html'; });
-
-    // bootstrap
-    (async function init(){
-      // check libs are loaded and create board
-      const libOk = await libReady(3000);
-      if(!libOk){
-        console.error('Required libraries missing. Ensure chess.min.js and chessboard.js are loaded.');
-        setMsg('Error: required libraries are not loaded. See console.', 0);
+    undoBtn.addEventListener('click', ()=>{
+      if(!game || typeof game.undo !== 'function') return;
+      const mv = game.undo();
+      if(mv){
+        if(boardInstance && typeof boardInstance.position === 'function') boardInstance.position(game.fen());
+        else renderPositionFromGame();
+        refreshNotation();
       }
-      await createBoard();
-      if(ratingMin) ratingMin.value = '800';
-      if(ratingMax) ratingMax.value = '2200';
-      loadListAndPopulate();
-      setMsg('Ready', 700);
+    });
+    flipBtn.addEventListener('click', ()=>{
+      if(boardInstance && boardEl.querySelector('.chessboard') ){
+        // flip chessboard.js if available
+        try{ boardInstance.flip(); }catch(e){}
+      }
+      // flip fallback
+      flipFallbackBoard();
+    });
+    resignBtn.addEventListener('click', ()=>{
+      if(game && typeof game.reset === 'function') game.reset();
+      if(boardInstance && typeof boardInstance.position === 'function') boardInstance.position('start');
+      else renderPositionFromGame();
+      refreshNotation();
+      puzzleInfo.textContent = 'Resigned / reset';
+    });
+
+    // boot sequence
+    (async function boot(){
+      setMsg('');
+      // try create Chessboard first; if it fails, fallback will render
+      await tryCreateBoard();
+      // load list
+      await loadListAndPopulate();
+      setMsg('Ready');
     })();
 
-    // expose for debugging
-    window._puzzleLoader = { manifest: () => window._clientManifest || null, getCandidates: () => currentCandidateList };
+    // expose debug helpers
+    window._puzzleLoader = { candidates: () => currentCandidateList, manifest: () => window._clientManifest || null };
 
   })();
   </script>
-
 </body>
 </html>
