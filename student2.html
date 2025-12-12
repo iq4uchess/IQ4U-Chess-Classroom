@@ -14,29 +14,37 @@
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; width:100%; justify-content:center; }
-    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:920px; width:100%; box-sizing:border-box; }
+    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:980px; width:100%; box-sizing:border-box; }
     .small{ font-size:13px; color:#555; }
     .muted{ color:#666; font-size:13px; }
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
+    .board-top{ grid-column: 1 / -1; display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; }
     .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
-    #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; }
+    #board-wrapper{ width:100%; max-width:760px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; padding:16px; }
     #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
-    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:88vh; min-width:520px; min-height:520px; box-shadow: 0 6px 18px rgba(2,6,23,0.04); border-radius:8px; padding:6px; }
     .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
-    .resizer .range{ width:260px; }
+    .resizer .range{ width:320px; }
     .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
     textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
     .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
+    .tactic-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .tactic-row select, .tactic-row button { min-height:36px; }
+    @media (max-width:1100px){
+      #board{ min-width:420px; min-height:420px; }
+      #board-wrapper{ max-width:640px; }
+      .resizer .range{ width:260px; }
+    }
     @media (max-width:900px){
       .container{ grid-template-columns:1fr; padding:0 12px; gap:12px; }
-      #board-wrapper{ max-width:100%; }
-      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
+      #board-wrapper{ max-width:100%; padding:8px; }
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
       .resizer .range{ width:140px; }
       button { padding:10px 14px; font-size:15px; }
       .controls { flex-wrap:wrap; gap:12px; }
     }
-    .multiplayer-panel { margin-top: 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:920px; }
+    .multiplayer-panel { margin-top: 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:980px; }
     .multiplayer-panel input[type="text"] { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
     .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
@@ -50,6 +58,9 @@
     .arrow-line { stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
     .arrow-head { fill: currentColor; }
     .square-highlight { position:absolute; border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,0.06); background: rgba(220,20,60,0.12); width:44px; height:44px; display:block; z-index:25; border:3px solid rgba(220,20,60,0.25); }
+
+    /* make chessboard pieces responsive inside chessboard.js container */
+    .chessboard-1x1 .piece { max-width:100%; height:auto; display:block; }
   </style>
 </head>
 <body>
@@ -75,11 +86,11 @@
     </div>
 
     <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
-      <input id="boardSizeRange" name="board-size" class="range" type="range" min="240" max="1200" step="10" value="570" aria-label="Board size">
-      <small id="boardSizeLabel">570px</small>
+      <input id="boardSizeRange" name="board-size" class="range" type="range" min="360" max="1400" step="10" value="760" aria-label="Board size">
+      <small id="boardSizeLabel">760px</small>
     </div>
 
-    <div class="panel" style="width:100%; max-width:920px;">
+    <div class="panel" style="width:100%; max-width:980px;">
       <div id="board-wrapper">
         <div id="board" aria-label="Chessboard container"></div>
         <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
@@ -91,9 +102,29 @@
     </div>
   </div>
 
-  <!-- Removed the controls+FEN container per request -->
+  <!-- Tactic / Puzzle panel (inserted under board) -->
+  <div class="panel" style="max-width:980px; margin-top:18px;">
+    <div class="tactic-row" aria-label="Puzzle controls">
+      <label class="small" for="tacticSelect">Tactic:</label>
+      <select id="tacticSelect"><option>Loading tactics…</option></select>
 
-  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;" id="multiplayerPanel">
+      <label class="small" for="ratingMin">Min rating:</label>
+      <select id="ratingMin" title="Minimum rating">
+        <option>0</option><option>600</option><option selected>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option>
+      </select>
+
+      <label class="small" for="ratingMax">Max rating:</label>
+      <select id="ratingMax" title="Maximum rating">
+        <option selected>99999</option><option>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option><option>2400</option>
+      </select>
+
+      <button id="loadPuzzleBtn">Load (first match)</button>
+      <button id="randomPuzzleBtn">Random</button>
+    </div>
+    <div id="puzzleInfo" class="muted small" style="margin-top:8px;">No puzzle loaded</div>
+  </div>
+
+  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:980px;" id="multiplayerPanel">
     <div style="display:flex; gap:8px; align-items:center;">
       <label for="emailInputBottom" class="small">Your username:</label>
       <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
@@ -120,17 +151,17 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
-  <!-- load chess.js engine before the main script to avoid "Chess lib missing" -->
+  <!-- load chess.js engine before the main script -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
   <script>
   (function(){
-    // --- Configuration: change base path if your repo is served from another subpath ---
-    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/'; // same-origin SVGs (required)
+    // --- Configuration paths (adjust if repo served from a subpath) ---
+    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/'; // same-origin SVGs
     const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';   // Option A list
-    // -------------------------------------------------------------------------------
+    // -----------------------------------------------------------------
 
-    // DOM
+    // DOM refs
     const boardWrapper = document.getElementById('board-wrapper');
     const drawOverlay = document.getElementById('draw-overlay');
     const boardSizeRange = document.getElementById('boardSizeRange');
@@ -138,54 +169,19 @@
     const msgEl = document.getElementById('msg');
     const promoteModal = document.getElementById('promoteModal');
 
-    // controls
     const undoBtn = document.getElementById('undoBtn');
     const flipBtn = document.getElementById('flipBtn');
     const resignBtn = document.getElementById('resignBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // notation
     const movesList = document.getElementById('movesList');
 
-    // multiplayer UI
     const emailInputBottom = document.getElementById('emailInputBottom');
     const joinBtnBottom = document.getElementById('joinBtnBottom');
     const multiplayStatus = document.getElementById('multiplayStatus');
     const pairedBubble = document.getElementById('pairedBubble');
 
-    // puzzle UI
-    const tacticSelect = document.createElement('select');
-    tacticSelect.id = 'tacticSelect';
-    // We'll insert tacticSelect into a new panel below; simpler: create a panel element now
-    // But to preserve your layout, we will append the tactic controls programmatically later.
-    // For this HTML we already have a multiplayer panel; we will add a tactics panel below the movesList.
-    (function injectTacticPanel(){
-      const parent = document.querySelector('.board-top').parentNode;
-      const panel = document.createElement('div');
-      panel.className = 'panel';
-      panel.style.maxWidth = '920px';
-      panel.style.marginTop = '18px';
-      panel.innerHTML = `
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label class="small" for="tacticSelect">Tactic:</label>
-          <select id="tacticSelect"><option>Loading tactics…</option></select>
-          <label class="small" for="ratingMin">Min rating:</label>
-          <select id="ratingMin" title="Minimum rating">
-            <option>0</option><option>600</option><option selected>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option>
-          </select>
-          <label class="small" for="ratingMax">Max rating:</label>
-          <select id="ratingMax" title="Maximum rating">
-            <option selected>99999</option><option>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option><option>2400</option>
-          </select>
-          <button id="loadPuzzleBtn">Load (first)</button>
-          <button id="randomPuzzleBtn">Random</button>
-        </div>
-        <div id="puzzleInfo" class="muted small" style="margin-top:8px;">No puzzle loaded</div>
-      `;
-      parent.appendChild(panel);
-    })();
-
-    // after injection grab references
+    const tacticSelect = document.getElementById('tacticSelect');
     const ratingMin = document.getElementById('ratingMin');
     const ratingMax = document.getElementById('ratingMax');
     const loadPuzzleBtn = document.getElementById('loadPuzzleBtn');
@@ -204,7 +200,7 @@
       if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
     }
 
-    // ensure chess.js is loaded (we included CDN before this)
+    // ensure Chess is present (we included CDN already)
     function ensureChessLoaded(){
       return new Promise(resolve=>{
         if(typeof Chess !== 'undefined') return resolve();
@@ -217,13 +213,10 @@
       });
     }
 
-    // pieceTheme function returning same-origin SVGs (prevents OpaqueResponseBlocking)
     function pieceTheme(piece){
-      // piece is like 'wP' or 'bK'
       return PIECES_BASE + piece + '.svg';
     }
 
-    // create the chessboard with original logic (draggable, onDrop/promotion etc.)
     function createBoard(theme){
       const orientation = (isPaired && myColor==='black') ? 'black' : 'white';
       if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
@@ -257,9 +250,8 @@
 
     // onDrop (with promotion)
     async function onDrop(source, target){
-      if(!game) return;
+      if(!game) return 'snapback';
 
-      // multiplayer restrictions (keeps original behavior)
       if(isPaired && myColor){
         const our = (myColor==='white') ? 'w' : 'b';
         const piece = game.get(source);
@@ -287,9 +279,9 @@
 
       setPersistentLastMove(source, target);
 
-      try{ 
-        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
-          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } }); 
+      try{
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){
+          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
         }
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
           window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
@@ -298,7 +290,7 @@
       return;
     }
 
-    // notation refresh (original)
+    // notation refresh
     function refreshNotation(){
       try{
         if(!movesList) return;
@@ -320,7 +312,7 @@
       }catch(e){ console.warn('refreshNotation error', e); }
     }
 
-    // inbound move handler (preserve original behavior)
+    // inbound move handler
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
@@ -369,7 +361,7 @@
       });
     }
 
-    // Simple updateOverlaySize stub (keeps overlay aligned)
+    // overlay sizing
     function updateOverlaySize(){
       try{
         const bd = document.getElementById('board');
@@ -399,7 +391,7 @@
         }
       }catch(e){}
 
-      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 570;
+      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 760;
       setBoardSize(initial);
       setMsg('Ready', 700);
 
@@ -408,7 +400,7 @@
     }
     boot();
 
-    // UI handlers (undo/flip/resign/logout) — original behavior
+    // UI handlers
     undoBtn.addEventListener('click', ()=>{ 
       if(!game) return; 
       const mv = game.undo(); 
@@ -451,9 +443,9 @@
     });
 
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
-    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
+    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(360, Math.min(1400, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
 
-    // CSV & puzzle loader (streaming parser) - unchanged, Option A list path used
+    // CSV + puzzle loader (streaming parser)
     function normalizeHeaderCell(h){
       return (h||'').toString().trim().toLowerCase().replace(/\s+/g,'');
     }
@@ -490,53 +482,58 @@
     }
 
     async function streamCsvFilter(fileUrl, {minRating=0,maxRating=99999,onMatch=null,maxMatches=200} = {}){
-      const resp = await fetch(fileUrl, {cache:'no-cache'});
-      if(!resp.ok) throw new Error('Fetch failed: ' + resp.status);
-      const reader = resp.body.getReader();
-      const dec = new TextDecoder('utf-8');
-      let { value, done } = await reader.read();
-      let buf = '';
-      let cols = null;
-      let rowNum = 0;
-      let matches = 0;
-      while(!done){
-        buf += dec.decode(value, {stream:true});
-        let lines = buf.split(/\r?\n/);
-        buf = lines.pop();
-        for(const line of lines){
-          if(!line) continue;
-          if(!cols){
-            cols = splitCsvHeader(line);
-            continue;
+      try{
+        const resp = await fetch(fileUrl, {cache:'no-cache'});
+        if(!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder('utf-8');
+        let { value, done } = await reader.read();
+        let buf = '';
+        let cols = null;
+        let rowNum = 0;
+        let matches = 0;
+        while(!done){
+          buf += dec.decode(value, {stream:true});
+          let lines = buf.split(/\r?\n/);
+          buf = lines.pop();
+          for(const line of lines){
+            if(!line) continue;
+            if(!cols){
+              cols = splitCsvHeader(line);
+              continue;
+            }
+            rowNum++;
+            try{
+              const rowObj = parseCsvRowToObject(cols, line);
+              const rstr = (rowObj['rating'] || '0').replace(/[^0-9]/g,'');
+              const rating = parseInt(rstr,10) || 0;
+              if(rating >= minRating && rating <= maxRating){
+                if(onMatch){
+                  const stop = await onMatch(rowObj, {fileUrl, rowNum});
+                  matches++;
+                  if(matches >= maxMatches) { reader.cancel().catch(()=>{}); return matches; }
+                  if(stop) { reader.cancel().catch(()=>{}); return matches; }
+                }
+              }
+            }catch(e){ console.warn(e); }
           }
-          rowNum++;
+          ({ value, done } = await reader.read());
+        }
+        if(buf && cols){
           try{
-            const rowObj = parseCsvRowToObject(cols, line);
+            const rowObj = parseCsvRowToObject(cols, buf);
             const rstr = (rowObj['rating'] || '0').replace(/[^0-9]/g,'');
             const rating = parseInt(rstr,10) || 0;
             if(rating >= minRating && rating <= maxRating){
-              if(onMatch){
-                const stop = await onMatch(rowObj, {fileUrl, rowNum});
-                matches++;
-                if(matches >= maxMatches) { reader.cancel().catch(()=>{}); return matches; }
-                if(stop) { reader.cancel().catch(()=>{}); return matches; }
-              }
+              if(onMatch) await onMatch(rowObj, {fileUrl, rowNum});
             }
-          }catch(e){ console.warn(e); }
+          }catch(e){}
         }
-        ({ value, done } = await reader.read());
+        return 0;
+      }catch(e){
+        console.warn('streamCsvFilter error', e);
+        return 0;
       }
-      if(buf && cols){
-        try{
-          const rowObj = parseCsvRowToObject(cols, buf);
-          const rstr = (rowObj['rating'] || '0').replace(/[^0-9]/g,'');
-          const rating = parseInt(rstr,10) || 0;
-          if(rating >= minRating && rating <= maxRating){
-            if(onMatch) await onMatch(rowObj, {fileUrl, rowNum});
-          }
-        }catch(e){}
-      }
-      return 0;
     }
 
     // load file list (puzzles_list.json) and populate tactics derived from filenames
@@ -555,20 +552,18 @@
         });
 
         const tacticNames = Object.keys(manifest.tactics).sort((a,b)=>a.localeCompare(b));
-        const tacticSelectEl = document.getElementById('tacticSelect');
-        tacticSelectEl.innerHTML = '<option value="">— Select tactic —</option>';
+        tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
         tacticNames.forEach(t => {
           const opt = document.createElement('option');
           opt.value = t;
           opt.textContent = t + ' (' + (manifest.tactics[t]||[]).length + ')';
-          tacticSelectEl.appendChild(opt);
+          tacticSelect.appendChild(opt);
         });
-        if(tacticNames.length === 0) tacticSelectEl.innerHTML = '<option value="">No tactics available</option>';
+        if(tacticNames.length === 0) tacticSelect.innerHTML = '<option value="">No tactics available</option>';
         puzzleInfo.textContent = 'List loaded (' + files.length + ' files).';
         window._clientManifest = manifest;
       }catch(e){
-        const tacticSelectEl = document.getElementById('tacticSelect');
-        if(tacticSelectEl) tacticSelectEl.innerHTML = '<option value="">List not available</option>';
+        tacticSelect.innerHTML = '<option value="">List not available</option>';
         puzzleInfo.textContent = 'Puzzle list could not be loaded. Ensure puzzles_list.json is present at: ' + LIST_URL;
         console.warn('list load failed', e);
       }
@@ -631,7 +626,8 @@
         if(fen){
           try{
             if(typeof game !== 'undefined' && game && typeof game.load === 'function'){
-              game.load(fen);
+              const ok = game.load(fen);
+              if(ok === false){ /* some chess.js versions return false on invalid fen */ }
             } else if(typeof Chess !== 'undefined'){
               game = new Chess(fen);
             } else throw new Error('Chess library not available');
@@ -647,7 +643,9 @@
             if(typeof game !== 'undefined' && game && typeof game.load_pgn === 'function'){
               game.reset();
               const ok = game.load_pgn(pgn);
-              if(!ok) { game.reset(); }
+              if(!ok) {
+                game.reset();
+              }
             } else if(typeof Chess !== 'undefined'){
               game = new Chess();
               try{ game.load_pgn(pgn); }catch(e){}
@@ -681,17 +679,18 @@
       }
     }
 
-    async function loadFirstCandidate(){ if(currentCandidateList.length===0){ puzzleInfo.textContent='No candidate puzzles.'; return; } await loadPuzzleByCandidateIndex(0); }
-    async function loadRandomCandidate(){ if(currentCandidateList.length===0){ puzzleInfo.textContent='No candidate puzzles.'; return; } const idx = Math.floor(Math.random()*currentCandidateList.length); await loadPuzzleByCandidateIndex(idx); }
+    function loadFirstCandidate(){ if(currentCandidateList.length===0){ puzzleInfo.textContent='No candidate puzzles.'; return; } loadPuzzleByCandidateIndex(0); }
+    function loadRandomCandidate(){ if(currentCandidateList.length===0){ puzzleInfo.textContent='No candidate puzzles.'; return; } const idx = Math.floor(Math.random()*currentCandidateList.length); loadPuzzleByCandidateIndex(idx); }
 
-    // Wiring puzzle UI
-    document.getElementById('tacticSelect').addEventListener('change', function(){ const t = this.value; if(!t){ puzzleInfo.textContent = 'Pick a tactic'; currentCandidateList=[]; return;} buildCandidatesForTactic(t); });
-    ratingMin.addEventListener('change', ()=> { if(document.getElementById('tacticSelect').value) buildCandidatesForTactic(document.getElementById('tacticSelect').value); });
-    ratingMax.addEventListener('change', ()=> { if(document.getElementById('tacticSelect').value) buildCandidatesForTactic(document.getElementById('tacticSelect').value); });
+    // UI wiring
+    tacticSelect.addEventListener('change', function(){ const t = tacticSelect.value; if(!t){ puzzleInfo.textContent = 'Pick a tactic'; currentCandidateList = []; return; } buildCandidatesForTactic(t); });
+    ratingMin.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    ratingMax.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+
     loadPuzzleBtn.addEventListener('click', loadFirstCandidate);
     randomPuzzleBtn.addEventListener('click', loadRandomCandidate);
 
-    // boot puzzle list & board
+    // boot sequence
     (async function init(){
       await ensureChessLoaded();
       game = new Chess();
@@ -706,11 +705,11 @@
     // expose for debugging
     window._puzzleLoader = { getCandidates: () => currentCandidateList, manifest: () => window._clientManifest || null };
 
-    // The Firebase code below is unchanged from your previous version (presence + master-move watch)
+    // firebase code (unchanged; same as your working version)...
   })();
   </script>
 
-  <!-- FIREBASE (unchanged presence & watch behavior) -->
+  <!-- FIREBASE (presence & watch behavior as before) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script>
@@ -834,9 +833,8 @@
       };
 
       window.addEventListener('beforeunload', ()=>{ /* do not auto-remove presence on unload per request */ });
-    })();  /* end inner IIFE */
-
-  })(); /* end outer IIFE */
+    })();
+  })();
   </script>
 </body>
 </html>
