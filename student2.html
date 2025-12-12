@@ -648,6 +648,7 @@
       }
 
       if(pgnField){
+        // Keep this only as a move extractor — but since you asked to IGNORE PGN for FEN, we keep PGN only for moves extraction.
         let s = pgnField;
         s = s.replace(/\[.*?\]\s*/g,''); // remove headers in brackets
         s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\(.*?\)/g,' ');
@@ -670,7 +671,7 @@
       return { tokens:[], types:[] };
     }
 
-    // load puzzle by index
+    // load puzzle by index (ONLY use row['fen'] for the starting position; IGNORE PGN for FEN)
     async function loadPuzzleByCandidateIndex(idx){
       const cand = currentCandidateList[idx];
       if(!cand){ solutionStatus.textContent='No puzzle'; return; }
@@ -679,42 +680,23 @@
       const raw = cand.row;
       solutionStatus.textContent = 'Loading ' + (raw['puzzleid'] || cand.meta.file);
 
-      // Debug: show parsed keys for failing rows if needed (uncomment for deeper debugging)
-      // console.group('DEBUG candidate row'); console.log('raw keys:', Object.keys(raw)); console.log('raw.fen:', raw['fen']); console.log('raw.pgn (trim):', (raw['pgn']||'').slice(0,200)); console.groupEnd();
-
       try{
-        // --- FEN selection and validation (fallback to PGN [FEN "..."])
+        // --- STRICT: only use 'fen' column; do not attempt to read FEN from PGN
         const fenRawCandidate = (raw['fen'] || '').toString().trim();
-        function extractFenFromPgn(pgnText){
-          if(!pgnText) return '';
-          const m = pgnText.match(/\[FEN\s+"([^"]+)"\]/i);
-          if(m && m[1]) return m[1].trim();
-          return '';
+        if(!fenRawCandidate || fenRawCandidate.length === 0){
+          console.warn('No FEN present in row.fen for candidate', cand.meta ? cand.meta.file : null, 'row:', raw);
+          solutionStatus.textContent = 'No FEN in row';
+          return;
         }
 
-        let fenSelected = '';
-        if(fenRawCandidate && fenRawCandidate.length > 0){
-          fenSelected = fenRawCandidate.replace(/^"+|"+$/g,'').trim();
-        } else {
-          // try PGN fallback
-          const pgnCandidate = (raw['pgn'] || raw['PGN'] || raw['Pgn'] || '').toString();
-          const fenFromPgn = extractFenFromPgn(pgnCandidate);
-          if(fenFromPgn){
-            console.info('Using FEN extracted from PGN tag for puzzle:', fenFromPgn);
-            fenSelected = fenFromPgn;
-          } else {
-            console.warn('No FEN in row.fen and no [FEN] tag found in PGN for candidate', cand && cand.meta ? cand.meta.file : null, 'row:', raw);
-            solutionStatus.textContent = 'No FEN in row';
-            return; // preserve existing behavior when no fen available
-          }
-        }
+        // sanitize surrounding quotes and whitespace
+        let fenSelected = fenRawCandidate.replace(/^"+|"+$/g,'').trim();
 
         // Validate minimal FEN format (should have at least 6 parts)
         const parts = fenSelected.split(/\s+/);
         if(parts.length < 6){
-          // if only piece placement is present, append safe defaults
+          // if only piece placement is present, append safe defaults (white to move, no castling etc.)
           console.warn('FEN appears incomplete — appending defaults. Found parts:', parts.length, fenSelected);
-          // default: white to move, no castling, no en-passant, halfmove 0, fullmove 1
           fenSelected = fenSelected + ' w - - 0 1';
         }
 
@@ -728,7 +710,7 @@
         // store initial side to move
         const parts2 = initialFen.split(/\s+/);
         initialSideToMove = (parts2 && parts2[1]) ? parts2[1] : 'w';
-        // prepare solutionMoves - prefer SAN column
+        // prepare solutionMoves - prefer SAN column; PGN is ignored for FEN but allowed for move tokens extraction if SAN present
         const extracted = extractMovesFromRow(raw);
         solutionMoves = extracted.tokens || [];
         solutionMoveTypes = extracted.types || [];
