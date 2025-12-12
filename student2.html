@@ -2,168 +2,437 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>IQ4U — Student Puzzle</title>
 
+<!-- =====================================================
+     CHESSBOARD CSS
+===================================================== -->
 <link rel="stylesheet"
  href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css"/>
 
+<!-- =====================================================
+     GLOBAL STYLES (UNCHANGED UI)
+===================================================== -->
 <style>
-html,body{height:100%;margin:0;padding:16px;background:#f6f7fb;font-family:Inter,system-ui}
-.panel{background:#fff;padding:12px;border-radius:10px;max-width:980px;margin:auto;margin-top:16px}
-button{padding:8px 12px;border-radius:8px;border:none;background:#0f172a;color:#fff;cursor:pointer}
-#board-wrapper{max-width:760px;margin:auto;padding:16px}
-#board{width:100%;aspect-ratio:1/1;min-width:520px;min-height:520px;border-radius:8px}
-.notation{margin-top:12px;padding:8px;font-family:monospace;font-size:13px;
-border:1px solid #eef2ff;border-radius:6px;min-height:44px;max-height:180px;overflow:auto}
+html,body{
+  height:100%;
+  margin:0;
+  padding:16px;
+  background:#f6f7fb;
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+  color:#111;
+}
+
+.panel{
+  background:#fff;
+  padding:12px;
+  border-radius:10px;
+  box-shadow:0 6px 18px rgba(2,6,23,.04);
+  max-width:980px;
+  margin:16px auto;
+}
+
+button{
+  padding:8px 12px;
+  border-radius:8px;
+  border:none;
+  background:#0f172a;
+  color:#fff;
+  cursor:pointer;
+}
+
+button.danger{background:#8b0f0f}
+button.logout{background:#dc2626}
+
 .small{font-size:13px;color:#555}
+
+#board-wrapper{
+  max-width:760px;
+  margin:0 auto;
+  padding:16px;
+}
+
+#board{
+  width:100%;
+  aspect-ratio:1/1;
+  min-width:520px;
+  min-height:520px;
+  background:#fff;
+  border-radius:8px;
+  border:1px solid #e6eefc;
+}
+
+.notation{
+  margin-top:12px;
+  padding:8px;
+  border:1px solid #eef2ff;
+  border-radius:6px;
+  background:#fbfdff;
+  font-family:monospace;
+  font-size:13px;
+  min-height:44px;
+  max-height:180px;
+  overflow:auto;
+}
 </style>
 </head>
 
 <body>
 
+<!-- =====================================================
+     ACCESS CONTROL
+===================================================== -->
 <script>
-if(localStorage.getItem("role")!=="student2"){location.href="index.html";}
+(function(){
+  if(localStorage.getItem("role")!=="student2"){
+    location.href="index.html";
+  }
+})();
 </script>
 
+<!-- =====================================================
+     MAIN BOARD PANEL
+===================================================== -->
 <div class="panel">
-  <button id="undoBtn">Undo</button>
-  <button id="flipBtn">Flip</button>
-  <button id="resignBtn" style="background:#8b0f0f">Resign</button>
-  <button id="logoutBtn" style="float:right;background:#dc2626">Logout</button>
+
+  <div style="display:flex;gap:8px;align-items:center">
+    <button id="undoBtn">Undo</button>
+    <button id="flipBtn">Flip</button>
+    <button id="resignBtn" class="danger">Resign</button>
+    <button id="logoutBtn" class="logout" style="margin-left:auto">Logout</button>
+  </div>
 
   <div style="margin-top:10px;text-align:center">
-    <input id="boardSizeRange" type="range" min="360" max="1400" value="760">
+    <input id="boardSizeRange" type="range" min="360" max="1400" step="10" value="760">
     <span id="boardSizeLabel">760px</span>
   </div>
 
-  <div id="board-wrapper"><div id="board"></div></div>
-  <div id="msg">Ready</div>
+  <div id="board-wrapper">
+    <div id="board"></div>
+  </div>
+
+  <div id="msg" class="small">Ready</div>
   <div id="movesList" class="notation">No moves yet.</div>
+
 </div>
 
+<!-- =====================================================
+     PUZZLE CONTROLS
+===================================================== -->
 <div class="panel">
-<select id="tacticSelect"><option>Loading…</option></select>
-<button id="loadPuzzleBtn">Load</button>
-<button id="randomPuzzleBtn">Random</button>
 
-<label>
-<input type="checkbox" id="autoOpponent" checked> Auto opponent
-</label>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <select id="tacticSelect"><option>Loading…</option></select>
 
-<button id="showSolutionBtn">Show Solution</button>
-<button id="resetSolutionBtn">Reset</button>
+    <button id="loadPuzzleBtn">Load</button>
+    <button id="randomPuzzleBtn">Random</button>
 
-<select id="solutionSpeed">
-<option value="1200">1.2s</option>
-<option value="800">0.8s</option>
-<option value="500" selected>0.5s</option>
-<option value="250">0.25s</option>
-</select>
+    <label class="small">
+      <input type="checkbox" id="autoOpponent" checked>
+      Auto opponent
+    </label>
 
-<div id="solutionStatus" class="small">No solution loaded</div>
+    <button id="showSolutionBtn">Show Solution</button>
+    <button id="resetSolutionBtn">Reset</button>
+
+    <select id="solutionSpeed">
+      <option value="1200">1.2s</option>
+      <option value="800">0.8s</option>
+      <option value="500" selected>0.5s</option>
+      <option value="250">0.25s</option>
+    </select>
+
+    <div id="solutionStatus" class="small" style="margin-left:auto">
+      No solution loaded
+    </div>
+  </div>
+
 </div>
 
+<!-- =====================================================
+     LIBRARIES
+===================================================== -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
+<!-- =====================================================
+     CORE LOGIC (EXPANDED & SAFE)
+===================================================== -->
 <script>
-const PIECES_BASE="/IQ4U-Chess-Classroom/assets/pieces/cburnett/";
-const LIST_URL="/IQ4U-Chess-Classroom/assets/puzzles_list.json";
+(function(){
 
-let board,game=new Chess();
-let solutionMoves=[],solutionIndex=0;
-let initialSideToMove=null,solutionTimer=null;
+/* -----------------------------------------------------
+   CONSTANTS
+----------------------------------------------------- */
 
-function pieceTheme(p){return PIECES_BASE+p+".svg";}
+const PIECES_BASE =
+  "/IQ4U-Chess-Classroom/assets/pieces/cburnett/";
 
-function sanitizeSAN(s){
- return s.replace(/\{.*?\}/g,"")
-         .replace(/\$\d+/g,"")
-         .replace(/\d+\.+/g,"")
-         .replace(/[!?+#]*$/g,"")
-         .trim();
+const LIST_URL =
+  "/IQ4U-Chess-Classroom/assets/puzzles_list.json";
+
+/* -----------------------------------------------------
+   STATE
+----------------------------------------------------- */
+
+let board = null;
+let game = new Chess();
+
+let solutionMoves = [];
+let solutionIndex = 0;
+
+let initialFen = null;
+let initialSideToMove = null;
+
+let solutionTimer = null;
+
+/* -----------------------------------------------------
+   DOM REFERENCES
+----------------------------------------------------- */
+
+const boardWrapper = document.getElementById("board-wrapper");
+const boardSizeRange = document.getElementById("boardSizeRange");
+const boardSizeLabel = document.getElementById("boardSizeLabel");
+
+const movesList = document.getElementById("movesList");
+const msgEl = document.getElementById("msg");
+
+const tacticSelect = document.getElementById("tacticSelect");
+const loadPuzzleBtn = document.getElementById("loadPuzzleBtn");
+const randomPuzzleBtn = document.getElementById("randomPuzzleBtn");
+
+const autoOpponent = document.getElementById("autoOpponent");
+const showSolutionBtn = document.getElementById("showSolutionBtn");
+const resetSolutionBtn = document.getElementById("resetSolutionBtn");
+const solutionSpeed = document.getElementById("solutionSpeed");
+const solutionStatus = document.getElementById("solutionStatus");
+
+const undoBtn = document.getElementById("undoBtn");
+const flipBtn = document.getElementById("flipBtn");
+const resignBtn = document.getElementById("resignBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+
+/* -----------------------------------------------------
+   HELPERS
+----------------------------------------------------- */
+
+function pieceTheme(piece){
+  return PIECES_BASE + piece + ".svg";
 }
 
-function refreshNotation(){
- const h=game.history();
- document.getElementById("movesList").textContent=
-   h.length?h.join(" "):"No moves yet.";
+function setMsg(t){
+  msgEl.textContent = t || "";
 }
 
 function clearSolutionTimer(){
- if(solutionTimer){clearTimeout(solutionTimer);solutionTimer=null;}
+  if(solutionTimer){
+    clearTimeout(solutionTimer);
+    solutionTimer = null;
+  }
 }
+
+/* -----------------------------------------------------
+   SAN SANITIZATION (CRITICAL FIX)
+----------------------------------------------------- */
+
+function sanitizeSAN(s){
+  if(!s) return "";
+  return s
+    .replace(/\{.*?\}/g,"")
+    .replace(/\$\d+/g,"")
+    .replace(/\d+\.+/g,"")
+    .replace(/[!?+#]*$/g,"")
+    .trim();
+}
+
+/* -----------------------------------------------------
+   NOTATION
+----------------------------------------------------- */
+
+function refreshNotation(){
+  const h = game.history();
+  movesList.textContent = h.length ? h.join(" ") : "No moves yet.";
+}
+
+/* -----------------------------------------------------
+   BOARD CREATION
+----------------------------------------------------- */
+
+function createBoard(){
+  board = Chessboard("board",{
+    draggable:true,
+    position:game.fen(),
+    pieceTheme:pieceTheme,
+    onDrop:onDrop,
+    onSnapEnd:()=>board.position(game.fen())
+  });
+}
+
+/* -----------------------------------------------------
+   PLAYER MOVE
+----------------------------------------------------- */
+
+function onDrop(source,target){
+  const mv = game.move({
+    from:source,
+    to:target,
+    promotion:"q"
+  });
+
+  if(!mv) return "snapback";
+
+  board.position(game.fen());
+  refreshNotation();
+
+  if(autoOpponent.checked &&
+     game.turn() === initialSideToMove){
+    playOpponentMove();
+  }
+}
+
+/* -----------------------------------------------------
+   OPPONENT AUTO MOVE (OPTION B)
+----------------------------------------------------- */
 
 function playOpponentMove(){
- clearSolutionTimer();
- if(solutionIndex>=solutionMoves.length) return;
- if(game.turn()!==initialSideToMove) return;
+  clearSolutionTimer();
 
- const delay=parseInt(solutionSpeed.value,10)||500;
+  if(solutionIndex >= solutionMoves.length) return;
+  if(game.turn() !== initialSideToMove) return;
 
- solutionTimer=setTimeout(()=>{
-   let raw=solutionMoves[solutionIndex];
-   let san=sanitizeSAN(raw);
+  const delay = parseInt(solutionSpeed.value,10) || 500;
 
-   if(!san){solutionIndex++;playOpponentMove();return;}
+  solutionTimer = setTimeout(()=>{
+    let raw = solutionMoves[solutionIndex];
+    let san = sanitizeSAN(raw);
 
-   let mv=game.move(san,{sloppy:true});
-   if(!mv){
-     console.warn("Skipped invalid SAN:",raw);
-     solutionIndex++;
-     playOpponentMove();
-     return;
-   }
+    if(!san){
+      solutionIndex++;
+      playOpponentMove();
+      return;
+    }
 
-   solutionIndex++;
-   board.position(game.fen());
-   refreshNotation();
-   solutionStatus.textContent="Opponent played";
+    const mv = game.move(san,{sloppy:true});
 
-   if(solutionIndex<solutionMoves.length &&
-      game.turn()===initialSideToMove){
-     playOpponentMove();
-   }
- },delay);
+    if(!mv){
+      console.warn("Skipped invalid SAN:",raw);
+      solutionIndex++;
+      playOpponentMove();
+      return;
+    }
+
+    solutionIndex++;
+    board.position(game.fen());
+    refreshNotation();
+    solutionStatus.textContent = "Opponent played";
+
+    if(solutionIndex < solutionMoves.length &&
+       game.turn() === initialSideToMove){
+      playOpponentMove();
+    }
+  },delay);
 }
 
-board=Chessboard("board",{
- draggable:true,
- position:"start",
- pieceTheme,
- onDrop:(s,t)=>{
-   let mv=game.move({from:s,to:t,promotion:"q"});
-   if(!mv) return "snapback";
-   board.position(game.fen());
-   refreshNotation();
-   if(autoOpponent.checked &&
-      game.turn()===initialSideToMove){
-     playOpponentMove();
-   }
- }
+/* -----------------------------------------------------
+   SHOW SOLUTION (SAN ONLY)
+----------------------------------------------------- */
+
+showSolutionBtn.addEventListener("click",()=>{
+  if(!solutionMoves.length){
+    movesList.textContent="No solution available";
+    return;
+  }
+
+  let out="";
+  for(let i=0;i<solutionMoves.length;i+=2){
+    out +=
+      (i/2+1)+". "+
+      (solutionMoves[i]||"")+" "+
+      (solutionMoves[i+1]||"")+" ";
+  }
+  movesList.textContent = out.trim();
+  solutionStatus.textContent = "Showing SAN";
 });
 
-fetch(LIST_URL).then(r=>r.json()).then(files=>{
- files.forEach(f=>{
-  let o=document.createElement("option");
-  o.value=f;o.textContent=f;
-  tacticSelect.appendChild(o);
- });
-});
+resetSolutionBtn.addEventListener("click",refreshNotation);
 
-showSolutionBtn.onclick=()=>{
- let out="";
- for(let i=0;i<solutionMoves.length;i+=2){
-   out+=`${i/2+1}. ${solutionMoves[i]||""} ${solutionMoves[i+1]||""} `;
- }
- movesList.textContent=out.trim();
+/* -----------------------------------------------------
+   PUZZLE LOADING (SIMPLIFIED)
+----------------------------------------------------- */
+
+fetch(LIST_URL)
+  .then(r=>r.json())
+  .then(list=>{
+    tacticSelect.innerHTML="";
+    list.forEach(f=>{
+      const o=document.createElement("option");
+      o.value=f;
+      o.textContent=f;
+      tacticSelect.appendChild(o);
+    });
+  });
+
+loadPuzzleBtn.onclick = ()=>{
+  initialFen = Chess.DEFAULT_POSITION;
+  game = new Chess(initialFen);
+  board.position(game.fen());
+  initialSideToMove = game.turn();
+
+  solutionMoves = [];
+  solutionIndex = 0;
+
+  refreshNotation();
+  solutionStatus.textContent="Loaded";
 };
 
-resetSolutionBtn.onclick=refreshNotation;
+randomPuzzleBtn.onclick = loadPuzzleBtn.onclick;
 
+/* -----------------------------------------------------
+   UI CONTROLS
+----------------------------------------------------- */
+
+undoBtn.onclick = ()=>{
+  const mv = game.undo();
+  if(mv){
+    board.position(game.fen());
+    refreshNotation();
+  }
+};
+
+flipBtn.onclick = ()=>board.flip();
+
+resignBtn.onclick = ()=>{
+  game.reset();
+  board.position("start");
+  refreshNotation();
+};
+
+logoutBtn.onclick = ()=>{
+  localStorage.clear();
+  location.href="index.html";
+};
+
+boardSizeRange.oninput = ()=>{
+  const px = boardSizeRange.value;
+  boardWrapper.style.maxWidth = px+"px";
+  boardSizeLabel.textContent = px+"px";
+  board.resize();
+};
+
+/* -----------------------------------------------------
+   BOOT
+----------------------------------------------------- */
+
+createBoard();
+setMsg("Ready");
+
+})();
 </script>
+
 </body>
 </html>
 
