@@ -49,6 +49,10 @@
     .arrow-line { stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
     .arrow-head { fill: currentColor; }
     .square-highlight { position:absolute; border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,0.06); background: rgba(220,20,60,0.12); width:44px; height:44px; display:block; z-index:25; border:3px solid rgba(220,20,60,0.25); }
+    /* Puzzle UI styles */
+    #puzzlePanel .small { margin-right:6px; }
+    #puzzleSelector { min-width:260px; }
+    #puzzleInfo { margin-top:8px; font-size:13px; color:#333; }
   </style>
 </head>
 <body>
@@ -90,8 +94,32 @@
     </div>
   </div>
 
-  <!-- Removed the controls+FEN container per request -->
+  <!-- Puzzle / Tactics panel (new) -->
+  <div class="panel" id="puzzlePanel" style="max-width:920px; margin-top:18px;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <label class="small" for="tacticSelect">Tactic:</label>
+      <select id="tacticSelect"><option value="">— Loading tactics —</option></select>
 
+      <label class="small" for="ratingMin">Min rating:</label>
+      <select id="ratingMin" title="Minimum rating">
+        <option>0</option><option>600</option><option>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option>
+      </select>
+
+      <label class="small" for="ratingMax">Max rating:</label>
+      <select id="ratingMax" title="Maximum rating">
+        <option>99999</option><option>800</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option><option>1800</option><option>2000</option><option>2200</option><option>2400</option>
+      </select>
+
+      <label class="small" for="puzzleSelector">Puzzle:</label>
+      <select id="puzzleSelector"><option value="">— select tactic & rating —</option></select>
+
+      <button id="loadPuzzleBtn">Load Puzzle</button>
+      <button id="randomPuzzleBtn">Random</button>
+    </div>
+    <div id="puzzleInfo" class="muted small">No puzzle loaded</div>
+  </div>
+
+  <!-- Multiplayer / join panel -->
   <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;" id="multiplayerPanel">
     <div style="display:flex; gap:8px; align-items:center;">
       <label for="emailInputBottom" class="small">Your username:</label>
@@ -148,23 +176,22 @@
     const multiplayStatus = document.getElementById('multiplayStatus');
     const pairedBubble = document.getElementById('pairedBubble');
 
+    // puzzle UI
+    const tacticSelect = document.getElementById('tacticSelect');
+    const ratingMin = document.getElementById('ratingMin');
+    const ratingMax = document.getElementById('ratingMax');
+    const puzzleSelector = document.getElementById('puzzleSelector');
+    const loadPuzzleBtn = document.getElementById('loadPuzzleBtn');
+    const randomPuzzleBtn = document.getElementById('randomPuzzleBtn');
+    const puzzleInfo = document.getElementById('puzzleInfo');
+
     // state
     let board = null, game = null, currentTheme = FALLBACK_THEME;
     let myColor = null, isPaired = false, pairedGameId = null;
     let pendingPromo = null;
 
-    // drawing state
-    let drawing = false;
-    let drawPointerId = null;
-    let drawStart = null;
-    let tempLine = null;
-    let tempHead = null;
-    let finalizedArrows = [];
-    let selectedSquareHighlights = {};
+    // drawing state (kept minimal here)
     let lastMoveSquares = [];
-
-    // left-click detection
-    let leftClickStart = null;
 
     function setMsg(t, ms=0){
       if(msgEl) msgEl.textContent = t||'';
@@ -287,7 +314,7 @@
       }catch(e){ console.warn('refreshNotation error', e); }
     }
 
-    // inbound move handler
+    // inbound move handler (keeps compatibility)
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
@@ -329,6 +356,7 @@
         if(el) el.classList.remove('cb-last-move');
       });
       lastMoveSquares = [];
+      if(!src || !tgt) return;
       ['square-' + src, 'square-' + tgt].forEach(cls => {
         const el = document.querySelector('.' + cls);
         if(el) el.classList.add('cb-last-move');
@@ -336,7 +364,6 @@
       });
     }
 
-    // Simple updateOverlaySize stub (keeps overlay aligned)
     function updateOverlaySize(){
       try{
         const bd = document.getElementById('board');
@@ -421,13 +448,354 @@
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
     function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
 
-    // firebase code (spectate logic removed)
+    // FIREBASE code (unchanged except presence handling removed earlier)
   })();
   </script>
 
   <!-- FIREBASE (modified presence & spectate-response handling removed) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <!-- Puzzle loader script (uses manifest + streaming CSV parsing; recognizes headers you provided) -->
+  <script>
+  (function(){
+    // Adjust path if manifest lives elsewhere
+    const MANIFEST_URL = 'IQ4U-Chess-Classroom/assets/puzzles_manifest.json';
+
+    // Elements (query again because earlier IIFE created them in different scope)
+    const tacticSelect = document.getElementById('tacticSelect');
+    const ratingMin = document.getElementById('ratingMin');
+    const ratingMax = document.getElementById('ratingMax');
+    const puzzleSelector = document.getElementById('puzzleSelector');
+    const loadPuzzleBtn = document.getElementById('loadPuzzleBtn');
+    const randomPuzzleBtn = document.getElementById('randomPuzzleBtn');
+    const puzzleInfo = document.getElementById('puzzleInfo');
+
+    let manifest = null;
+    let currentCandidateList = []; // {row, meta}
+    const MAX_TOTAL_RESULTS = 400;
+
+    // Robust header normalization for your CSV headings.
+    function normalizeHeaderCell(h){
+      return (h||'').toString().trim().toLowerCase().replace(/\s+/g,'');
+    }
+
+    // Parse CSV header line (handles commas within quotes minimally)
+    function splitCsvHeader(line){
+      // Basic implementation: split by comma respecting double quotes
+      const cols = [];
+      let cur = '', inQuote=false;
+      for (let i=0;i<line.length;i++){
+        const ch = line[i];
+        if(ch === '"'){ inQuote = !inQuote; continue; }
+        if(ch === ',' && !inQuote){ cols.push(normalizeHeaderCell(cur)); cur=''; continue; }
+        cur += ch;
+      }
+      cols.push(normalizeHeaderCell(cur));
+      return cols;
+    }
+
+    // Parse CSV row into object per columns (minimal quoted support)
+    function parseCsvRowToObject(cols, line){
+      const vals = [];
+      let cur = '', inQuote=false;
+      for (let i=0;i<line.length;i++){
+        const ch = line[i];
+        if(ch === '"'){
+          // handle escaped "" -> "
+          if(inQuote && line[i+1] === '"'){ cur += '"'; i++; continue; }
+          inQuote = !inQuote; continue;
+        }
+        if(ch === ',' && !inQuote){ vals.push(cur); cur = ''; continue; }
+        cur += ch;
+      }
+      vals.push(cur);
+      const obj = {};
+      for(let i=0;i<cols.length;i++){
+        obj[cols[i]] = (vals[i] !== undefined) ? vals[i].trim() : '';
+      }
+      return obj;
+    }
+
+    // Streaming CSV reader that yields matches
+    async function streamCsvFilter(fileUrl, {minRating=0,maxRating=99999,tacticFilter=null,onMatch=null,maxMatches=200} = {}){
+      const resp = await fetch(fileUrl, {cache:'no-cache'});
+      if(!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder('utf-8');
+      let { value, done } = await reader.read();
+      let buf = '';
+      let cols = null;
+      let rowNum = 0;
+      let matches = 0;
+      while(!done){
+        buf += dec.decode(value, {stream:true});
+        let lines = buf.split(/\r?\n/);
+        buf = lines.pop();
+        for(const line of lines){
+          if(!line) continue;
+          if(!cols){
+            cols = splitCsvHeader(line);
+            continue;
+          }
+          rowNum++;
+          try{
+            const rowObj = parseCsvRowToObject(cols, line);
+            // read rating robustly
+            const rstr = (rowObj['rating'] || rowObj['ratingdeviation'] || rowObj['ratingdivision'] || '0').replace(/[^0-9]/g,'');
+            const rating = parseInt(rstr,10) || 0;
+            // tactic might be in 'themes' or file-based; check both.
+            const theme = (rowObj['themes'] || rowObj['themes'] || '').toLowerCase();
+            const tacticOk = !tacticFilter || (theme && theme.indexOf(tacticFilter.toLowerCase()) !== -1) || true; // allow all and filter later by manifest-file mapping
+            if(rating >= minRating && rating <= maxRating){
+              if(onMatch){
+                const stop = await onMatch(rowObj, {fileUrl, rowNum});
+                matches++;
+                if(matches >= maxMatches) { reader.cancel().catch(()=>{}); return matches; }
+                if(stop) { reader.cancel().catch(()=>{}); return matches; }
+              }
+            }
+          }catch(e){
+            console.warn('parse row error', e);
+          }
+        }
+        ({ value, done } = await reader.read());
+      }
+      // final partial buffer line
+      if(buf && cols){
+        try{
+          const rowObj = parseCsvRowToObject(cols, buf);
+          const rstr = (rowObj['rating'] || '0').replace(/[^0-9]/g,'');
+          const rating = parseInt(rstr,10) || 0;
+          if(rating >= minRating && rating <= maxRating){
+            if(onMatch) await onMatch(rowObj, {fileUrl, rowNum: rowNum+1});
+          }
+        }catch(e){}
+      }
+      return 0;
+    }
+
+    // load manifest and populate tactics
+    async function loadManifestAndPopulate(){
+      try{
+        const r = await fetch(MANIFEST_URL, {cache:'no-cache'});
+        if(!r.ok) throw new Error('Manifest not found');
+        manifest = await r.json();
+        // manifest.tactics is object mapping tacticName -> [filenames]
+        const tacticNames = Object.keys(manifest.tactics || {}).sort((a,b)=>a.localeCompare(b));
+        tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
+        tacticNames.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t + ' (' + (manifest.tactics[t]||[]).length + ')';
+          tacticSelect.appendChild(opt);
+        });
+        if(tacticNames.length === 0){
+          tacticSelect.innerHTML = '<option value="">No tactics in manifest</option>';
+        }
+      }catch(e){
+        tacticSelect.innerHTML = '<option value="">Manifest not available</option>';
+        console.warn('manifest load failed', e);
+        puzzleInfo.textContent = 'Manifest could not be loaded. Ensure puzzles_manifest.json is present in assets.';
+      }
+    }
+
+    // When user chooses a tactic we stream matching rows from files associated to that tactic
+    async function populatePuzzleListForTactic(tacticName){
+      puzzleSelector.innerHTML = '<option>Loading…</option>';
+      currentCandidateList = [];
+      if(!manifest || !manifest.tactics || !manifest.tactics[tacticName]){
+        puzzleSelector.innerHTML = '<option value="">No puzzles found</option>';
+        puzzleInfo.textContent = 'No files for that tactic in manifest.';
+        return;
+      }
+      const filenames = manifest.tactics[tacticName].slice();
+      const minR = parseInt(ratingMin.value,10) || 0;
+      const maxR = parseInt(ratingMax.value,10) || 99999;
+      let total = 0;
+
+      // iterate files and stream rows until MAX_TOTAL_RESULTS reached
+      for(const fname of filenames){
+        if(total >= MAX_TOTAL_RESULTS) break;
+        const entry = (manifest.entries||[]).find(e=>e.filename===fname) || {};
+        const fileUrl = entry.fileUrl || ('IQ4U-Chess-Classroom/assets/' + fname);
+        try{
+          await streamCsvFilter(fileUrl, {
+            minRating: minR,
+            maxRating: maxR,
+            tacticFilter: tacticName,
+            maxMatches: 200,
+            onMatch: async (row, meta) => {
+              // We expect header earlier to have normalized fields: puzzleid, fen, moves, pgn, san, themes etc
+              // Keep the original row mapping object where keys are normalized header names
+              // For display use PuzzleId or a fallback
+              const displayId = row['puzzleid'] || row['puzzleid'.toLowerCase()] || row['id'] || '';
+              const rating = row['rating'] || '';
+              const title = displayId ? 'ID:' + displayId : (row['openingtags'] || row['themes'] || '').slice(0,40);
+              currentCandidateList.push({ row, meta:{ file: fname, fileUrl, rowNum: meta.rowNum }, display: (title + ' — ' + rating) });
+              total++;
+              if(total >= MAX_TOTAL_RESULTS) return true;
+              return false;
+            }
+          });
+        }catch(e){
+          console.warn('stream error', fileUrl, e);
+        }
+      }
+
+      if(currentCandidateList.length === 0){
+        puzzleSelector.innerHTML = '<option value="">No puzzles match rating/tactic</option>';
+        puzzleInfo.textContent = 'No puzzles found for that tactic and rating range.';
+        return;
+      }
+      puzzleSelector.innerHTML = '';
+      currentCandidateList.forEach((c,i)=>{
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = c.display || ('Puzzle ' + (i+1));
+        puzzleSelector.appendChild(opt);
+      });
+      puzzleInfo.textContent = `${currentCandidateList.length} puzzles loaded (showing up to ${MAX_TOTAL_RESULTS}). Choose one or press Random.`;
+    }
+
+    // When loading: accept FEN first; if no FEN try PGN or Moves columns.
+    async function loadPuzzleByCandidateIndex(idx){
+      const cand = currentCandidateList[idx];
+      if(!cand){
+        puzzleInfo.textContent = 'Invalid puzzle selection';
+        return;
+      }
+      puzzleInfo.textContent = 'Loading puzzle…';
+      const raw = cand.row;
+      // raw keys are normalized header names (no spaces), so check probable keys:
+      const fen = (raw['fen'] || raw['fen'.toLowerCase()] || '').trim();
+      // Moves column in your CSV may be "Moves" (maybe SAN moves separated by spaces).
+      const movesCol = (raw['moves'] || raw['moves'.toLowerCase()] || '').trim();
+      const pgn = (raw['pgn'] || raw['pgn'.toLowerCase()] || '').trim();
+      const puzzleId = raw['puzzleid'] || raw['puzzleid'.toLowerCase()] || '';
+      const title = puzzleId || (raw['openingtags'] || raw['themes'] || '').slice(0,40) || ('Puzzle ' + (idx+1));
+
+      try{
+        // Prefer FEN
+        if(fen){
+          try{
+            if(typeof game !== 'undefined' && game && typeof game.load === 'function'){
+              // If FEN column contains position only, we set position. If the FEN includes move counters, chess.load will accept that.
+              game.load(fen);
+            } else if(typeof Chess !== 'undefined'){
+              game = new Chess(fen);
+            } else {
+              throw new Error('Chess library not ready');
+            }
+            if(board) board.position(game.fen());
+            refreshNotation();
+            setPersistentLastMove('','');
+            puzzleInfo.textContent = `Loaded: ${title} (FEN)`;
+            return;
+          }catch(e){
+            console.warn('FEN load failed', e);
+            // continue to PGN/moves fallback
+          }
+        }
+
+        // Try PGN (some CSVs might include full PGN)
+        if(pgn){
+          try{
+            if(typeof game !== 'undefined' && game && typeof game.load_pgn === 'function'){
+              // Some Chess.js variants expose load_pgn
+              game.reset();
+              const ok = game.load_pgn(pgn);
+              if(!ok) {
+                // fallback: attempt manual moves
+                game.reset();
+              }
+            } else if(typeof Chess !== 'undefined'){
+              game = new Chess();
+              try{ game.load_pgn(pgn); }catch(e){ /* ignore */ }
+            }
+            if(board) board.position(game.fen());
+            refreshNotation();
+            puzzleInfo.textContent = `Loaded: ${title} (PGN)`;
+            return;
+          }catch(e){
+            console.warn('PGN load failed', e);
+          }
+        }
+
+        // Try Moves column (assume SAN sequence like "1. Qh5 Qe7 2. ...", or "Qh5,Qe7,..." or space-separated SAN)
+        if(movesCol){
+          // try to extract SAN tokens by removing numeric move numbers and punctuation
+          const sanOnly = movesCol.replace(/\d+\.+/g,'').replace(/\(/g,'').replace(/\)/g,'').replace(/,+/g,' ').trim();
+          const tokens = sanOnly.split(/\s+/).filter(t => t && t.length>0);
+          if(tokens.length > 0){
+            // create a fresh game and apply SAN moves one by one
+            if(typeof Chess !== 'undefined') game = new Chess(); else throw new Error('Chess lib missing');
+            game.reset();
+            for(const san of tokens){
+              try{
+                // game.move accepts SAN
+                const mv = game.move(san, { sloppy: true });
+                if(mv === null){
+                  // Try to ignore move numbers or stray tokens
+                }
+              }catch(e){}
+            }
+            if(board) board.position(game.fen());
+            refreshNotation();
+            puzzleInfo.textContent = `Loaded: ${title} (Moves applied)`;
+            return;
+          }
+        }
+
+        puzzleInfo.textContent = 'Puzzle missing FEN/PGN/Moves or content could not be parsed.';
+      }catch(e){
+        console.warn('load puzzle error', e);
+        puzzleInfo.textContent = 'Error loading puzzle: ' + (e && e.message ? e.message : e);
+      }
+    }
+
+    // UI wiring
+    tacticSelect.addEventListener('change', function(){
+      const t = tacticSelect.value;
+      if(!t){
+        puzzleSelector.innerHTML = '<option value="">— select tactic —</option>';
+        puzzleInfo.textContent = 'Pick a tactic';
+        return;
+      }
+      populatePuzzleListForTactic(t);
+    });
+    ratingMin.addEventListener('change', ()=> { if(tacticSelect.value) populatePuzzleListForTactic(tacticSelect.value); });
+    ratingMax.addEventListener('change', ()=> { if(tacticSelect.value) populatePuzzleListForTactic(tacticSelect.value); });
+
+    loadPuzzleBtn.addEventListener('click', function(){
+      const idx = parseInt(puzzleSelector.value,10);
+      if(isNaN(idx) || !currentCandidateList[idx]) {
+        puzzleInfo.textContent = 'Select a puzzle first';
+        return;
+      }
+      loadPuzzleByCandidateIndex(idx);
+    });
+
+    randomPuzzleBtn.addEventListener('click', function(){
+      if(currentCandidateList.length === 0) { puzzleInfo.textContent = 'No candidates to pick'; return; }
+      const idx = Math.floor(Math.random()*currentCandidateList.length);
+      puzzleSelector.value = String(idx);
+      loadPuzzleByCandidateIndex(idx);
+    });
+
+    // init
+    (function init(){
+      if(ratingMin) ratingMin.value = '800';
+      if(ratingMax) ratingMax.value = '2200';
+      loadManifestAndPopulate();
+      // expose for debugging
+      window._puzzleLoader = { populatePuzzleListForTactic, loadPuzzleByCandidateIndex, manifest: () => manifest };
+    })();
+
+  })();
+  </script>
+
+  <!-- Firebase runtime (as in your original) -->
   <script>
   (function(){
     const FIREBASE_CONFIG = {
@@ -447,7 +815,6 @@
       const gamesRef = db.ref('games');
       let movesRef = null;
 
-      // consistent sessionStorage key
       let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
       sessionStorage.setItem('iq4u_clientId', myId);
 
@@ -455,7 +822,6 @@
       let currentGameId = null;
       let presenceTimer = null;
 
-      // goOnline: writes role="student" and keeps record until explicit logout
       function goOnline(email){
         myEmail = email || ('anon-'+myId);
         const node = onlineRef.child(myId);
@@ -463,13 +829,11 @@
           .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
           .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
 
-        // intentionally DO NOT call onDisconnect().remove() so the student remains listed until explicit logout.
         if(presenceTimer) clearInterval(presenceTimer);
         presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
       }
       function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
 
-      // Watch for master's moves (master will write to moves/{myId})
       let masterMovesRef = null;
       function watchMasterMoves(){
         if(masterMovesRef) return;
@@ -477,19 +841,16 @@
         masterMovesRef.on('child_added', snap=>{
           const m = snap.val();
           if(!m) return;
-          // Only process moves from master (by field contains 'm_' prefix for master ID)
           if(!m.by || !m.by.startsWith('m_')) {
-            return; // Skip if not from master
+            return;
           }
           if(m.payload){
             try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
           }
         });
       }
-      // Start watching master moves immediately when online
       watchMasterMoves();
 
-      // notifications
       db.ref('notifications/'+myId).on('child_added', snap=>{
         const n = snap.val();
         if(!n) return;
@@ -538,14 +899,12 @@
 
       function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
 
-      // Join button — reads username input and goes online
       document.getElementById('joinBtnBottom').addEventListener('click', function(){
         const email = (document.getElementById('emailInputBottom').value||'').trim();
         if(!email) return alert('Enter username to join online');
         goOnline(email);
       });
 
-      // expose helper for auto-join from boot
       window.firebaseMultiplayer = {
         emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
         emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
@@ -558,9 +917,8 @@
       };
 
       window.addEventListener('beforeunload', ()=>{ /* do not auto-remove presence on unload per request */ });
-    })();  /* end inner IIFE */
-
-  })(); /* end outer IIFE */
+    })();
+  })();
   </script>
 </body>
 </html>
