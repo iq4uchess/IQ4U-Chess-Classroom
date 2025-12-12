@@ -323,20 +323,7 @@
       }catch(e){ console.warn('applyMoveTokenOnReal error', e); return null; }
     }
 
-    // compare student's actual move to expected token
-    function expectedMoveMatchesActual(expectedToken, expectedType, actualMove){
-      try{
-        // create temporary copy of current position BEFORE actual move (we assume actualMove has been already applied to game; for comparing we should compare using copy of position BEFORE applying actualMove — caller provides correct ordering)
-        // We'll take the current game FEN BEFORE the student's move is applied; but in onDrop we have already performed game.move for student's move.
-        // To avoid complexity, we reconstruct a temp position by undoing last move temporarily if needed.
-        // Simpler: compare actualMove.from/to/promotion to what we'd get if we applied expectedToken on a copy of the position BEFORE the student's move.
-        // So caller must pass the fenBeforeStudentMove.
-        console.warn('expectedMoveMatchesActual should be called with fenBeforeStudentMove context; implement by caller.');
-        return false;
-      }catch(e){ console.warn('expectedMoveMatchesActual error', e); return false; }
-    }
-
-    // We'll instead implement a compare function that takes fenBeforeStudentMove:
+    // compare student's actual move to expected token using a fenBefore snapshot
     function expectedMatchesActual_givenFen(expectedToken, expectedType, fenBefore, actualMove){
       try{
         const temp = new Chess(fenBefore);
@@ -384,6 +371,7 @@
         const type = solutionMoveTypes[solutionIndex];
         const applied = applyMoveTokenOnReal(token, type);
         if(!applied){
+          console.error('Auto-opponent failed to apply token:', token, 'type:', type, 'at solutionIndex:', solutionIndex, 'candidateIndex:', currentCandidateIndex, 'fenBefore:', game.fen());
           solutionStatus.textContent = 'Failed to apply opponent move: ' + token;
           return;
         }
@@ -400,15 +388,41 @@
 
     // called when solution fully applied
     function onSolutionFinished(){
-      clearSolutionTimer();
-      solutionStatus.textContent = 'Solution complete';
-      if(currentCandidateList && currentCandidateIndex >=0 && currentCandidateIndex < currentCandidateList.length-1){
-        setTimeout(()=> {
-          currentCandidateIndex++;
-          loadPuzzleByCandidateIndex(currentCandidateIndex);
-        }, 700);
-      } else {
-        solutionStatus.textContent = 'All moves applied - no more puzzles';
+      try{
+        clearSolutionTimer();
+        console.info('Solution finished for candidateIndex=', currentCandidateIndex);
+
+        // Attempt to advance to next candidate if available
+        if(Array.isArray(currentCandidateList) && currentCandidateIndex >= 0 && currentCandidateIndex < currentCandidateList.length - 1){
+          const nextIndex = currentCandidateIndex + 1;
+          // small visual feedback
+          solutionStatus.textContent = 'Loading next puzzle...';
+          // attempt to load; catch and log any errors
+          try{
+            loadPuzzleByCandidateIndex(nextIndex);
+            console.info('Loading next puzzle index=', nextIndex);
+          }catch(loadErr){
+            console.error('Failed to load next puzzle (first try):', loadErr);
+            // try one more time after brief delay (handles transient parse/fetch race)
+            setTimeout(()=>{
+              try{
+                loadPuzzleByCandidateIndex(nextIndex);
+                console.info('Retry: loaded next puzzle index=', nextIndex);
+              }catch(retryErr){
+                console.error('Retry also failed to load next puzzle:', retryErr);
+                solutionStatus.textContent = 'Next puzzle failed to load';
+              }
+            }, 300);
+          }
+          return;
+        }
+
+        // No next puzzle available
+        solutionStatus.textContent = 'Solution complete (no more puzzles)';
+        console.info('No subsequent puzzle to load (candidateIndex at end).');
+      }catch(e){
+        console.error('onSolutionFinished error', e);
+        solutionStatus.textContent = 'Solution finished (error)';
       }
     }
 
@@ -618,7 +632,7 @@
       if(!row) return { tokens:[], types:[] };
       // find SAN field (various possible header names)
       const tryGet = (names) => { for(const n of names) if(row[n] && row[n].toString().trim()) return row[n].toString().trim(); return ''; };
-      const sanField = tryGet(['san','san.','sanmoves','san_moves','san_tokens']);
+      const sanField = tryGet(['san','san.','sanmoves','san_moves','san_tokens','san']);
       const movesField = tryGet(['moves','move','mv','moves_tokens']);
       const pgnField = tryGet(['pgn','game','text']);
 
@@ -663,35 +677,57 @@
       currentCandidateIndex = idx;
       currentPuzzleIdEl.textContent = getCandidateDesc(idx);
       const raw = cand.row;
-      const fenRaw = (raw['fen']||'').toString().trim();
       solutionStatus.textContent = 'Loading ' + (raw['puzzleid'] || cand.meta.file);
+
+      // Debug: show parsed keys for failing rows if needed (uncomment for deeper debugging)
+      // console.group('DEBUG candidate row'); console.log('raw keys:', Object.keys(raw)); console.log('raw.fen:', raw['fen']); console.log('raw.pgn (trim):', (raw['pgn']||'').slice(0,200)); console.groupEnd();
+
       try{
-        // parse and load fen (ensure no surrounding quotes)
-        const fen = fenRaw.replace(/^"+|"+$/g,'').trim();
-        if(!fen){
-          solutionStatus.textContent = 'No FEN in row';
-          return;
+        // --- FEN selection and validation (fallback to PGN [FEN "..."])
+        const fenRawCandidate = (raw['fen'] || '').toString().trim();
+        function extractFenFromPgn(pgnText){
+          if(!pgnText) return '';
+          const m = pgnText.match(/\[FEN\s+"([^"]+)"\]/i);
+          if(m && m[1]) return m[1].trim();
+          return '';
         }
-        // validate basic fen format: must have at least 6 space-separated parts
-        const fenParts = fen.split(/\s+/);
-        if(fenParts.length < 6){
-          // if FEN only piece placement, append reasonable defaults: assume white to move and no castling
-          // but prefer to warn
-          console.warn('FEN appears incomplete, appending defaults', fen);
-          // append " w - - 0 1"
-          const appended = fen + ' w - - 0 1';
-          initialFen = appended;
+
+        let fenSelected = '';
+        if(fenRawCandidate && fenRawCandidate.length > 0){
+          fenSelected = fenRawCandidate.replace(/^"+|"+$/g,'').trim();
         } else {
-          initialFen = fen;
+          // try PGN fallback
+          const pgnCandidate = (raw['pgn'] || raw['PGN'] || raw['Pgn'] || '').toString();
+          const fenFromPgn = extractFenFromPgn(pgnCandidate);
+          if(fenFromPgn){
+            console.info('Using FEN extracted from PGN tag for puzzle:', fenFromPgn);
+            fenSelected = fenFromPgn;
+          } else {
+            console.warn('No FEN in row.fen and no [FEN] tag found in PGN for candidate', cand && cand.meta ? cand.meta.file : null, 'row:', raw);
+            solutionStatus.textContent = 'No FEN in row';
+            return; // preserve existing behavior when no fen available
+          }
         }
+
+        // Validate minimal FEN format (should have at least 6 parts)
+        const parts = fenSelected.split(/\s+/);
+        if(parts.length < 6){
+          // if only piece placement is present, append safe defaults
+          console.warn('FEN appears incomplete — appending defaults. Found parts:', parts.length, fenSelected);
+          // default: white to move, no castling, no en-passant, halfmove 0, fullmove 1
+          fenSelected = fenSelected + ' w - - 0 1';
+        }
+
+        initialFen = fenSelected;
+
         // load into chess.js
         try{ if(typeof Chess !== 'undefined') game = new Chess(initialFen); else game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
         if(!game) game = new Chess();
         // set board and initial fen
         if(board) board.position(game.fen());
         // store initial side to move
-        const parts = initialFen.split(/\s+/);
-        initialSideToMove = (parts && parts[1]) ? parts[1] : 'w';
+        const parts2 = initialFen.split(/\s+/);
+        initialSideToMove = (parts2 && parts2[1]) ? parts2[1] : 'w';
         // prepare solutionMoves - prefer SAN column
         const extracted = extractMovesFromRow(raw);
         solutionMoves = extracted.tokens || [];
@@ -705,7 +741,6 @@
         refreshNotation(-1);
         solutionStatus.textContent = `Loaded: ${(raw['puzzleid']||cand.meta.file)} (${solutionMoves.length} moves)`;
         // If first move is the side indicated by the FEN (i.e. index 0 belongs to the side to move), those are "opponent" moves.
-        // Auto-play opponent moves when index parity shows opponent moves (index 0 is the FEN active color)
         if(solutionMoves && solutionMoves.length>0 && solutionIndex % 2 === 0 && autoOpponent.checked){
           setTimeout(()=> autoPlayOpponentNext(), 200);
         }
