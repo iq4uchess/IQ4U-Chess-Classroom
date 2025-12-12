@@ -49,6 +49,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
   <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
   <script>
@@ -63,13 +64,14 @@
       appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
     try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
+
     const db = firebase.database();
     const onlineRef = db.ref('online');
     const gamesRef = db.ref('games');
 
-    const MASTER_ID = sessionStorage.getItem('iq4u_clientId') || ('m_'+Math.random().toString(36).slice(2,10));
-    sessionStorage.setItem('iq4u_clientId', MASTER_ID);
-    const MASTER_NAME = localStorage.getItem('username') || localStorage.getItem('email') || 'master';
+    // MASTER identity will be derived from Firebase Auth when present
+    let MASTER_ID = null;
+    let MASTER_NAME = localStorage.getItem('username') || localStorage.getItem('email') || 'master';
 
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
@@ -125,43 +127,7 @@
     await ensureChess();
     for(const s of STUDENTS) initEngineAndBoard(s.id);
 
-    // ---------- presence handling (only count recent entries) ----------
-    onlineRef.on('value', snap => {
-      const val = snap.val() || {};
-      for(const k in onlineMap) delete onlineMap[k];
-      let countRecent = 0;
-      const now = Date.now();
-      // treat an entry as online if ts within last 45s
-      const ONLINE_WINDOW_MS = 45_000;
-      for(const id in val){
-        if(!val.hasOwnProperty(id)) continue;
-        const rec = val[id] || {};
-        const ts = rec.ts || 0;
-        onlineMap[id] = { email: rec.email || id, role: rec.role || null, ts };
-        if(Number(ts) > (now - ONLINE_WINDOW_MS)) countRecent++;
-      }
-
-      // only notify when true count changes
-      if(lastOnlineCount === null || lastOnlineCount !== countRecent){
-        lastOnlineCount = countRecent;
-        // update per-card notification once (dedupe in addNotification)
-        STUDENTS.forEach(s => addNotification(s.id, `Players online: ${countRecent}`));
-      }
-
-      STUDENTS.forEach(s => populateSelectForBoard(s.id));
-      STUDENTS.forEach(s => updateMasterStudentsList(s.id));
-      STUDENTS.forEach(s => refreshBadge(s.id));
-    });
-
-    // publish master presence (as before)
-    try{
-      const n = onlineRef.child(MASTER_ID);
-      n.set({ email: MASTER_NAME, role: 'master', ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{});
-      n.onDisconnect().remove();
-      setInterval(()=> n.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
-    }catch(e){}
-
-    // ---------- helpers ----------
+    // ---------- functions (unchanged UI helpers) ----------
     function createCard(student, pieceTheme, index){
       const card = document.createElement('div'); card.className = 'board-card'; card.dataset.studentId = student.id;
 
@@ -199,9 +165,7 @@
       `;
       card.appendChild(multiplayPanel);
 
-      // default sizes: top two bigger
       const defaultSize = (index < 2) ? 570 : 360;
-
       boardsState[student.id] = {
         size: defaultSize,
         flip: false,
@@ -236,6 +200,7 @@
       masterSpectateBtn.addEventListener('click', () => {
         const selectedStudent = masterStudentsSelect.value;
         if(!selectedStudent){ alert('Select a student'); return; }
+        if(!MASTER_ID){ alert('Sign-in required for master to send invites'); return; }
         sendSpectateInvite(student.id, selectedStudent);
         masterStatus.textContent = `Invite sent to ${selectedStudent}`;
         addNotification(student.id, `Invite sent to ${selectedStudent}`);
@@ -286,7 +251,6 @@
       const ONLINE_WINDOW_MS = 45_000;
       const onlineIds = Object.keys(onlineMap || {}).filter(id => {
         const entry = onlineMap[id] || {};
-        // only include if ts is recent
         if(!entry.ts || Number(entry.ts) < (now - ONLINE_WINDOW_MS)) return false;
         return (entry.role && String(entry.role).toLowerCase() === 'student') || isLikelyStudentEntry(entry.email);
       });
@@ -326,7 +290,6 @@
       const el = document.getElementById('notif_' + boardId);
       if(!el) return;
       const st = boardsState[boardId];
-      // dedupe: skip if identical to last shown notification
       if(st && st.lastNotif === msg) return;
       st.lastNotif = msg;
       const item = document.createElement('div');
@@ -334,7 +297,6 @@
       item.textContent = `${new Date().toLocaleTimeString()} — ${msg}`;
       el.insertBefore(item, el.firstChild);
       while(el.children.length > 10) el.removeChild(el.lastChild);
-      // remove after 10s
       setTimeout(() => {
         try{
           if(item && item.parentElement) item.parentElement.removeChild(item);
@@ -346,6 +308,7 @@
     // ---------- spectate invite flow ----------
     function sendSpectateInvite(boardId, clientId){
       if(!clientId) return;
+      if(!MASTER_ID) return addNotification(boardId, 'Sign in required to send invite');
       try{
         const inviteRef = db.ref(`spectateInvites/${clientId}/${MASTER_ID}`);
         const payload = { type:'spectate', fromId:MASTER_ID, fromEmail:MASTER_NAME, boardId:boardId||null, ts: firebase.database.ServerValue.TIMESTAMP };
@@ -355,8 +318,9 @@
     }
 
     // Listen for responses (spectateResponses/<MASTER_ID>) -> show accepted/declined notifications and start watching when accepted
-    (function listenForSpectateResponses(){
-      const respRef = db.ref(`spectateResponses/${MASTER_ID}`);
+    function listenForSpectateResponsesForMaster(masterUid){
+      if(!masterUid) return;
+      const respRef = db.ref(`spectateResponses/${masterUid}`);
       respRef.on('child_added', snap => {
         const resp = snap.val();
         if(!resp) return;
@@ -376,26 +340,23 @@
             sel.appendChild(opt);
           }
           if(sel) sel.value = studentId;
-          // *** IMPORTANT: clear previous moveRecords for this board when starting to watch a new client
+          // clear previous moveRecords for this board
           boardsState[targetBoard].moveRecords = {};
           boardsState[targetBoard].processedMoveKeys = new Set();
           startWatching(targetBoard, studentId);
         } else {
           addNotification(targetBoard, `Invite declined by ${studentId}`);
-          // keep selection - do not clear select
         }
         snap.ref.remove().catch(()=>{});
       });
       function findBoardForStudentId(id){ for(const s of STUDENTS) if(s.id === id) return s.id; return null; }
-    })();
+    }
 
-    // ---------- watching & replay (core logic kept intact) ----------
+    // ---------- watching & replay (same logic as previously) ----------
     const CANDIDATE_PATHS = ['','game','move','moves'];
-
     function startWatching(boardId, clientId){
       const st = boardsState[boardId];
       if(!st) return;
-      // clear previous listeners but keep moveRecords cleared above on accept; if needed you can preserve
       stopWatching(boardId, {clearRecords:false});
       st.watchedClientId = clientId;
       refreshBadge(boardId);
@@ -411,7 +372,6 @@
         st.listeners[path] = { ref, handlers:{ value:onValue, child_added:onChildAdded } };
       });
 
-      // moves/{clientId}
       try{
         const movesPath = `moves/${clientId}`;
         const movesRef = db.ref(movesPath);
@@ -476,9 +436,7 @@
       refreshBadge(boardId);
       addNotification(boardId, 'Stopped watching');
       clearNotation(boardId);
-      if(!opts.clearRecords){
-        // keep moveRecords if desired (we clear them when accepting a new invite to avoid cross-contamination)
-      } else {
+      if(opts.clearRecords){
         st.moveRecords = {};
         st.processedMoveKeys = new Set();
       }
@@ -490,7 +448,6 @@
       const ts = value && (value.ts || (value.payload && value.payload.ts)) ? (value.ts || (value.payload && value.payload.ts)) : Date.now();
       const st = boardsState[boardId];
       if(!st) return;
-      // store per-board (keys isolated)
       st.moveRecords[key] = { payload, ts: Number(ts) || Date.now() };
       replayMoveRecords(boardId);
     }
@@ -574,22 +531,97 @@
     }
     function clearNotation(boardId){ const notEl = document.getElementById('notation_' + boardId); if(notEl) notEl.innerHTML = 'No moves.'; }
 
+    // ---------- presence & listeners (attach after auth) ----------
+    function attachPresenceAndListenersForMaster(uid, displayName, email){
+      if(!uid) return;
+      MASTER_ID = uid;
+      MASTER_NAME = displayName || localStorage.getItem('username') || localStorage.getItem('email') || email || 'master';
+
+      // publish master presence under /online/<uid> with required shape
+      try{
+        const n = onlineRef.child(MASTER_ID);
+        const payload = { name: MASTER_NAME, email: email || '', role: 'master', ts: firebase.database.ServerValue.TIMESTAMP };
+        n.set(payload).catch(()=>{});
+        // remove on disconnect
+        try{ n.onDisconnect().remove(); }catch(e){}
+        // refresh timestamp periodically
+        setInterval(()=> n.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
+      }catch(e){}
+
+      // online list watcher (only valid while authenticated)
+      onlineRef.on('value', snap => {
+        const val = snap.val() || {};
+        for(const k in onlineMap) delete onlineMap[k];
+        let countRecent = 0;
+        const now = Date.now();
+        const ONLINE_WINDOW_MS = 45_000;
+        for(const id in val){
+          if(!val.hasOwnProperty(id)) continue;
+          const rec = val[id] || {};
+          const ts = rec.ts || 0;
+          onlineMap[id] = { email: rec.email || id, role: rec.role || null, ts };
+          if(Number(ts) > (now - ONLINE_WINDOW_MS)) countRecent++;
+        }
+
+        if(lastOnlineCount === null || lastOnlineCount !== countRecent){
+          lastOnlineCount = countRecent;
+          STUDENTS.forEach(s => addNotification(s.id, `Players online: ${countRecent}`));
+        }
+
+        STUDENTS.forEach(s => populateSelectForBoard(s.id));
+        STUDENTS.forEach(s => updateMasterStudentsList(s.id));
+        STUDENTS.forEach(s => refreshBadge(s.id));
+      });
+
+      // spectateResponses listener for master
+      listenForSpectateResponsesForMaster(MASTER_ID);
+    }
+
+    // ---------- start watching / moves logic (reused above) ----------
+    // (startWatching, attachGameMoveListenersForStudent, attachMovesListenerForGame, stopWatching,
+    //  ingestPayloadWithMeta, ingestPayload, replayMoveRecords, updateNotation already defined)
+
+    // ---------- AUTH boot: require master to sign in ----------
+    // If your master account is a service account or a special auth user, you must sign-in on this page.
+    // For simplicity, we expect you to sign in previously or use other auth flows. We will detect auth state.
+    firebase.auth().onAuthStateChanged(user => {
+      if(user){
+        // user is authenticated - use real UID
+        const uid = user.uid;
+        const displayName = user.displayName || null;
+        const email = user.email || '';
+        console.log('Master signed in as', uid, email);
+        attachPresenceAndListenersForMaster(uid, displayName, email);
+      } else {
+        // not signed in. Show status and keep UI active but restrict invites
+        // Optionally you can redirect to index.html to sign in
+        console.warn('No auth user for master page. Master features disabled until sign-in.');
+        // If you want to automatically sign the master in using a saved token or custom flow,
+        // implement sign-in here (omitted for security).
+      }
+    });
+
     // ---------- utilities ----------
     function getDebugElem(boardId){ return document.getElementById('debug_' + boardId); }
 
-    document.getElementById('globalLogout').addEventListener('click', () => {
-      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); sessionStorage.removeItem('iq4u_clientId'); }catch(e){}
-      try{ onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
+    document.getElementById('globalLogout').addEventListener('click', async () => {
+      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
+      try{ if(MASTER_ID) onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
+      // sign out if auth available
+      if(firebase.auth){
+        try{ await firebase.auth().signOut(); }catch(e){}
+      }
+      // clear local session storage id
+      try{ sessionStorage.removeItem('iq4u_clientId'); }catch(e){}
       window.location.href = 'index.html';
     });
+
     window.addEventListener('beforeunload', () => {
-      try{ onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
-      STUDENTS.forEach(s => stopWatching(s.id));
+      try{ if(MASTER_ID) onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
+      STUDENTS.forEach(s => stopWatching(s.id, { clearRecords:true }));
     });
 
   })();
   </script>
 </body>
 </html>
-
-
