@@ -1,848 +1,568 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Puzzle Trainer — Student2 (Offline)</title>
-<style>
-  :root{
-    --bg:#f6f7fb; --panel:#ffffff; --muted:#6b7280; --accent:#0f172a; --card-shadow: 0 6px 18px rgba(2,6,23,.04);
-  }
-  html,body{height:100%; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:#111;}
-  .wrap{max-width:1200px; margin:20px auto; padding:14px; display:grid; grid-template-columns: 420px 1fr; gap:18px; align-items:start;}
-  header{grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px;}
-  header h1{margin:0;font-size:18px;}
-  .panel{background:var(--panel); padding:12px; border-radius:10px; box-shadow:var(--card-shadow);}
-  .muted{color:var(--muted); font-size:13px;}
-  /* Board Top */
-  .board-top{grid-column:1/-1; display:flex; flex-direction:column; gap:12px; align-items:center;}
-  .controls{display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap;}
-  .controls button, .controls select{padding:8px 10px; border-radius:8px; border:none; background:var(--accent); color:#fff; cursor:pointer;}
-  .controls .ghost{background:transparent; color:var(--accent); border:1px solid #e6eefc;}
-  /* Resizer UI */
-  .resizer{display:flex; gap:10px; align-items:center;}
-  .range{width:260px;}
-  #board-wrapper{width:100%; max-width:720px; display:flex; align-items:center; justify-content:center; transition: max-width 160ms ease;}
-  #board{width:100%; aspect-ratio:1/1; max-height:80vh; border-radius:8px; background:#fefefe; box-shadow:inset 0 0 0 1px #eef2ff; display:block; touch-action:none;}
-  .board-row{display:flex;}
-  .square{width:calc(100%/8); height:calc(100%/8); display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; cursor:pointer; font-size:32px;}
-  .square.dark{background:#b58863;}
-  .square.light{background:#f0d9b5;}
-  .square.highlight{outline:3px solid rgba(255,215,0,0.4);}
-  .square.legal{box-shadow:inset 0 -10px 0 rgba(0,0,0,0.12);}
-  .piece{font-size:calc(var(--piece-size,38px)); pointer-events:none;}
-  /* left column */
-  .col-left{display:flex; flex-direction:column; gap:12px;}
-  textarea{width:100%; min-height:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace;}
-  .row{display:flex; gap:8px; align-items:center;}
-  .small{font-size:13px; color:var(--muted);}
-  /* moves list and stats */
-  #movesList{min-height:220px; max-height:320px; overflow:auto; padding:8px; border-radius:6px; background:#fbfdff; border:1px solid #eef2ff;}
-  .move-row{padding:6px;border-radius:6px;}
-  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-  .tag{background:#eef2ff;color:#0f172a;padding:4px 8px;border-radius:999px;font-size:12px;}
-  .stat{font-size:13px;color:var(--muted);}
-  /* right column */
-  .col-right{display:flex; flex-direction:column; gap:12px;}
-  .panel-title{display:flex; justify-content:space-between; align-items:center;}
-  .list{display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto;}
-  .puzzle-item{padding:8px;border-radius:8px; display:flex; justify-content:space-between; align-items:center; gap:8px; border:1px solid #eef2ff; background:#fff;}
-  footer{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;margin-top:8px;}
-  /* responsive */
-  @media(max-width:980px){
-    .wrap{grid-template-columns:1fr; padding:10px;}
-    #board-wrapper{max-width:100%;}
-    .range{width:140px;}
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IQ4U — Student Puzzle (student2)</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <style>
+    html,body{ overscroll-behavior-y: contain; height:100%; }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; width:100%; justify-content:center; }
+    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:920px; width:100%; box-sizing:border-box; }
+    .small{ font-size:13px; color:#555; }
+    .muted{ color:#666; font-size:13px; }
+    .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
+    .board-top{ grid-column: 1 / -1; display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; }
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
+    #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; }
+    #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
+    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
+    .resizer .range{ width:260px; }
+    .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
+    textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
+    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
+    @media (max-width:900px){
+      .container{ grid-template-columns:1fr; padding:0 12px; gap:12px; }
+      #board-wrapper{ max-width:100%; }
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
+      .resizer .range{ width:140px; }
+      button { padding:10px 14px; font-size:15px; }
+      .controls { flex-wrap:wrap; gap:12px; }
+    }
+    .multiplayer-panel { margin-top: 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:920px; }
+    .multiplayer-panel input[type="text"] { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
+    .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
+    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
+    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
+    .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
+    .promote-modal .row{ display:flex; gap:8px; align-items:center; justify-content:center; }
+    .promote-modal button{ min-width:44px; min-height:44px; font-weight:700; }
+    .readonly-note{ color:#444; font-size:13px; margin-left:8px; }
+    .logout-btn { background:#dc2626; }
+    #draw-overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:30; }
+    .arrow-line { stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .arrow-head { fill: currentColor; }
+    .square-highlight { position:absolute; border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,0.06); background: rgba(220,20,60,0.12); width:44px; height:44px; display:block; z-index:25; border:3px solid rgba(220,20,60,0.25); }
+  </style>
 </head>
 <body>
-<div class="wrap" role="application" aria-label="Puzzle trainer UI">
-  <header>
-    <h1>Puzzle Trainer — Student2 (Offline)</h1>
-    <div style="display:flex;gap:10px;align-items:center;">
-      <div class="small">Logged in as <strong>student2</strong></div>
-      <button id="exportDbBtn" title="Export local puzzle DB">Export DB</button>
-      <button id="importDbBtn" title="Import DB">Import DB</button>
-      <input id="importFile" type="file" accept=".json" style="display:none" />
-    </div>
-  </header>
 
-  <!-- TOP: board + controls -->
-  <div class="board-top panel">
+  <!-- ACCESS CHECK: strict for student2 only -->
+  <script>
+    (function(){
+      const allowedRoles = ['student2']; // strict: only student2 allowed on this page
+      const role = localStorage.getItem('role');
+      console.log('student2.html access-check sees role =', role);
+      if(!role || allowedRoles.indexOf(role) === -1){
+        try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
+      }
+    })();
+  </script>
+
+  <div class="board-top">
     <div class="controls" aria-hidden="false">
-      <div class="toolbar">
-        <button id="undoBtn">Undo</button>
-        <button id="prevBtn">Prev</button>
-        <button id="nextBtn">Next</button>
-        <button id="flipBtn">Flip</button>
-        <button id="autoPlayBtn" class="ghost">Auto Play</button>
-        <button id="hintBtn" class="ghost">Hint</button>
-        <button id="showSolutionBtn">Show Solution</button>
-      </div>
-
-      <div style="width:8px;"></div>
-
-      <div class="resizer">
-        <button id="presetSmall">S</button>
-        <button id="presetMed">M</button>
-        <button id="presetLarge">L</button>
-        <input id="boardSizeRange" class="range" type="range" min="240" max="1200" step="10" value="720" aria-label="Board size">
-        <small id="boardSizeLabel">720px</small>
-      </div>
+      <button id="undoBtn">Undo</button>
+      <button id="flipBtn">Flip</button>
+      <button id="resignBtn" title="Resign / Reset" style="background:#8b0f0f;">Resign</button>
+      <button id="logoutBtn" class="logout-btn">Logout</button>
     </div>
 
-    <div style="width:100%; max-width:920px;">
-      <div id="board-wrapper"><div id="board" role="grid" aria-label="Chessboard container"></div></div>
+    <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
+      <input id="boardSizeRange" name="board-size" class="range" type="range" min="240" max="1200" step="10" value="570" aria-label="Board size">
+      <small id="boardSizeLabel">570px</small>
+    </div>
 
-      <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
-        <div>Orientation:
-          <select id="orientationSelect"><option value="white">White</option><option value="black">Black</option></select>
-        </div>
-        <div>FEN: <code id="fenDisplay" style="font-family:monospace;"></code></div>
+    <div class="panel" style="width:100%; max-width:920px;">
+      <div id="board-wrapper">
+        <div id="board" aria-label="Chessboard container"></div>
+        <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
       </div>
-      <div class="muted" id="msg" aria-live="polite" style="margin-top:8px;"></div>
+
+      <div class="info" id="msg" aria-live="polite"></div>
+
+      <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
     </div>
   </div>
 
-  <!-- Left column: puzzle input / controls -->
-  <div class="col-left">
-    <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <strong>Import / Create Puzzles</strong>
-        <div class="small muted">Offline only</div>
-      </div>
-      <div style="margin-top:8px;">
-        <textarea id="pgnInput" placeholder="Paste PGN(s) or FEN+solution here. Examples:
-1) PGN: 1. e4 e5 2. Nf3 Nc6
-2) FEN + moves block:
-[FEN \"r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3\"]
-1. Nc3 d6
-"></textarea>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <input type="file" id="pgnFile" accept=".pgn,text/plain" />
-          <button id="loadPgnBtn">Load</button>
-          <button id="clearPgn">Clear</button>
-          <button id="addToDbBtn">Add to DB</button>
-        </div>
-        <div class="small muted" style="margin-top:8px;">You may paste multiple PGNs separated by a blank line or [Event] tag. Use FEN header to specify starting positions.</div>
-      </div>
+  <!-- Removed the controls+FEN container per request -->
+
+  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;" id="multiplayerPanel">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label for="emailInputBottom" class="small">Your username:</label>
+      <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
+      <button id="joinBtnBottom">Join Online</button>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">
-        <strong>Puzzle Controls</strong>
-        <div class="small muted" id="puzzleCounter">0 puzzles</div>
-      </div>
-      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button id="startBtn">Start</button>
-        <button id="shuffleBtn">Shuffle</button>
-        <button id="markWrongBtn" class="ghost">Mark Wrong</button>
-        <button id="skipBtn" class="ghost">Skip</button>
-        <button id="reviewWrongBtn">Review Wrong</button>
-      </div>
-      <div style="margin-top:10px;">
-        <div class="small">Filters: <input id="filterTag" placeholder="tag/category" /> <button id="applyFilter">Apply</button> <button id="clearFilter">Clear</button></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <strong>Session Stats</strong>
-      <div style="margin-top:8px;">
-        <div class="stat">Total attempted: <span id="statAttempted">0</span></div>
-        <div class="stat">Solved: <span id="statSolved">0</span></div>
-        <div class="stat">Accuracy: <span id="statAccuracy">0%</span></div>
-        <div style="margin-top:8px;"><button id="resetProgress">Reset Progress</button></div>
-      </div>
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
+      <div id="multiplayStatus" class="muted">Not connected</div>
+      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
     </div>
   </div>
 
-  <!-- Right column: puzzle list / moves -->
-  <div class="col-right">
-    <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <strong>Loaded Puzzles</strong>
-        <div class="small muted">click to load</div>
-      </div>
-      <div id="puzzleList" class="list" style="margin-top:8px;"></div>
-    </div>
-
-    <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <strong>Solution / Moves</strong>
-        <div class="small muted">toggle</div>
-      </div>
-      <div id="movesList" style="margin-top:8px; display:block;"></div>
+  <div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
+    <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
+    <div class="row">
+      <button data-piece="q">Q</button>
+      <button data-piece="r">R</button>
+      <button data-piece="b">B</button>
+      <button data-piece="n">N</button>
     </div>
   </div>
 
-  <footer class="muted">Local puzzle DB stored in browser. Export/Import with buttons above.</footer>
-</div>
+  <!-- libs -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
-<!-- Local dependency: chess.min.js must be in same folder -->
-<script src="chess.min.js"></script>
+  <script>
+  (function(){
+    const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
+    const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
+    const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-<script>
-/*
-  Student2 Puzzle Trainer (offline)
-  - Requires chess.min.js available locally in same directory.
-  - Board rendered with SVG/HTML and Unicode chess glyphs (no external images).
-  - Uses chess.js for move validation, FEN, SAN, etc.
-*/
+    // DOM
+    const boardWrapper = document.getElementById('board-wrapper');
+    const drawOverlay = document.getElementById('draw-overlay');
+    const boardSizeRange = document.getElementById('boardSizeRange');
+    const boardSizeLabel = document.getElementById('boardSizeLabel');
+    const msgEl = document.getElementById('msg');
+    const promoteModal = document.getElementById('promoteModal');
 
-/* ---------- Utility helpers ---------- */
-function $(id){ return document.getElementById(id); }
-function setMsg(t, ms=0){ const m=$('msg'); m.textContent=t||''; if(ms>0) setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, ms); }
+    // controls
+    const undoBtn = document.getElementById('undoBtn');
+    const flipBtn = document.getElementById('flipBtn');
+    const resignBtn = document.getElementById('resignBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
 
-/* ---------- Board rendering w/ Unicode pieces ---------- */
-const UNICODE_PIECES = {
-  p: '♟', r:'♜', n:'♞', b:'♝', q:'♛', k:'♚',
-  P: '♙', R:'♖', N:'♘', B:'♗', Q:'♕', K:'♔'
-};
+    // notation
+    const movesList = document.getElementById('movesList');
 
-const fileNames = ['a','b','c','d','e','f','g','h'];
+    // multiplayer UI
+    const emailInputBottom = document.getElementById('emailInputBottom');
+    const joinBtnBottom = document.getElementById('joinBtnBottom');
+    const multiplayStatus = document.getElementById('multiplayStatus');
+    const pairedBubble = document.getElementById('pairedBubble');
 
-function createBoardElement(sizePx){
-  const board = $('board');
-  board.innerHTML = '';
-  const wrapperWidth = board.clientWidth || sizePx || 720;
-  board.style.width = '100%';
-  // create 8x8 squares
-  for(let rank=8; rank>=1; rank--){
-    const row = document.createElement('div');
-    row.className = 'board-row';
-    row.style.display = 'flex';
-    for(let file=0; file<8; file++){
-      const sq = document.createElement('div');
-      sq.className = 'square';
-      const isDark = ((file + rank) % 2 === 1);
-      sq.classList.add(isDark ? 'dark' : 'light');
-      sq.dataset.square = fileNames[file] + rank;
-      sq.setAttribute('role','button');
-      sq.setAttribute('aria-label', 'square ' + sq.dataset.square);
-      const p = document.createElement('div');
-      p.className = 'piece';
-      sq.appendChild(p);
-      row.appendChild(sq);
+    // state
+    let board = null, game = null, currentTheme = FALLBACK_THEME;
+    let myColor = null, isPaired = false, pairedGameId = null;
+    let pendingPromo = null;
+
+    // drawing state
+    let drawing = false;
+    let drawPointerId = null;
+    let drawStart = null;
+    let tempLine = null;
+    let tempHead = null;
+    let finalizedArrows = [];
+    let selectedSquareHighlights = {};
+    let lastMoveSquares = [];
+
+    // left-click detection
+    let leftClickStart = null;
+
+    function setMsg(t, ms=0){
+      if(msgEl) msgEl.textContent = t||'';
+      if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
     }
-    board.appendChild(row);
-  }
-}
 
-/* ---------- Application state ---------- */
-let engine = null; // Chess.js instance
-let boardOrientation = 'white'; // 'white' | 'black'
-let db = { puzzles: [] }; // puzzle DB in memory
-let session = {
-  currentIndex: -1,
-  currentPuzzle: null,
-  stepIndex: 0, // index into puzzle.moves (SAN tokens)
-  inPlay: false,
-  selectedSquare: null,
-  stats: { attempted:0, solved:0 },
-  showMoves: false,
-  wrongQueue: []
-};
-const STORAGE_KEY = 'puzzleTrainerDB_v1';
-const PROGRESS_KEY = 'puzzleTrainerProgress_v1';
-
-/* ---------- Persistence ---------- */
-function saveDB(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
-function loadDB(){ const raw=localStorage.getItem(STORAGE_KEY); if(raw){ try{ db=JSON.parse(raw); }catch(e){ console.warn('db parse fail',e); } } renderPuzzleList(); updatePuzzleCounter(); }
-function saveProgress(){ localStorage.setItem(PROGRESS_KEY, JSON.stringify({ stats:session.stats, wrong: session.wrongQueue })); }
-function loadProgress(){ const raw=localStorage.getItem(PROGRESS_KEY); if(raw){ try{ const j=JSON.parse(raw); session.stats = j.stats || session.stats; session.wrongQueue = j.wrong || []; }catch(e){ } } updateStatsUI(); }
-
-/* ---------- PGN / FEN parsing helpers (robust) ---------- */
-function stripCommentsAndVariations(raw){
-  if(!raw) return '';
-  let s = raw.replace(/\{[^}]*\}/g, ' ');
-  s = s.replace(/%[^\n]*\n/g, ' ');
-  while(/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, ' ');
-  return s;
-}
-
-function extractLastFEN(raw){
-  if(!raw) return null;
-  const re = /\[FEN\s+"([^"]+)"\]/g;
-  let m, last=null;
-  while((m=re.exec(raw))!==null) last = m[1];
-  return last;
-}
-
-function extractSANMoves(pgnClean){
-  if(!pgnClean) return [];
-  let body = pgnClean.replace(/\[[^\]]*\]/g,' ');
-  body = body.replace(/\s+/g,' ').trim();
-  if(!body) return [];
-  const tokens = body.split(' ').filter(t => t && !/^\d+\.{1,3}$/.test(t) && t!=='1-0' && t!=='0-1' && t!=='1/2-1/2' && t!=='*');
-  return tokens;
-}
-
-function splitPGNs(raw){
-  if(!raw) return [];
-  const byEvent = raw.split(/\n(?=\[Event\s)/g).map(s=>s.trim()).filter(Boolean);
-  if(byEvent.length>1) return byEvent;
-  return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
-}
-
-/* ---------- Puzzle object format ----------
-  {
-    id: <uuid/string>,
-    title: <string>,
-    tags: [ 'tactics', 'mate', 'endgame' ],
-    fen: <starting FEN> or null (default start),
-    moves: [ 'e4', 'e5', 'Nf3', ... ]  // SAN tokens
-    sourceText: original input for reference
-    stats: { attempts:0, solved:0, lastAttempt:timestamp }
-  }
-------------------------------------------- */
-
-function makeId(){ return 'p_'+Math.random().toString(36).slice(2,9); }
-
-function addPuzzlesFromText(raw){
-  const parts = splitPGNs(raw);
-  let added = 0;
-  for(const part of parts){
-    const pgn = part.trim();
-    if(!pgn) continue;
-    const cleaned = stripCommentsAndVariations(pgn);
-    const moves = extractSANMoves(cleaned);
-    const fen = extractLastFEN(pgn) || null;
-    const title = fen ? 'FEN puzzle' : (pgn.split('\n')[0].slice(0,80) || 'Puzzle');
-    const pu = {
-      id: makeId(),
-      title: title,
-      tags: [],
-      fen: fen,
-      moves: moves,
-      sourceText: pgn,
-      stats: { attempts:0, solved:0, lastAttempt:null }
-    };
-    db.puzzles.push(pu);
-    added++;
-  }
-  saveDB();
-  loadDB();
-  setMsg(`Added ${added} puzzle(s)`, 1600);
-}
-
-/* ---------- UI rendering ---------- */
-function renderPuzzleList(){
-  const list = $('puzzleList');
-  list.innerHTML = '';
-  db.puzzles.forEach((p, idx) => {
-    const el = document.createElement('div');
-    el.className='puzzle-item';
-    el.innerHTML = `<div style="min-width:0">
-      <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.title}</div>
-      <div class="small muted" style="margin-top:4px;">moves: ${p.moves.length} | id:${p.id.slice(0,6)}</div>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button data-idx="${idx}" class="loadPuzzleBtn">Load</button>
-      <button data-idx="${idx}" class="delPuzzleBtn ghost">Del</button>
-    </div>`;
-    list.appendChild(el);
-  });
-  // wire buttons
-  Array.from(document.getElementsByClassName('loadPuzzleBtn')).forEach(b=>b.onclick = (e)=>{
-    const idx = Number(e.currentTarget.dataset.idx);
-    loadPuzzleByIndex(idx);
-  });
-  Array.from(document.getElementsByClassName('delPuzzleBtn')).forEach(b=>b.onclick = (e)=>{
-    const idx = Number(e.currentTarget.dataset.idx);
-    if(confirm('Delete puzzle?')){ db.puzzles.splice(idx,1); saveDB(); loadDB(); }
-  });
-  updatePuzzleCounter();
-}
-
-function updatePuzzleCounter(){ $('puzzleCounter').textContent = `${db.puzzles.length} puzzles`; }
-
-function updateStatsUI(){
-  $('statAttempted').textContent = session.stats.attempted || 0;
-  $('statSolved').textContent = session.stats.solved || 0;
-  const acc = session.stats.attempted ? Math.round(100*(session.stats.solved/session.stats.attempted)) : 0;
-  $('statAccuracy').textContent = acc + '%';
-}
-
-/* ---------- Load / prepare puzzle ---------- */
-function preparePuzzle(puzzle){
-  stopAutoPlay();
-  session.currentPuzzle = puzzle;
-  session.stepIndex = 0;
-  session.inPlay = true;
-  session.selectedSquare = null;
-  engine = new Chess(puzzle.fen || undefined);
-  // If puzzle.moves is empty -> nothing to do
-  renderBoard();
-  renderMovesList();
-  setMsg(`Loaded puzzle: ${puzzle.title}`, 1200);
-  $('fenDisplay').textContent = engine.fen();
-}
-
-function loadPuzzleByIndex(idx){
-  if(idx < 0 || idx >= db.puzzles.length) return;
-  preparePuzzle(db.puzzles[idx]);
-  session.currentIndex = idx;
-  highlightCurrentPuzzleInList();
-}
-
-function highlightCurrentPuzzleInList(){
-  const items = document.querySelectorAll('#puzzleList .puzzle-item');
-  items.forEach((it, i)=>{ it.style.boxShadow = (i===session.currentIndex) ? '0 6px 18px rgba(16,185,129,0.12)' : ''; });
-}
-
-/* ---------- Render board from engine.fen() ---------- */
-function renderBoard(){
-  const boardEl = $('board');
-  const fen = engine.fen();
-  const parts = fen.split(' ');
-  const rows = parts[0].split('/');
-  // ensure board structure exists
-  boardEl.querySelectorAll('.square').forEach(sqEl=>{
-    sqEl.classList.remove('highlight','legal');
-    sqEl.firstElementChild.textContent = '';
-  });
-  for(let r=0;r<8;r++){
-    const rank = 8 - r;
-    let fileIndex = 0;
-    const row = rows[r];
-    for(const ch of row){
-      if(/\d/.test(ch)){ fileIndex += Number(ch); continue; }
-      const sq = fileNames[fileIndex] + rank;
-      const el = boardEl.querySelector(`.square[data-square="${sq}"]`);
-      if(el) el.firstElementChild.textContent = UNICODE_PIECES[ch] || '';
-      fileIndex++;
+    async function ensureChessLoaded(){
+      if(typeof Chess !== 'undefined') return;
+      try{
+        const mod = await import(CHESS_URL + '?t=' + Date.now());
+        window.Chess = mod.default || mod.Chess || mod;
+      }catch(e){}
+      if(typeof Chess !== 'undefined') return;
+      return new Promise(resolve=>{
+        const s = document.createElement('script');
+        s.src = CHESS_URL + '?t=' + Date.now();
+        s.async = true;
+        s.onload = ()=> setTimeout(()=>resolve(), 10);
+        s.onerror = ()=> resolve();
+        document.head.appendChild(s);
+      });
     }
-  }
-  $('fenDisplay').textContent = fen;
-  renderLegalHighlights();
-}
 
-/* ---------- Interaction: click-to-move (select source then dest) ---------- */
-function coordToSquare(el){
-  return el && el.dataset ? el.dataset.square : null;
-}
+    async function chooseTheme(){
+      const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
+      try{ const res = await fetch(test,{method:'HEAD',cache:'no-store'}); return res.ok?CUSTOM_PIECE_THEME:FALLBACK_THEME;}catch(e){return FALLBACK_THEME}
+    }
 
-function renderLegalHighlights(){
-  // remove existing legal markers
-  board.querySelectorAll('.square').forEach(sq => {
-    sq.classList.remove('legal','highlight');
-  });
-  // If selectedSquare show legal moves
-  if(session.selectedSquare && engine){
-    const moves = engine.moves({ square: session.selectedSquare, verbose:true });
-    moves.forEach(m=>{
-      const el = board.querySelector(`.square[data-square="${m.to}"]`);
-      if(el) el.classList.add('legal');
+    function createBoard(theme){
+      const orientation = (isPaired && myColor==='black') ? 'black' : 'white';
+      if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
+      if(typeof game === 'undefined' || game===null) game = new Chess();
+      board = Chessboard('board', {
+        draggable: true,
+        position: game ? game.fen() : 'start',
+        orientation: orientation,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: theme
+      });
+      try{ if(board && typeof board.position === 'function') board.position(game.fen()); }catch(e){ console.warn('board.position error', e); }
+      refreshNotation();
+      setTimeout(updateOverlaySize, 30);
+    }
+
+    function onSnapEnd(){ if(board) board.position(game.fen()); }
+
+    // promotion dialog
+    function showPromotionDialog(){ promoteModal.style.display='block'; }
+    function hidePromotionDialog(){ promoteModal.style.display='none'; }
+    promoteModal.addEventListener('click', function(e){
+      if(e.target && e.target.dataset && e.target.dataset.piece){
+        const p = e.target.dataset.piece;
+        if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(p);
+        hidePromotionDialog();
+      }
     });
-    const selEl = board.querySelector(`.square[data-square="${session.selectedSquare}"]`);
-    if(selEl) selEl.classList.add('highlight');
-  }
-}
 
-const board = (function(){ return $('board'); })();
+    // onDrop (with promotion)
+    async function onDrop(source, target){
+      if(!game) return;
 
-board.addEventListener('pointerdown', function(e){
-  const sq = e.target.closest('.square');
-  if(!sq) return;
-  const sqName = coordToSquare(sq);
-  if(!session.inPlay || !engine) return;
-  // two cases: selecting source or trying to play move
-  const piece = engine.get(sqName);
-  if(session.selectedSquare === null){
-    // select only if piece of side to move or allow selecting opponent piece for hints
-    session.selectedSquare = sqName;
-    renderLegalHighlights();
-    return;
-  } else {
-    // attempt move from selectedSquare -> sqName
-    const from = session.selectedSquare;
-    const to = sqName;
-    const promotion = 'q'; // default promotion
-    try{
-      const moveObj = engine.move({ from, to, promotion });
-      if(!moveObj){
-        // invalid by engine
-        setMsg('Illegal move', 1000);
-        session.selectedSquare = null;
-        renderBoard();
-        return;
+      if(isPaired && myColor){
+        const our = (myColor==='white') ? 'w' : 'b';
+        const piece = game.get(source);
+        if(!piece){ setMsg('No piece at source',900); return 'snapback'; }
+        if(piece.color !== our){ setMsg('Not your piece',900); return 'snapback'; }
+        if(game.turn() !== our){ setMsg('Not your turn',900); return 'snapback'; }
       }
-      // check against expected SAN if puzzle has moves
-      const expectedSAN = session.currentPuzzle && session.currentPuzzle.moves[session.stepIndex];
-      if(expectedSAN){
-        // if moveObj.san matches expected, accept and continue
-        if(moveObj.san !== expectedSAN){
-          // wrong move: rollback
-          engine.undo();
-          setMsg(`Wrong move — expected ${expectedSAN}`, 1400);
-          session.selectedSquare = null;
-          // mark attempt
-          markAttempt(false);
+
+      const legal = game.moves({ verbose:true }) || [];
+      const candidate = legal.find(m => m.from === source && m.to === target && m.promotion);
+      let chosenPromo = null;
+      if(candidate){
+        chosenPromo = await new Promise(resolve => { pendingPromo = { from:source, to:target, resolve }; showPromotionDialog(); });
+        pendingPromo = null;
+        if(!chosenPromo) chosenPromo = 'q';
+      }
+
+      const moveObj = { from: source, to: target };
+      if(chosenPromo) moveObj.promotion = chosenPromo;
+      const mv = game.move(moveObj);
+      if(mv === null){ setMsg('Illegal move',900); return 'snapback'; }
+
+      if(board) board.position(game.fen());
+      refreshNotation();
+
+      setPersistentLastMove(source, target);
+
+      try{ 
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
+          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } }); 
+        }
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+          window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
+        }
+      }catch(e){ console.error('onDrop emit error:', e); }
+      return;
+    }
+
+    // notation refresh
+    function refreshNotation(){
+      try{
+        if(!movesList) return;
+        if(!game) { movesList.innerHTML = 'No moves yet.'; return; }
+        const hist = game.history() || [];
+        if(hist.length === 0){ movesList.innerHTML = 'No moves yet.'; return; }
+
+        movesList.innerHTML = '';
+        for(let i=0;i<hist.length;i+=2){
+          const no = Math.floor(i/2)+1;
+          const w = hist[i]||'';
+          const b = hist[i+1]||'';
+          const div = document.createElement('div');
+          div.className = 'move';
+          div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${ b ? ('\u00A0' + b) : '' }`;
+          movesList.appendChild(div);
+        }
+        movesList.scrollLeft = movesList.scrollWidth;
+      }catch(e){ console.warn('refreshNotation error', e); }
+    }
+
+    // inbound move handler
+    window.onBoardMove = function(payload){
+      try{
+        if(!payload) return;
+
+        if(typeof payload === 'string'){
+          if(!game) game = new Chess();
+          if(typeof game.load === 'function'){ game.load(payload); }
+          if(board) board.position(game.fen());
+          refreshNotation();
           return;
-        } else {
-          // correct move
-          session.stepIndex++;
-          renderBoard();
-          setMsg('Correct', 900);
-          // if more moves exist, perhaps autoplay opponent, else puzzle solved
-          if(session.stepIndex >= session.currentPuzzle.moves.length){
-            setMsg('Puzzle solved!', 1800);
-            markAttempt(true);
-            session.inPlay = false;
-            session.selectedSquare = null;
-            saveProgress();
-            return;
+        }
+
+        if(!game) game = new Chess();
+
+        if(payload.move && payload.move.from && payload.move.to){
+          const mvObj = { from: payload.move.from, to: payload.move.to };
+          if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
+          const applied = game.move(mvObj);
+          if(applied === null){
+            if(payload.fen && typeof game.load === 'function'){
+              game.load(payload.fen);
+            }
           } else {
-            // If it's opponent move next (i.e., engine.turn() != student side), play opponent moves automatically until student to move
-            autoplayOpponentMoves();
+            setPersistentLastMove(payload.move.from, payload.move.to);
           }
+        } else if(payload.fen){
+          if(typeof game.load === 'function') game.load(payload.fen);
         }
-      } else {
-        // no expected sequence: free play, just move
-        renderBoard();
-      }
-    }catch(ex){
-      console.error('move error',ex);
-      setMsg('Move error', 1000);
-      session.selectedSquare = null;
-      renderBoard();
-    } finally {
-      session.selectedSquare = null;
-      renderLegalHighlights();
+
+        if(board) board.position(game.fen());
+        refreshNotation();
+      }catch(e){ console.warn('onBoardMove failed', e); }
+    };
+
+    // persistent last-move highlight
+    function setPersistentLastMove(src, tgt){
+      lastMoveSquares.forEach(sq => {
+        const el = document.querySelector('.square-' + sq);
+        if(el) el.classList.remove('cb-last-move');
+      });
+      lastMoveSquares = [];
+      ['square-' + src, 'square-' + tgt].forEach(cls => {
+        const el = document.querySelector('.' + cls);
+        if(el) el.classList.add('cb-last-move');
+        lastMoveSquares.push(cls.replace('square-',''));
+      });
     }
-  }
-});
 
-/* ---------- Autoplay opponent moves according to solution sequence ---------- */
-let autoplayTimer = null;
-function autoplayOpponentMoves(){
-  stopAutoPlay();
-  const studentColor = 'w'; // assume student plays White; we can derive from puzzle FEN if needed
-  const speed = 500;
-  function step(){
-    if(!session.currentPuzzle) return;
-    if(session.stepIndex >= session.currentPuzzle.moves.length) { stopAutoPlay(); return; }
-    // if engine.turn() equals side that should play next: check expected SAN and play it
-    const expected = session.currentPuzzle.moves[session.stepIndex];
-    const r = engine.move(expected, { sloppy:true });
-    if(!r){
-      console.warn('Autoplay invalid move at', session.stepIndex, expected);
-      stopAutoPlay();
-      setMsg('Solution invalid at step '+(session.stepIndex+1), 2000);
-      return;
+    // Simple updateOverlaySize stub (keeps overlay aligned)
+    function updateOverlaySize(){
+      try{
+        const bd = document.getElementById('board');
+        if(!bd) return;
+        const rect = bd.getBoundingClientRect();
+        drawOverlay.style.width = rect.width + 'px';
+        drawOverlay.style.height = rect.height + 'px';
+      }catch(e){}
     }
-    session.stepIndex++;
-    renderBoard();
-    if(session.stepIndex < session.currentPuzzle.moves.length && engine.turn() !== studentColor){
-      autoplayTimer = setTimeout(step, speed);
-      return;
-    }
-    // if next is student's move, stop autoplay to let student play
-    stopAutoPlay();
-  }
-  // only start autoplay if it's opponent's turn according to engine
-  if(engine && engine.turn()){
-    // if it's opponent to move (i.e., if engine.turn() != student color) then step
-    if(engine.turn() !== 'w'){ // assuming student white
-      autoplayTimer = setTimeout(step, speed);
-    }
-  }
-}
 
-function stopAutoPlay(){ if(autoplayTimer) { clearTimeout(autoplayTimer); autoplayTimer = null; } }
+    // boot
+    async function boot(){
+      await ensureChessLoaded();
+      currentTheme = await chooseTheme();
+      game = new Chess();
+      createBoard(currentTheme);
 
-/* ---------- Mark attempts and progress ---------- */
-function markAttempt(solved){
-  if(!session.currentPuzzle) return;
-  session.stats.attempted++;
-  if(solved) session.stats.solved++;
-  session.currentPuzzle.stats.attempts = (session.currentPuzzle.stats.attempts||0)+1;
-  if(solved) session.currentPuzzle.stats.solved = (session.currentPuzzle.stats.solved||0)+1;
-  session.currentPuzzle.stats.lastAttempt = Date.now();
-  saveDB(); saveProgress(); updateStatsUI();
-  if(!solved){
-    // push into wrong queue for review
-    session.wrongQueue.push(session.currentPuzzle.id);
-    // keep unique
-    session.wrongQueue = Array.from(new Set(session.wrongQueue));
-  }
-}
+      try{
+        const uname = localStorage.getItem('username') || localStorage.getItem('email') || '';
+        if(uname && emailInputBottom) emailInputBottom.value = uname;
+      }catch(e){}
 
-/* ---------- Render moves list UI ---------- */
-function renderMovesList(){
-  const ml = $('movesList');
-  ml.innerHTML = '';
-  if(!session.currentPuzzle) { ml.innerHTML = '<div class="small muted">No puzzle selected</div>'; return; }
-  if(!session.currentPuzzle.moves || session.currentPuzzle.moves.length===0){
-    ml.innerHTML = '<div class="small muted">No moves / solution provided.</div>'; return;
-  }
-  let html='';
-  for(let i=0;i<session.currentPuzzle.moves.length;i+=2){
-    const no = Math.floor(i/2)+1;
-    html += `<div class="move-row"><strong>${no}.</strong> ${session.currentPuzzle.moves[i]||''} ${session.currentPuzzle.moves[i+1]||''}</div>`;
-  }
-  ml.innerHTML = html;
-}
-
-/* ---------- Controls wiring ---------- */
-$('loadPgnBtn').onclick = function(){
-  const txt = $('pgnInput').value.trim();
-  if(!txt){ setMsg('Paste PGN or FEN first',1300); return; }
-  addPuzzlesFromText(txt);
-};
-
-$('pgnFile').addEventListener('change', function(ev){
-  const file = ev.target.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    const text = e.target.result;
-    addPuzzlesFromText(text);
-  };
-  reader.readAsText(file,'utf-8');
-});
-
-$('clearPgn').onclick = ()=>{ $('pgnInput').value=''; setMsg('Input cleared',900); };
-
-$('addToDbBtn').onclick = function(){
-  const txt = $('pgnInput').value.trim();
-  if(!txt) { setMsg('Paste PGN/FEN first',1300); return; }
-  addPuzzlesFromText(txt);
-  $('pgnInput').value = '';
-};
-
-$('startBtn').onclick = function(){
-  if(db.puzzles.length===0){ setMsg('No puzzles in DB',1200); return; }
-  session.currentIndex = 0;
-  preparePuzzle(db.puzzles[0]);
-};
-
-$('shuffleBtn').onclick = function(){
-  // Fisher-Yates
-  for(let i=db.puzzles.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [db.puzzles[i], db.puzzles[j]] = [db.puzzles[j], db.puzzles[i]];
-  }
-  saveDB(); renderPuzzleList(); setMsg('Shuffled',1000);
-};
-
-$('nextBtn').onclick = function(){
-  if(session.currentIndex < db.puzzles.length - 1){
-    session.currentIndex++;
-    loadPuzzleByIndex(session.currentIndex);
-  } else setMsg('Already at last puzzle', 1200);
-};
-$('prevBtn').onclick = function(){
-  if(session.currentIndex > 0){
-    session.currentIndex--;
-    loadPuzzleByIndex(session.currentIndex);
-  } else setMsg('Already at first puzzle', 1200);
-};
-$('undoBtn').onclick = function(){
-  if(!engine) return;
-  engine.undo();
-  renderBoard();
-};
-$('flipBtn').onclick = function(){
-  boardOrientation = (boardOrientation === 'white') ? 'black' : 'white';
-  // flip board by reversing DOM order of rows and squares
-  flipBoardDom();
-};
-
-function flipBoardDom(){
-  const boardEl = $('board');
-  // reverse rows
-  const rows = Array.from(boardEl.children);
-  rows.reverse();
-  boardEl.innerHTML = '';
-  rows.forEach(row=>{
-    // reverse squares order in row
-    const squares = Array.from(row.children).reverse();
-    row.innerHTML = '';
-    squares.forEach(sq => row.appendChild(sq));
-    boardEl.appendChild(row);
-  });
-}
-
-/* autoplay & hint */
-$('autoPlayBtn').onclick = function(){
-  if(autoplayTimer){ stopAutoPlay(); setMsg('Autoplay stopped',900); return; }
-  setMsg('Autoplaying solution',900);
-  autoplayOpponentMoves();
-};
-$('hintBtn').onclick = function(){
-  if(!session.currentPuzzle) return;
-  const next = session.currentPuzzle.moves[session.stepIndex];
-  if(!next) { setMsg('No hint available',1200); return; }
-  setMsg(`Hint: next move is ${next}`, 3000);
-};
-$('showSolutionBtn').onclick = function(){
-  if(!session.currentPuzzle) return;
-  // Show full solution by applying moves on a copy and rendering sequence
-  const copy = new Chess(session.currentPuzzle.fen || undefined);
-  const sol = session.currentPuzzle.moves.slice();
-  let i=0;
-  const speed = 420;
-  setMsg('Playing solution',900);
-  const t = setInterval(()=>{
-    if(i>=sol.length){ clearInterval(t); renderBoard(); setMsg('Solution complete',1000); return; }
-    try{ copy.move(sol[i], { sloppy:true }); }catch(e){ console.warn('bad sol move', e); clearInterval(t); setMsg('Solution playback error',2000); return; }
-    // update board to copy position for user preview (but do not change working engine)
-    const previewFen = copy.fen();
-    // temporarily render preview by updating squares directly
-    renderPreviewFen(previewFen);
-    i++;
-  }, speed);
-};
-
-function renderPreviewFen(fen){
-  // quick render similar to renderBoard but not change engine
-  const boardEl = $('board');
-  boardEl.querySelectorAll('.square').forEach(sq=> sq.firstElementChild.textContent = '');
-  const rows = fen.split(' ')[0].split('/');
-  for(let r=0;r<8;r++){
-    let fileIndex = 0;
-    const rank = 8 - r;
-    for(const ch of rows[r]){
-      if(/\d/.test(ch)){ fileIndex += Number(ch); continue; }
-      const sq = fileNames[fileIndex] + rank;
-      const el = boardEl.querySelector(`.square[data-square="${sq}"]`);
-      if(el) el.firstElementChild.textContent = UNICODE_PIECES[ch] || '';
-      fileIndex++;
-    }
-  }
-}
-
-/* mark wrong / skip / review wrong */
-$('markWrongBtn').onclick = function(){
-  if(!session.currentPuzzle) return;
-  session.wrongQueue.push(session.currentPuzzle.id);
-  session.wrongQueue = Array.from(new Set(session.wrongQueue));
-  saveProgress();
-  setMsg('Marked for review',1000);
-};
-$('skipBtn').onclick = function(){
-  if(session.currentIndex < db.puzzles.length - 1){ session.currentIndex++; loadPuzzleByIndex(session.currentIndex); } else setMsg('No more puzzles',1000);
-};
-$('reviewWrongBtn').onclick = function(){
-  // load next from wrong queue
-  if(session.wrongQueue.length===0){ setMsg('No wrong puzzles saved',1200); return; }
-  const id = session.wrongQueue.shift();
-  const idx = db.puzzles.findIndex(p=>p.id===id);
-  if(idx>=0) loadPuzzleByIndex(idx);
-  saveProgress();
-};
-
-/* reset progress */
-$('resetProgress').onclick = function(){
-  if(confirm('Reset all progress?')){ session.stats = { attempted:0, solved:0 }; session.wrongQueue = []; saveProgress(); updateStatsUI(); setMsg('Progress reset',1100); }
-};
-
-/* board resizer */
-const boardWrapper = $('board-wrapper');
-const boardSizeRange = $('boardSizeRange');
-const boardSizeLabel = $('boardSizeLabel');
-function setBoardSize(px){
-  const clamped = Math.max(240, Math.min(1200, Number(px)));
-  boardWrapper.style.maxWidth = clamped + 'px';
-  boardSizeRange.value = clamped;
-  boardSizeLabel.textContent = clamped + 'px';
-  // recreate board layout squares to match new size (font scales with board)
-  const root = document.documentElement;
-  // scale piece font size relative to width
-  const pieceSize = Math.max(20, Math.round(clamped * 0.05));
-  root.style.setProperty('--piece-size', pieceSize + 'px');
-  // ensure board DOM present
-  // do not rebuild squares to keep event handlers; just reflow CSS
-}
-boardSizeRange.addEventListener('input', e => setBoardSize(e.target.value));
-$('presetSmall').onclick = ()=> setBoardSize(360);
-$('presetMed').onclick = ()=> setBoardSize(720);
-$('presetLarge').onclick = ()=> setBoardSize(920);
-
-/* ---------- Export / Import DB ---------- */
-$('exportDbBtn').onclick = function(){
-  const data = JSON.stringify(db, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'puzzles_db.json'; document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 3000);
-};
-
-$('importDbBtn').onclick = function(){ $('importFile').click(); };
-$('importFile').addEventListener('change', function(ev){
-  const f = ev.target.files[0]; if(!f) return;
-  const r = new FileReader();
-  r.onload = function(e){
-    try{
-      const j = JSON.parse(e.target.result);
-      if(j && Array.isArray(j.puzzles)){
-        if(confirm('Import will append puzzles to existing DB. Continue?')){
-          db.puzzles = db.puzzles.concat(j.puzzles.map(p => ({ ...p, id: makeId() })));
-          saveDB(); loadDB(); setMsg('Imported puzzles',1200);
+      // Auto-join online if username exists in input or localStorage
+      try{
+        const saved = (emailInputBottom && emailInputBottom.value) ? emailInputBottom.value.trim() : (localStorage.getItem('username') || localStorage.getItem('email') || '');
+        if(saved){
+          setTimeout(()=>{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.autoJoin) window.firebaseMultiplayer.autoJoin(saved); }, 200);
         }
-      } else {
-        alert('Invalid DB JSON');
+      }catch(e){}
+
+      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 570;
+      setBoardSize(initial);
+      setMsg('Ready', 700);
+
+      drawOverlay.addEventListener('contextmenu', e => e.preventDefault());
+      document.getElementById('board').addEventListener('contextmenu', e => e.preventDefault());
+    }
+    boot();
+
+    // UI handlers (undo/flip/resign/logout)
+    undoBtn.addEventListener('click', ()=>{ 
+      if(!game) return; 
+      const mv = game.undo(); 
+      if(mv) { 
+        if(board) board.position(game.fen()); 
+        refreshNotation(); 
+        setMsg('Undid move',900);
+        try{ 
+          if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+            window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' });
+          }
+        }catch(e){}
+      } 
+    });
+    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
+    resignBtn.addEventListener('click', ()=>{
+      if(!game) return;
+      game.reset();
+      if(board) board.position('start');
+      refreshNotation();
+      setMsg('You resigned — game reset',1500);
+      try{ 
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
+          window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null }); 
+        }
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+          window.firebaseMultiplayer.emitFen({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKB1R w KQkq - 0 1', action: 'resign' });
+        }
+      }catch(e){}
+      isPaired = false; myColor = null; pairedGameId = null;
+      pairedBubble.style.display='none';
+      multiplayStatus.textContent = 'Not connected';
+      createBoard(currentTheme);
+    });
+
+    logoutBtn.addEventListener('click', ()=>{
+      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
+      try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) window.firebaseMultiplayer.goOffline(); }catch(e){}
+      window.location.href = 'index.html';
+    });
+
+    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
+    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
+
+    // firebase code (spectate logic removed)
+  })();
+  </script>
+
+  <!-- FIREBASE (modified presence & spectate-response handling removed) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script>
+  (function(){
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
+    };
+    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){ /* ignore if already initialized */ }
+
+    (function(){
+      const db = firebase.database();
+      const onlineRef = db.ref('online');
+      const gamesRef = db.ref('games');
+      let movesRef = null;
+
+      // consistent sessionStorage key
+      let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
+      sessionStorage.setItem('iq4u_clientId', myId);
+
+      let myEmail = '';
+      let currentGameId = null;
+      let presenceTimer = null;
+
+      // goOnline: writes role="student" and keeps record until explicit logout
+      function goOnline(email){
+        myEmail = email || ('anon-'+myId);
+        const node = onlineRef.child(myId);
+        node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
+          .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
+          .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
+
+        // intentionally DO NOT call onDisconnect().remove() so the student remains listed until explicit logout.
+        if(presenceTimer) clearInterval(presenceTimer);
+        presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
       }
-    }catch(ex){ alert('Import failed: ' + ex.message); }
-  };
-  r.readAsText(f,'utf-8');
-});
+      function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
 
-/* ---------- DB / storage boot ---------- */
-function boot(){
-  // create board DOM squares
-  createBoardElement(720);
-  setBoardSize(720);
-  // wire click handlers via event delegation done earlier
-  loadDB();
-  loadProgress();
-  // initial engine
-  engine = new Chess();
-  renderBoard();
-  updateStatsUI();
-  // house-keeping: keyboard shortcuts
-  window.addEventListener('keydown', (e)=>{
-    if(e.key === 'ArrowRight'){ $('nextBtn').click(); }
-    if(e.key === 'ArrowLeft'){ $('prevBtn').click(); }
-    if(e.key === ' ') { e.preventDefault(); $('autoPlayBtn').click(); }
-    if(e.key === 'r'){ $('resetProgress').click(); }
-  });
-  setMsg('Trainer ready (offline)', 1200);
-}
+      // Watch for master's moves (master will write to moves/{myId})
+      let masterMovesRef = null;
+      function watchMasterMoves(){
+        if(masterMovesRef) return;
+        masterMovesRef = db.ref('moves/'+myId);
+        masterMovesRef.on('child_added', snap=>{
+          const m = snap.val();
+          if(!m) return;
+          // Only process moves from master (by field contains 'm_' prefix for master ID)
+          if(!m.by || !m.by.startsWith('m_')) {
+            return; // Skip if not from master
+          }
+          if(m.payload){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
+          }
+        });
+      }
+      // Start watching master moves immediately when online
+      watchMasterMoves();
 
-/* ---------- Filtering (simple) ---------- */
-$('applyFilter').onclick = function(){
-  const q = $('filterTag').value.trim().toLowerCase();
-  if(!q){ renderPuzzleList(); return; }
-  const filtered = db.puzzles.filter(p => (p.tags||[]).some(t => t.toLowerCase().includes(q)) || (p.title||'').toLowerCase().includes(q));
-  // render filtered list
-  const list = $('puzzleList'); list.innerHTML='';
-  filtered.forEach((p, idx)=>{
-    const el = document.createElement('div');
-    el.className='puzzle-item';
-    el.innerHTML = `<div style="min-width:0">
-      <div style="font-weight:600">${p.title}</div>
-      <div class="small muted" style="margin-top:4px;">moves: ${p.moves.length}</div>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button data-id="${p.id}" class="loadFilterBtn">Load</button>
-    </div>`;
-    list.appendChild(el);
-  });
-  Array.from(document.getElementsByClassName('loadFilterBtn')).forEach(b=>b.onclick = (ev)=>{
-    const id = ev.currentTarget.dataset.id;
-    const idx = db.puzzles.findIndex(p=>p.id===id);
-    if(idx>=0) loadPuzzleByIndex(idx);
-  });
-};
+      // notifications
+      db.ref('notifications/'+myId).on('child_added', snap=>{
+        const n = snap.val();
+        if(!n) return;
+        if(n.type==='startGame' && n.gameId){
+          currentGameId = n.gameId;
+          watchMoves(currentGameId);
+          document.getElementById('pairedBubble').style.display='inline-block';
+          const color = (n.white===myId)?'white':((n.black===myId)?'black':null);
+          if(color) document.getElementById('multiplayStatus').textContent = 'Paired: You are ' + (color.charAt(0).toUpperCase()+color.slice(1));
+          if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: currentGameId, color: color, myId: myId });
+          try{ localStorage.setItem('iq4u_last_game', currentGameId); if(color) localStorage.setItem('iq4u_last_color', color); }catch(e){}
+        }
+        snap.ref.remove().catch(()=>{});
+      });
 
-$('clearFilter').onclick = function(){ $('filterTag').value=''; renderPuzzleList(); };
+      db.ref('challengeDeclined/'+myId).on('child_added', snap=>{
+        const d = snap.val();
+        if(!d) return;
+        document.getElementById('multiplayStatus').textContent = (d.email||'Player') + ' declined your challenge';
+        snap.ref.remove().catch(()=>{});
+      });
 
-/* ---------- Initialization ---------- */
-boot();
+      function watchMoves(gameId){
+        if(!gameId) return;
+        movesRef = db.ref('moves/'+gameId);
+        movesRef.on('child_added', snap=>{
+          const m = snap.val();
+          if(!m) return;
+          if(m.by && m.by===myId) return;
+          if(m.payload){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
+          } else if(m.fen){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove({ fen: m.fen, move: m.move||null }); }catch(e){}
+          }
+          if(m.payload && m.payload.type === 'resign'){
+            try{
+              if(window.game) window.game.reset();
+              if(window.board) window.board.position('start');
+              if(document.getElementById('pairedBubble')) document.getElementById('pairedBubble').style.display='none';
+              if(document.getElementById('multiplayStatus')) document.getElementById('multiplayStatus').textContent = 'Opponent resigned / game ended';
+              try{ localStorage.removeItem('iq4u_last_game'); localStorage.removeItem('iq4u_last_color'); }catch(e){}
+            }catch(e){}
+          }
+        });
+      }
 
-</script>
+      function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
+
+      // Join button — reads username input and goes online
+      document.getElementById('joinBtnBottom').addEventListener('click', function(){
+        const email = (document.getElementById('emailInputBottom').value||'').trim();
+        if(!email) return alert('Enter username to join online');
+        goOnline(email);
+      });
+
+      // expose helper for auto-join from boot
+      window.firebaseMultiplayer = {
+        emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
+        emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
+        startWatchingGame: function(gameId){ currentGameId = gameId; watchMoves(gameId); },
+        getMyId: () => myId,
+        getMyEmail: () => myEmail,
+        goOffline: goOffline,
+        autoJoin: function(name){ if(!name) return; try{ document.getElementById('emailInputBottom').value = name; goOnline(name); }catch(e){ goOnline(name); } },
+        getMyColor: () => null
+      };
+
+      window.addEventListener('beforeunload', ()=>{ /* do not auto-remove presence on unload per request */ });
+    })();  /* end inner IIFE */
+
+  })(); /* end outer IIFE */
+  </script>
 </body>
 </html>
+
+
