@@ -4,86 +4,148 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Puzzle (student2)</title>
+  <title>IQ4U — Student Puzzle</title>
 
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <!-- Chessboard.js CSS -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
 
   <style>
-    html,body{ overscroll-behavior-y: contain; height:100%; }
-    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; display:flex; flex-direction:column; align-items:center; }
-    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
-    .panel{ background:#fff; padding:12px; border-radius:10px; margin:0 auto; max-width:980px; width:100%; box-shadow:0 6px 18px rgba(2,6,23,.04); }
-    .small{ font-size:13px; color:#555; }
-    .muted{ color:#666; font-size:13px; }
-    .controls{ display:flex; gap:8px; justify-content:center; }
-    #board-wrapper{ width:100%; max-width:760px; display:flex; justify-content:center; padding:16px; }
-    #board{ width:100%; aspect-ratio:1/1; min-width:520px; min-height:520px; border:1px solid #e6eefc; border-radius:8px; padding:6px; background:#fff; }
-    .notation{ margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:180px; overflow:auto; font-family:monospace; font-size:13px; }
+    html,body {
+      overscroll-behavior-y: contain;
+      height: 100%;
+      background: #f6f7fb;
+      font-family: Inter, system-ui, sans-serif;
+      margin: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #111;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 12px;
+      border-radius: 10px;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+      width: 100%;
+      max-width: 980px;
+      margin-top: 16px;
+    }
+
+    button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #0f172a;
+      color: #fff;
+    }
+
+    #board-wrapper {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    #board {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      min-width: 520px;
+      min-height: 520px;
+      border: 1px solid #e6eefc;
+      border-radius: 8px;
+      padding: 6px;
+      background: #fff;
+    }
+
+    .notation {
+      margin-top: 12px;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #eef2ff;
+      min-height: 44px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: #fbfdff;
+      font-family: monospace;
+      font-size: 13px;
+    }
   </style>
 </head>
 
 <body>
 
-<!-- ACCESS CONTROL -->
 <script>
-(function(){
-  const role = localStorage.getItem("role");
-  if(!role || role !== "student2"){
-    window.location.replace("index.html");
+  // strict access control
+  if (localStorage.getItem("role") !== "student2") {
+    location.href = "index.html";
   }
-})();
 </script>
 
 <div class="panel">
-  <div class="controls">
+  <div style="display:flex; gap:8px; align-items:center;">
     <button id="undoBtn">Undo</button>
     <button id="flipBtn">Flip</button>
     <button id="resignBtn" style="background:#8b0f0f;">Resign</button>
     <button id="logoutBtn" style="margin-left:auto; background:#dc2626;">Logout</button>
   </div>
 
-  <div style="display:flex; justify-content:center; margin-top:10px;">
+  <div style="margin-top:10px; display:flex; align-items:center; justify-content:center; gap:10px;">
     <input id="boardSizeRange" type="range" min="360" max="1400" step="10" value="760">
-    <small id="boardSizeLabel" style="margin-left:10px;">760px</small>
+    <small id="boardSizeLabel">760px</small>
   </div>
 
   <div id="board-wrapper">
     <div id="board"></div>
-    <svg id="draw-overlay"></svg>
   </div>
 
   <div id="msg" class="info">Ready</div>
-
   <div id="movesList" class="notation">No moves yet.</div>
 </div>
-
 <!-- PUZZLE PANEL -->
 <div class="panel" style="margin-top:18px;">
-  <div style="display:flex; gap:12px; flex-wrap:wrap;">
-    <div style="display:flex; gap:8px; align-items:center;">
+  <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <label class="small">Tactic:</label>
       <select id="tacticSelect"><option>Loading…</option></select>
 
       <label class="small">Min:</label>
-      <select id="ratingMin"><option>0</option><option>600</option><option selected>800</option></select>
+      <select id="ratingMin">
+        <option>0</option>
+        <option>600</option>
+        <option selected>800</option>
+      </select>
 
       <label class="small">Max:</label>
-      <select id="ratingMax"><option selected>99999</option><option>1000</option><option>1200</option></select>
+      <select id="ratingMax">
+        <option selected>99999</option>
+        <option>1000</option>
+        <option>1200</option>
+        <option>1400</option>
+      </select>
 
-      <button id="loadPuzzleBtn">Load</button>
+      <button id="loadPuzzleBtn">Load First</button>
       <button id="randomPuzzleBtn">Random</button>
     </div>
 
-    <div style="margin-left:auto; display:flex; gap:8px;">
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
       <button id="prevPuzzleBtn">Previous</button>
       <button id="nextPuzzleBtn">Next</button>
       <div id="currentPuzzleId" class="small">No puzzle</div>
     </div>
   </div>
 
-  <div style="display:flex; gap:8px; margin-top:10px;">
-    <label><input type="checkbox" id="autoOpponent" checked> <span class="small">Auto opponent</span></label>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+    <label>
+      <input type="checkbox" id="autoOpponent" checked>
+      <span class="small">Auto opponent</span>
+    </label>
 
+    <!-- Show SAN only; NEVER animate or modify board -->
     <button id="showSolutionBtn">Show Solution</button>
     <button id="resetSolutionBtn">Reset Solution</button>
 
@@ -92,342 +154,474 @@
       <option value="1200">1.2s</option>
       <option value="800">0.8s</option>
       <option value="500" selected>0.5s</option>
+      <option value="250">0.25s</option>
     </select>
 
-    <div id="solutionStatus" class="muted small" style="margin-left:auto;">No solution</div>
+    <div id="solutionStatus" class="muted small" style="margin-left:auto;">
+      No solution loaded
+    </div>
   </div>
 </div>
 
-<!-- MULTIPLAYER -->
+<!-- MULTIPLAYER PANEL -->
 <div class="panel" style="margin-top:18px;">
-  <div style="display:flex; gap:8px;">
+  <div style="display:flex; gap:8px; align-items:center;">
     <label class="small">Username:</label>
     <input id="emailInputBottom" type="text" placeholder="student1">
     <button id="joinBtnBottom">Join Online</button>
   </div>
 
-  <div style="display:flex; gap:8px; margin-top:10px;">
+  <div style="display:flex; gap:8px; margin-top:10px; align-items:center;">
     <div id="multiplayStatus" class="muted small">Not connected</div>
     <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
   </div>
 </div>
-
-<!-- PROMOTION MODAL -->
-<div id="promoteModal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:white; padding:12px; border-radius:8px;">
-  <div style="font-weight:bold; text-align:center;">Promote to:</div>
-  <div style="display:flex; gap:10px; margin-top:10px;">
-    <button data-piece="q">Q</button>
-    <button data-piece="r">R</button>
-    <button data-piece="b">B</button>
-    <button data-piece="n">N</button>
-  </div>
-</div>
-
 <!-- LIBRARIES -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
-<!-- ================= CORE GAME SCRIPT ================= -->
 <script>
 (function(){
 
-/* ---------------------------------------------------
+/* ======================================================
+   CONSTANTS
+====================================================== */
+
+const PIECES_BASE = "/IQ4U-Chess-Classroom/assets/pieces/cburnett/";
+const LIST_URL = "/IQ4U-Chess-Classroom/assets/puzzles_list.json";
+
+/* ======================================================
+   DOM
+====================================================== */
+
+const boardEl = document.getElementById("board");
+const boardWrapper = document.getElementById("board-wrapper");
+const boardSizeRange = document.getElementById("boardSizeRange");
+const boardSizeLabel = document.getElementById("boardSizeLabel");
+const movesList = document.getElementById("movesList");
+const msgEl = document.getElementById("msg");
+
+const tacticSelect = document.getElementById("tacticSelect");
+const ratingMin = document.getElementById("ratingMin");
+const ratingMax = document.getElementById("ratingMax");
+const loadPuzzleBtn = document.getElementById("loadPuzzleBtn");
+const randomPuzzleBtn = document.getElementById("randomPuzzleBtn");
+const prevPuzzleBtn = document.getElementById("prevPuzzleBtn");
+const nextPuzzleBtn = document.getElementById("nextPuzzleBtn");
+const currentPuzzleId = document.getElementById("currentPuzzleId");
+
+const autoOpponent = document.getElementById("autoOpponent");
+const showSolutionBtn = document.getElementById("showSolutionBtn");
+const resetSolutionBtn = document.getElementById("resetSolutionBtn");
+const solutionSpeed = document.getElementById("solutionSpeed");
+const solutionStatus = document.getElementById("solutionStatus");
+
+const undoBtn = document.getElementById("undoBtn");
+const flipBtn = document.getElementById("flipBtn");
+const resignBtn = document.getElementById("resignBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+
+/* ======================================================
    STATE
---------------------------------------------------- */
+====================================================== */
 
-let board=null;
-let game=null;
+let board = null;
+let game = null;
 
-let solutionMoves=[];
-let solutionTypes=[];
-let solutionIndex=0;
+let solutionMoves = [];
+let solutionIndex = 0;
 
-let initialFen=null;
-let initialSideToMove=null;   // OPTION B
+let initialFen = null;
+let initialSideToMove = null;   // OPTION B
 
-let currentList=[];
-let currentIdx=-1;
+let candidates = [];
+let candidateIndex = -1;
 
-let solutionTimer=null;
+let solutionTimer = null;
 
-/* ---------------------------------------------------
-   UI HELPERS
---------------------------------------------------- */
+/* ======================================================
+   HELPERS
+====================================================== */
+
+function pieceTheme(piece){
+  return PIECES_BASE + piece + ".svg";
+}
 
 function setMsg(t){
-  document.getElementById("msg").textContent=t;
+  msgEl.textContent = t || "";
 }
 
 function refreshNotation(){
-  const moves=game.history();
-  const out=document.getElementById("movesList");
-  if(!moves.length){ out.textContent="No moves yet."; return; }
-  out.textContent=moves.join(" ");
-}
-
-/* ---------------------------------------------------
-   BOARD SETUP
---------------------------------------------------- */
-
-function createBoard(){
-  board = Chessboard("board",{
-    draggable:true,
-    position:"start",
-    onDrop:onDrop,
-    onSnapEnd:()=>board.position(game.fen())
-  });
-}
-
-/* ---------------------------------------------------
-   SAN ONLY — SHOW SOLUTION
---------------------------------------------------- */
-
-document.getElementById("showSolutionBtn").onclick = function(){
-  if(!solutionMoves.length){
-    document.getElementById("movesList").textContent="No solution available.";
+  const hist = game.history();
+  if(!hist.length){
+    movesList.textContent = "No moves yet.";
     return;
   }
+  movesList.textContent = hist.join(" ");
+}
 
-  let txt="";
-  for(let i=0;i<solutionMoves.length;i+=2){
-    const n=(i/2)+1;
-    const w=solutionMoves[i]||"";
-    const b=solutionMoves[i+1]||"";
-    txt+=`${n}. ${w} ${b} `;
+function clearSolutionTimer(){
+  if(solutionTimer){
+    clearTimeout(solutionTimer);
+    solutionTimer = null;
+  }
+}
+
+/* ======================================================
+   BOARD
+====================================================== */
+
+function createBoard(){
+  if(board && board.destroy){
+    try{ board.destroy(); }catch(e){}
   }
 
-  document.getElementById("movesList").textContent=txt.trim();
-  document.getElementById("solutionStatus").textContent="SAN shown";
-};
+  board = Chessboard("board",{
+    draggable: true,
+    position: game.fen(),
+    pieceTheme: pieceTheme,
+    onDrop: onDrop,
+    onSnapEnd: ()=> board.position(game.fen())
+  });
 
-/* ---------------------------------------------------
-   RESET SOLUTION (restore notation)
---------------------------------------------------- */
+  board.position(game.fen());
+}
 
-document.getElementById("resetSolutionBtn").onclick = function(){
-  refreshNotation();
-  document.getElementById("solutionStatus").textContent="Reset";
-};
+/* ======================================================
+   MOVE HANDLING
+====================================================== */
 
-/* ---------------------------------------------------
-   STUDENT MOVE HANDLER
---------------------------------------------------- */
-
-async function onDrop(source,target){
-  const legal = game.moves({verbose:true});
-  const promo = legal.find(m=>m.from===source && m.to===target && m.promotion);
-
-  let chosen=null;
-  if(promo){
-    chosen=await new Promise(res=>{
-      pendingPromotion={resolve:res};
-      showPromotion();
-    });
-  }
-
-  const mv=game.move({from:source,to:target,promotion:chosen});
+async function onDrop(source, target){
+  const mv = game.move({from:source, to:target, promotion:"q"});
   if(!mv) return "snapback";
 
   board.position(game.fen());
   refreshNotation();
+
+  // if opponent turn next → autoplay
+  if(autoOpponent.checked && game.turn() === initialSideToMove){
+    autoPlayOpponent();
+  }
 }
 
-/* ---------------------------------------------------
-   PROMOTION DIALOG
---------------------------------------------------- */
+/* ======================================================
+   AUTO OPPONENT (OPTION B)
+====================================================== */
 
-let pendingPromotion=null;
-function showPromotion(){ document.getElementById("promoteModal").style.display="block"; }
-function hidePromotion(){ document.getElementById("promoteModal").style.display="none"; }
+function autoPlayOpponent(){
+  clearSolutionTimer();
 
-document.getElementById("promoteModal").onclick = function(e){
-  if(!e.target.dataset.piece) return;
-  if(pendingPromotion) pendingPromotion.resolve(e.target.dataset.piece);
-  pendingPromotion=null;
-  hidePromotion();
-};
+  if(solutionIndex >= solutionMoves.length) return;
+  if(game.turn() !== initialSideToMove) return;
 
-/* ---------------------------------------------------
-   PUZZLE LOADING
---------------------------------------------------- */
+  const delay = parseInt(solutionSpeed.value,10) || 500;
 
-const LIST_URL="/IQ4U-Chess-Classroom/assets/puzzles_list.json";
+  solutionTimer = setTimeout(()=>{
+    const san = solutionMoves[solutionIndex];
+    const mv = game.move(san, {sloppy:true});
+    if(!mv){
+      solutionStatus.textContent = "Opponent move failed";
+      return;
+    }
 
-async function loadList(){
-  const r=await fetch(LIST_URL);
-  const arr=await r.json();
-  window._manifest = arr;
-  populateTactics(arr);
+    solutionIndex++;
+    board.position(game.fen());
+    refreshNotation();
+    solutionStatus.textContent = "Opponent played";
+
+    if(solutionIndex < solutionMoves.length &&
+       game.turn() === initialSideToMove){
+      autoPlayOpponent();
+    }
+  }, delay);
 }
 
-function populateTactics(list){
-  const t = document.getElementById("tacticSelect");
-  t.innerHTML='<option value="">— Select tactic —</option>';
+/* ======================================================
+   SHOW SOLUTION (SAN ONLY)
+====================================================== */
 
-  const map={};
-  list.forEach(f=>{
-    const key=f.replace(".csv","").toLowerCase();
-    if(!map[key]) map[key]=[];
-    map[key].push(f);
-  });
-
-  for(const k in map){
-    const op=document.createElement("option");
-    op.value=k;
-    op.textContent=k+" ("+map[k].length+")";
-    t.appendChild(op);
+showSolutionBtn.addEventListener("click",()=>{
+  if(!solutionMoves.length){
+    movesList.textContent = "No solution available.";
+    return;
   }
 
-  window._tactics = map;
+  let out = "";
+  for(let i=0;i<solutionMoves.length;i+=2){
+    const n = (i/2)+1;
+    const w = solutionMoves[i] || "";
+    const b = solutionMoves[i+1] || "";
+    out += `${n}. ${w} ${b} `;
+  }
+
+  movesList.textContent = out.trim();
+  solutionStatus.textContent = "Showing SAN";
+});
+
+resetSolutionBtn.addEventListener("click",()=>{
+  refreshNotation();
+  solutionStatus.textContent = "Reset";
+});
+
+/* ======================================================
+   CSV / PUZZLES
+====================================================== */
+
+function parseCsv(text){
+  const lines = text.replace(/\r/g,"").split("\n");
+  const header = lines.shift().split(",").map(h=>h.trim().toLowerCase());
+  const rows = [];
+
+  lines.forEach(l=>{
+    if(!l.trim()) return;
+    const cols = l.split(",");
+    const obj = {};
+    header.forEach((h,i)=> obj[h] = (cols[i]||"").trim());
+    rows.push(obj);
+  });
+  return rows;
+}
+
+async function loadPuzzleList(){
+  const r = await fetch(LIST_URL);
+  const files = await r.json();
+
+  const map = {};
+  files.forEach(f=>{
+    const k = f.replace(".csv","").toLowerCase();
+    if(!map[k]) map[k] = [];
+    map[k].push(f);
+  });
+
+  tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
+  Object.keys(map).forEach(k=>{
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = `${k} (${map[k].length})`;
+    tacticSelect.appendChild(o);
+  });
+
+  window._puzzleFiles = map;
 }
 
 async function buildCandidates(){
-  const tactic=document.getElementById("tacticSelect").value;
-  if(!tactic){ currentList=[]; return; }
+  candidates = [];
+  candidateIndex = -1;
 
-  const files=window._tactics[tactic];
-  currentList=[];
+  const tactic = tacticSelect.value;
+  if(!tactic) return;
 
+  const files = window._puzzleFiles[tactic];
   for(const f of files){
-    const url="/IQ4U-Chess-Classroom/assets/puzzle/"+f;
-    const text=await (await fetch(url)).text();
-    const rows=parseCsv(text);
-
-    for(const r of rows){
-      currentList.push({row:r,file:f});
-    }
+    const text = await (await fetch("/IQ4U-Chess-Classroom/assets/puzzle/"+f)).text();
+    const rows = parseCsv(text);
+    rows.forEach(r=> candidates.push(r));
   }
-
-  currentIdx=0;
 }
 
-function parseCsv(csv){
-  csv=csv.replace(/\r/g,"");
-  const lines=csv.split("\n");
-  const header=lines.shift().split(",").map(h=>h.trim().toLowerCase());
-  const out=[];
-  for(const ln of lines){
-    if(!ln.trim()) continue;
-    const parts=ln.split(",");
-    const obj={};
-    for(let i=0;i<header.length;i++){
-      obj[header[i]]=parts[i]?parts[i].trim():"";
-    }
-    out.push(obj);
-  }
-  return out;
-}
+function loadPuzzle(idx){
+  const row = candidates[idx];
+  if(!row) return;
 
-async function loadPuzzle(idx){
-  const data=currentList[idx];
-  if(!data) return;
-
-  const fen=data.row.fen.trim();
-  initialFen=fen;
-  game = new Chess(fen);
+  initialFen = row.fen.trim();
+  game = new Chess(initialFen);
   board.position(game.fen());
 
-  initialSideToMove = game.turn();  // OPTION-B opponent logic
+  initialSideToMove = game.turn();
 
-  const moves = (data.row.san||"").trim().split(/\s+/);
-  solutionMoves = moves.filter(v=>v!=="");
-  solutionTypes = solutionMoves.map(()=> "san");
-
-  solutionIndex=0;
+  solutionMoves = (row.san||"").split(/\s+/).filter(Boolean);
+  solutionIndex = 0;
 
   refreshNotation();
-  document.getElementById("currentPuzzleId").textContent = data.row.puzzleid||"Puzzle";
-  document.getElementById("solutionStatus").textContent="Loaded";
+  currentPuzzleId.textContent = row.puzzleid || "Puzzle";
+  solutionStatus.textContent = "Loaded";
+
+  if(autoOpponent.checked && game.turn() === initialSideToMove){
+    autoPlayOpponent();
+  }
 }
 
-/* ---------------------------------------------------
-   NAV CONTROLS
---------------------------------------------------- */
+/* ======================================================
+   UI EVENTS
+====================================================== */
 
-document.getElementById("loadPuzzleBtn").onclick=async()=>{
+loadPuzzleBtn.onclick = async ()=>{
   await buildCandidates();
-  loadPuzzle(0);
-};
-
-document.getElementById("randomPuzzleBtn").onclick=async()=>{
-  await buildCandidates();
-  const idx=Math.floor(Math.random()*currentList.length);
-  loadPuzzle(idx);
-};
-
-document.getElementById("nextPuzzleBtn").onclick=()=>{
-  if(currentIdx<currentList.length-1){
-    currentIdx++;
-    loadPuzzle(currentIdx);
+  if(candidates.length){
+    candidateIndex = 0;
+    loadPuzzle(candidateIndex);
   }
 };
 
-document.getElementById("prevPuzzleBtn").onclick=()=>{
-  if(currentIdx>0){
-    currentIdx--;
-    loadPuzzle(currentIdx);
+randomPuzzleBtn.onclick = async ()=>{
+  await buildCandidates();
+  if(candidates.length){
+    candidateIndex = Math.floor(Math.random()*candidates.length);
+    loadPuzzle(candidateIndex);
   }
 };
 
-/* ---------------------------------------------------
-   BASIC BUTTONS
---------------------------------------------------- */
+nextPuzzleBtn.onclick = ()=>{
+  if(candidateIndex < candidates.length-1){
+    candidateIndex++;
+    loadPuzzle(candidateIndex);
+  }
+};
 
-document.getElementById("undoBtn").onclick=()=>{
-  const mv=game.undo();
+prevPuzzleBtn.onclick = ()=>{
+  if(candidateIndex > 0){
+    candidateIndex--;
+    loadPuzzle(candidateIndex);
+  }
+};
+
+undoBtn.onclick = ()=>{
+  const mv = game.undo();
   if(mv){
     board.position(game.fen());
     refreshNotation();
   }
 };
 
-document.getElementById("flipBtn").onclick=()=>board.flip();
+flipBtn.onclick = ()=> board.flip();
 
-document.getElementById("resignBtn").onclick=()=>{
+resignBtn.onclick = ()=>{
   game.reset();
   board.position("start");
   refreshNotation();
 };
 
-document.getElementById("logoutBtn").onclick=()=>{
-  localStorage.removeItem("role");
-  window.location.href="index.html";
+logoutBtn.onclick = ()=>{
+  localStorage.clear();
+  location.href = "index.html";
 };
 
-/* ---------------------------------------------------
-   BOARD RESIZE
---------------------------------------------------- */
-
-document.getElementById("boardSizeRange").oninput = function(){
-  const px=this.value;
-  document.getElementById("board-wrapper").style.maxWidth=px+"px";
-  document.getElementById("boardSizeLabel").textContent=px+"px";
+boardSizeRange.oninput = ()=>{
+  const px = boardSizeRange.value;
+  boardWrapper.style.maxWidth = px+"px";
+  boardSizeLabel.textContent = px+"px";
   board.resize();
 };
 
-/* ---------------------------------------------------
+/* ======================================================
    BOOT
---------------------------------------------------- */
+====================================================== */
 
 (async function boot(){
-  game=new Chess();
+  game = new Chess();
   createBoard();
-  board.position("start");
-  await loadList();
+  await loadPuzzleList();
   setMsg("Ready");
 })();
+
 })();
 </script>
-
 <!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
 <script>
-/* Multiplayer unchanged — omitted for brevity, insert your existing one or request full rebuild */
-</script>
+(function(){
 
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+    authDomain: "iq4u-chess-classroom.firebaseapp.com",
+    databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "iq4u-chess-classroom",
+    storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+    messagingSenderId: "833620718306",
+    appId: "1:833620718306:web:b599bb6936fe0da4bb"
+  };
+
+  try { firebase.initializeApp(FIREBASE_CONFIG); }
+  catch(e){}
+
+  const db = firebase.database();
+  const onlineRef = db.ref("online");
+  const movesRoot = db.ref("moves");
+
+  let myId = sessionStorage.getItem("iq4u_clientId");
+  if(!myId){
+    myId = "c_" + Math.random().toString(36).slice(2,10);
+    sessionStorage.setItem("iq4u_clientId", myId);
+  }
+
+  let myName = "";
+  let currentGameId = null;
+  let presenceTimer = null;
+
+  function goOnline(name){
+    myName = name || ("anon-"+myId);
+
+    const node = onlineRef.child(myId);
+    node.set({
+      email: myName,
+      role: "student",
+      ts: firebase.database.ServerValue.TIMESTAMP
+    });
+
+    if(presenceTimer) clearInterval(presenceTimer);
+    presenceTimer = setInterval(()=>{
+      node.update({ ts: firebase.database.ServerValue.TIMESTAMP });
+    }, 25000);
+
+    document.getElementById("multiplayStatus").textContent =
+      "Connected as " + myName;
+  }
+
+  function goOffline(){
+    if(presenceTimer) clearInterval(presenceTimer);
+    onlineRef.child(myId).remove().catch(()=>{});
+    document.getElementById("multiplayStatus").textContent = "Not connected";
+  }
+
+  // Join button
+  document.getElementById("joinBtnBottom").addEventListener("click",()=>{
+    const name = document.getElementById("emailInputBottom").value.trim();
+    if(!name){
+      alert("Enter username");
+      return;
+    }
+    goOnline(name);
+  });
+
+  // Watch personal control channel (teacher / master)
+  movesRoot.child(myId).on("child_added", snap=>{
+    const msg = snap.val();
+    if(!msg || !msg.payload) return;
+
+    try{
+      if(typeof window.onBoardMove === "function"){
+        window.onBoardMove(msg.payload);
+      }
+    }catch(e){}
+  });
+
+  // Expose minimal multiplayer API (non-invasive)
+  window.firebaseMultiplayer = {
+    emitMove(payload){
+      if(!currentGameId) return;
+      movesRoot.child(currentGameId).push({
+        payload,
+        by: myId,
+        ts: firebase.database.ServerValue.TIMESTAMP
+      });
+    },
+    emitFen(payload){
+      movesRoot.child(myId).push({
+        payload,
+        by: myId,
+        ts: firebase.database.ServerValue.TIMESTAMP
+      });
+    },
+    goOffline,
+    getMyId: ()=>myId,
+    getMyEmail: ()=>myName
+  };
+
+})();
+</script>
 </body>
 </html>
 
