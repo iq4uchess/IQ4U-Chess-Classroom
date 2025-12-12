@@ -8,6 +8,7 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
+    /* (same styles you had) */
     html,body{ overscroll-behavior-y: contain; height:100%; }
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
@@ -87,7 +88,7 @@
 
       <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
 
-      <!-- Engine Debug Panel inserted here -->
+      <!-- Engine Debug Panel -->
       <div style="margin-top:10px; display:flex; justify-content:center;">
         <div style="width:100%; max-width:920px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
@@ -149,7 +150,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
     </div>
 
-    <!-- Engine controls: levels 1..8 to match lichess-like levels -->
+    <!-- Engine controls: levels 1..8 -->
     <div style="width:100%; margin-top:8px; display:flex; gap:8px; align-items:center; justify-content:center;">
       <label class="small">Engine:</label>
       <select id="engineColor">
@@ -189,6 +190,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
   <script>
   (function(){
+    // core libs and constants
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
@@ -244,18 +246,16 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     let engineLevel = 8; // 1..8
     let engineMoveTime = 300;
 
-    // drawing state (minimal helpers)
+    // minor state
     let lastMoveSquares = [];
 
-    // left-click detection
-    let leftClickStart = null;
-
+    // small helpers
     function setMsg(t, ms=0){
       if(msgEl) msgEl.textContent = t||'';
       if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
     }
 
-    // safe loader for chess.js
+    // load chess.js safely
     async function ensureChessLoaded(){
       if(typeof Chess !== 'undefined') return;
       try{
@@ -273,13 +273,13 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
     }
 
-    // choose piece theme
+    // piece theme chooser
     async function chooseTheme(){
       const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
       try{ const res = await fetch(test,{method:'HEAD',cache:'no-store'}); return res.ok?CUSTOM_PIECE_THEME:FALLBACK_THEME;}catch(e){return FALLBACK_THEME}
     }
 
-    // Minimal overlay resize helper to avoid ReferenceError
+    // overlay resize helper
     function updateOverlaySize(){
       try{
         const boardEl = document.getElementById('board');
@@ -324,12 +324,11 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }
     });
 
-    // onDrop (with promotion)
+    // onDrop handler (with promotion + engine gating)
     async function onDrop(source, target){
       if(!game) return 'snapback';
       if(isSpectator){ setMsg('Spectator — cannot move',1000); return 'snapback'; }
 
-      // If playing against engine and engine controls the side the user tried to move, block
       if(engineEnabled){
         const humanSide = (engineColor==='white') ? 'b' : 'w';
         const piece = game.get(source);
@@ -360,7 +359,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       if(board) board.position(game.fen());
       refreshNotation();
-
       setPersistentLastMove(source, target);
 
       try{
@@ -378,39 +376,14 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       return;
     }
 
-    // map levels 1..8 to search depths (adjustable)
+    // map level -> depth
     function levelToDepth(level){
       const lvl = Number(level)||1;
       const map = {1:1,2:2,3:3,4:4,5:6,6:8,7:10,8:12};
       return map[Math.max(1, Math.min(8, lvl))] || 4;
     }
 
-    // ask engine to move when it's engine's turn
-    function maybeAskEngineToMove(){
-      if(!engineEnabled || !engine) return;
-      if(!game) return;
-      const turn = game.turn();
-      const engColor = (engineColor==='white') ? 'w' : 'b';
-      if(turn !== engColor) return; // not engine's turn
-
-      const fen = game.fen();
-      postToEngine('position fen ' + fen);
-      const depth = levelToDepth(engineLevel);
-      postToEngine('setoption name Threads value 1');
-      postToEngine('isready');
-      // choose go by depth (deterministic)
-      postToEngine('go depth ' + depth);
-      panelLog('log','Engine thinking (level ' + engineLevel + ', depth ' + depth + ')...');
-      setMsg('Engine thinking (level ' + engineLevel + ')', 0);
-    }
-
-    // ===========================
-    // Engine worker initialization
-    // ===========================
-    // Use local stockfish worker at /js/stockfish.js (you must host this file)
-    const WORKER_PATH = '/js/stockfish.js';
-
-    // Debug panel logger functions (panelLog used throughout)
+    // Engine panel logger
     function panelLogAdd(text, level){
       try{
         const el = document.getElementById('engineLog');
@@ -436,7 +409,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       try{ panelLogAdd(text, level); }catch(e){}
     }
 
-    // postToEngine wrapper (logs outgoing commands)
+    // postToEngine wrapper
     function postToEngine(cmd){
       try{
         panelLog('log','[engine <=] ' + cmd);
@@ -447,7 +420,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }
     }
 
-    // hook engine logging to on-page panel
+    // hook engine logging and apply bestmove
     function hookEngineLogging(worker){
       if(!worker) return;
       worker.onmessage = function(e){
@@ -456,12 +429,12 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         panelLog('log','[engine =>] ' + line);
 
         try{
-          if(typeof line !== 'string' || !line) return;
-          if(line.indexOf('uciok')!==-1) panelLog('log','[engine] uciok received');
-          if(line.indexOf('readyok')!==-1) panelLog('log','[engine] readyok received');
+          if(!line || typeof line !== 'string') return;
+          if(line.indexOf('uciok') !== -1) panelLog('log','[engine] uciok received');
+          if(line.indexOf('readyok') !== -1) panelLog('log','[engine] readyok received');
         }catch(err){ panelLog('warn','engine parse warning ' + (err && err.message ? err.message : err)); }
 
-        // handle bestmove automatically: apply it to the game
+        // handle bestmove
         if(line.startsWith('bestmove')){
           const parts = line.split(' ');
           if(parts.length >= 2){
@@ -491,29 +464,120 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         }
       };
 
-      worker.onerror = function(err){
-        panelLog('error','[engine] worker error: ' + (err && err.message ? err.message : JSON.stringify(err)));
+      worker.onerror = function(ev){
+        let msg = '[engine] worker error event: ' + JSON.stringify({
+          message: ev && ev.message,
+          filename: ev && ev.filename,
+          lineno: ev && ev.lineno,
+          colno: ev && ev.colno,
+          error: ev && ev.error && (ev.error.message || String(ev.error))
+        });
+        panelLog('error', msg);
+        console.error('engine.onerror event object:', ev);
       };
-      worker.onmessageerror = function(err){
-        panelLog('error','[engine] onmessageerror: ' + (err && err.message ? err.message : JSON.stringify(err)));
+
+      worker.onmessageerror = function(ev){
+        panelLog('error','[engine] onmessageerror: ' + JSON.stringify(ev));
+        console.error('engine.onmessageerror:', ev);
       };
     }
 
-    // init engine worker (local only for reliability)
-    function initEngineWorker(){
-      if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
-      try{
-        panelLog('log','[engine] creating worker from ' + WORKER_PATH);
-        engine = new Worker(WORKER_PATH);
-        hookEngineLogging(engine);
-        // initialize UCI
-        postToEngine('uci');
-        postToEngine('isready');
-        panelLog('log','[engine] worker created and initialized from ' + WORKER_PATH);
-      }catch(e){
-        panelLog('error','[engine] worker create failed for ' + WORKER_PATH + ' ' + (e && e.message ? e.message : e));
-        engine = null;
+    // ask engine to move when it's engine's turn
+    function maybeAskEngineToMove(){
+      if(!engineEnabled || !engine) return;
+      if(!game) return;
+      const turn = game.turn();
+      const engColor = (engineColor==='white') ? 'w' : 'b';
+      if(turn !== engColor) return; // not engine's turn
+
+      const fen = game.fen();
+      postToEngine('position fen ' + fen);
+      const depth = levelToDepth(engineLevel);
+      postToEngine('setoption name Threads value 1');
+      postToEngine('isready');
+      postToEngine('go depth ' + depth);
+      panelLog('log','Engine thinking (level ' + engineLevel + ', depth ' + depth + ')...');
+      setMsg('Engine thinking (level ' + engineLevel + ')', 0);
+    }
+
+    // ===== robust initEngineWorker: try CDNs then local fallback =====
+    async function initEngineWorker(){
+      // candidates (ordered)
+      const candidates = [
+        'https://cdn.jsdelivr.net/npm/stockfish.wasm@0.10.0/stockfish.js',
+        'https://cdn.jsdelivr.net/npm/stockfish.wasm@0.11.0/stockfish.js',
+        'https://cdn.jsdelivr.net/gh/niklasf/stockfish.js@master/src/stockfish.js',
+        'https://cdn.jsdelivr.net/npm/stockfish@15.1.3/src/stockfish.js',
+        'https://unpkg.com/stockfish.wasm@0.10.0/stockfish.js',
+        'https://unpkg.com/stockfish@15.1.3/src/stockfish.js',
+        'https://raw.githubusercontent.com/niklasf/stockfish.js/master/src/stockfish.js'
+      ];
+
+      // local fallback (relative to page) - recommended to host these locally
+      const localFallback = 'js/stockfish.js';
+
+      // HEAD-check helper
+      async function headOk(url){
+        try{
+          const r = await fetch(url, { method:'HEAD', cache:'no-store' });
+          if(!r.ok){ panelLog('warn','[engine] HEAD fail ' + r.status + ' ' + url); return false; }
+          const ct = (r.headers.get('content-type')||'').toLowerCase();
+          if(ct.indexOf('text/html') !== -1){ panelLog('warn','[engine] HEAD content-type text/html (likely 404) for ' + url); return false; }
+          panelLog('log','[engine] HEAD ok content-type: ' + ct + ' for ' + url);
+          return true;
+        }catch(e){
+          panelLog('warn','[engine] HEAD request failed for ' + url + ' — ' + (e && e.message ? e.message : e));
+          return false;
+        }
       }
+
+      // terminate prior
+      if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
+
+      // iterate candidates
+      let chosen = null;
+      for(const url of candidates){
+        panelLog('log','[engine] trying candidate: ' + url);
+        const ok = await headOk(url);
+        if(!ok) continue;
+        try{
+          panelLog('log','[engine] attempting Worker(' + url + ')');
+          const w = new Worker(url);
+          engine = w;
+          hookEngineLogging(engine);
+          postToEngine('uci'); postToEngine('isready');
+          panelLog('log','[engine] worker created and initialized from ' + url);
+          chosen = url;
+          break;
+        }catch(err){
+          panelLog('warn','[engine] Worker construction failed for ' + url + ' — ' + (err && err.message ? err.message : err));
+        }
+      }
+
+      // local fallback
+      if(!chosen){
+        panelLog('log','[engine] trying local fallback: ' + localFallback);
+        const okL = await headOk(localFallback);
+        if(okL){
+          try{
+            const w = new Worker(localFallback);
+            engine = w;
+            hookEngineLogging(engine);
+            postToEngine('uci'); postToEngine('isready');
+            panelLog('log','[engine] worker created from local fallback ' + localFallback);
+            chosen = localFallback;
+          }catch(err){
+            panelLog('error','[engine] local fallback Worker creation failed: ' + (err && err.message ? err.message : err));
+          }
+        } else {
+          panelLog('warn','[engine] local fallback HEAD failed: ' + localFallback);
+        }
+      }
+
+      if(!chosen){
+        panelLog('error','[engine] All worker candidates failed — engine unavailable. Host js/stockfish.js & stockfish.wasm locally or fix CDN availability.');
+      }
+      return chosen;
     }
 
     // notation refresh
@@ -523,7 +587,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(!game) { movesList.innerHTML = 'No moves yet.'; return; }
         const hist = game.history() || [];
         if(hist.length === 0){ movesList.innerHTML = 'No moves yet.'; return; }
-
         movesList.innerHTML = '';
         for(let i=0;i<hist.length;i+=2){
           const no = Math.floor(i/2)+1;
@@ -538,11 +601,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ console.warn('refreshNotation error', e); }
     }
 
-    // inbound move handler (multiplayer)
+    // inbound move handler
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
-
         if(typeof payload === 'string'){
           if(!game) game = new Chess();
           if(typeof game.load === 'function'){ game.load(payload); }
@@ -550,9 +612,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
           refreshNotation();
           return;
         }
-
         if(!game) game = new Chess();
-
         if(payload.move && payload.move.from && payload.move.to){
           const mvObj = { from: payload.move.from, to: payload.move.to };
           if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
@@ -567,7 +627,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         } else if(payload.fen){
           if(typeof game.load === 'function') game.load(payload.fen);
         }
-
         if(board) board.position(game.fen());
         refreshNotation();
       }catch(e){ console.warn('onBoardMove failed', e); }
@@ -599,7 +658,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(uname && emailInputBottom) emailInputBottom.value = uname;
       }catch(e){}
 
-      // Auto-join online if username exists in input or localStorage
       try{
         const saved = (emailInputBottom && emailInputBottom.value) ? emailInputBottom.value.trim() : (localStorage.getItem('username') || localStorage.getItem('email') || '');
         if(saved){
@@ -614,7 +672,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       drawOverlay.addEventListener('contextmenu', e => e.preventDefault());
       document.getElementById('board').addEventListener('contextmenu', e => e.preventDefault());
 
-      // initialize engine UI state
+      // initialize engine UI
       engineColor = engineColorSelect.value || 'black';
       engineLevel = Number(engineLevelSelect.value) || 8;
       engineMoveTime = Number(engineMoveTimeInput.value) || 300;
@@ -623,18 +681,28 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       engineColorSelect.addEventListener('change', ()=>{ engineColor = engineColorSelect.value || 'black'; });
       engineMoveTimeInput.addEventListener('change', ()=>{ engineMoveTime = Number(engineMoveTimeInput.value)||300; });
 
-      toggleEngineBtn.addEventListener('click', ()=>{
+      toggleEngineBtn.addEventListener('click', async ()=>{
         engineEnabled = !engineEnabled;
         if(engineEnabled){
           toggleEngineBtn.textContent = 'Engine: ON';
-          initEngineWorker();
-          // If engine starts and it's engine to move on current position, ask it
+          panelLog('log','[engine] starting initialization (CDN/local lookup)');
+          const chosen = await initEngineWorker();
+          panelLog('log','[engine] init result: ' + String(chosen));
+          // If engine started and it's engine to move, ask it
           setTimeout(()=>{ maybeAskEngineToMove(); }, 300);
         } else {
           toggleEngineBtn.textContent = 'Play vs Engine';
           if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
         }
       });
+
+      // debug panel controls
+      setTimeout(()=>{
+        const clearBtn = document.getElementById('engineClearBtn');
+        if(clearBtn) clearBtn.addEventListener('click', ()=>{ const el=document.getElementById('engineLog'); if(el) el.innerHTML=''; });
+        const tog = document.getElementById('enginePanelToggle');
+        if(tog) tog.addEventListener('change', (e)=>{ const el=document.getElementById('engineLog'); if(el) el.style.display = e.target.checked ? 'block' : 'none'; });
+      },300);
     }
     boot();
 
@@ -723,7 +791,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
     function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
 
-    // firebase code unchanged except spectate handling improvements below
+    // firebase code continues unchanged below...
   })();
   </script>
 
@@ -735,7 +803,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
-      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      databaseURL: "https://iq4uchess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "iq4u-chess-classroom",
       storageBucket: "iq4uchess-classroom.firebasedestorage.app",
       messagingSenderId: "833620718306",
@@ -750,7 +818,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       const gamesRef = db.ref('games');
       let movesRef = null;
 
-      // consistent sessionStorage key
+      // session id
       let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
       sessionStorage.setItem('iq4u_clientId', myId);
 
@@ -758,20 +826,17 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       let currentGameId = null;
       let presenceTimer = null;
 
-      // goOnline: writes role="student" and keeps record until explicit logout
       function goOnline(email){
         myEmail = email || ('anon-'+myId);
         const node = onlineRef.child(myId);
         node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
           .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
           .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
-
         if(presenceTimer) clearInterval(presenceTimer);
         presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
       }
       function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
 
-      // populate online list
       onlineRef.on('value', snap=>{
         const v = snap.val()||{};
         const onlinePlayersBottom = document.getElementById('onlinePlayersBottom');
@@ -800,7 +865,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       function sendChallengeTo(targetId){ if(!targetId) return; const ch = challengesRef.child(targetId).push(); ch.set({ fromId: myId, fromEmail: myEmail, ts: firebase.database.ServerValue.TIMESTAMP }).then(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge sent'; setTimeout(()=> ch.remove().catch(()=>{}), 60_000); }).catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge failed'; }); }
 
-      // handle incoming challenge
       challengesRef.child(myId).on('child_added', snap=>{
         const data = snap.val(); const key = snap.key;
         if(!data) return;
@@ -828,7 +892,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         }
       });
 
-      // Watch for master's moves (master will write to moves/{myId})
       let masterMovesRef = null;
       function watchMasterMoves(){
         if(masterMovesRef) return;
@@ -846,7 +909,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }
       watchMasterMoves();
 
-      // notifications
       db.ref('notifications/'+myId).on('child_added', snap=>{
         const n = snap.val();
         if(!n) return;
@@ -869,10 +931,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         snap.ref.remove().catch(()=>{});
       });
 
-      // Spectate invites
+      // spectate invites handling
       let isSpectatedByMaster = false;
       const spectateInvitePath = 'spectateInvites/'+myId;
-
       db.ref(spectateInvitePath).once('value', snap => {
         if(snap.exists()){
           snap.forEach(child => {
@@ -882,11 +943,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }).catch(err => {
         console.error('fetch invites error:', err);
       });
-
       db.ref(spectateInvitePath).on('child_added', snap => {
         processInvite(snap);
       }, err => { console.error('invite child_added error', err); });
-
       function processInvite(snap){
         const inv = snap.val();
         if(!inv) return;
