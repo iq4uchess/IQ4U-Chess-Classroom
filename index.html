@@ -89,34 +89,50 @@
     };
 
     firebase.initializeApp(firebaseConfig);
-
     const auth = firebase.auth();
 
+    // MASTER UID (only this user can access master.html)
+    const MASTER_UID = "PLCwUQ474lQrbxOJwFGgZ1ERheH3";
+
+    // -------------------------
+    // LOGIN AS MASTER
+    // -------------------------
     function loginMaster() {
       let email = document.getElementById("email").value;
       let pass = document.getElementById("password").value;
 
       auth.signInWithEmailAndPassword(email, pass)
-          .then(() => {
+        .then(userCredential => {
+          const user = userCredential.user;
+
+          if (user.uid === MASTER_UID) {
             localStorage.setItem("role", "master");
             window.location.href = "master.html";
-          })
-          .catch(err => alert(err.message));
+          } else {
+            auth.signOut();
+            alert("You are NOT allowed to login as Master.");
+          }
+        })
+        .catch(err => alert(err.message));
     }
 
+    // -------------------------
+    // LOGIN AS STUDENT
+    // -------------------------
     function loginStudent(studentID) {
       let email = document.getElementById("email").value;
       let pass = document.getElementById("password").value;
 
       auth.signInWithEmailAndPassword(email, pass)
-          .then(() => {
-            localStorage.setItem("role", studentID);
-            window.location.href = "student.html";
-          })
-          .catch(err => alert(err.message));
+        .then(() => {
+          localStorage.setItem("role", studentID);
+          window.location.href = "student.html";
+        })
+        .catch(err => alert(err.message));
     }
   </script>
 
 </body>
 </html>
+
 
