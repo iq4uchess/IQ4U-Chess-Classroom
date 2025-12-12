@@ -8,7 +8,6 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
-    /* same styles as before (omitted here for brevity in this message) */
     html,body{ overscroll-behavior-y: contain; height:100%; }
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
@@ -38,7 +37,7 @@
     }
     .multiplayer-panel { margin-top: 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:920px; }
     .multiplayer-panel input[type="text"] { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
-    .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eef2; }
+    .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
     .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
     .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
@@ -47,17 +46,16 @@
     .readonly-note{ color:#444; font-size:13px; margin-left:8px; }
     .logout-btn { background:#dc2626; }
     #draw-overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:30; }
-    .arrow-line { stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .arrow-line { stroke-width:4px; stroke-linecap:round; stroke-linejoin:round; }
     .arrow-head { fill: currentColor; }
     .square-highlight { position:absolute; border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,0.06); background: rgba(220,20,60,0.12); width:44px; height:44px; display:block; z-index:25; border:3px solid rgba(220,20,60,0.25); }
   </style>
 </head>
 <body>
 
-  <!-- ACCESS CHECK: allow any student role so testing/redirects won't bounce legitimate students -->
+  <!-- ACCESS CHECK -->
   <script>
     (function(){
-      // Accept student1..student4 so tests / redirects don't bounce users unexpectedly.
       const allowedRoles = ['student1','student2','student3','student4'];
       const role = localStorage.getItem('role');
       if(!role || allowedRoles.indexOf(role) === -1){
@@ -88,6 +86,21 @@
       <div class="info" id="msg" aria-live="polite"></div>
 
       <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
+
+      <!-- Engine Debug Panel inserted here -->
+      <div style="margin-top:10px; display:flex; justify-content:center;">
+        <div style="width:100%; max-width:920px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+            <strong style="font-size:13px;">Engine Debug Log</strong>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button id="engineClearBtn" style="background:#0f172a;padding:6px 8px;border-radius:6px;">Clear</button>
+              <label class="small"><input id="enginePanelToggle" type="checkbox" checked /> Visible</label>
+            </div>
+          </div>
+          <div id="engineLog" aria-live="polite" style="background:#0b1220;color:#e6eefc;padding:8px;border-radius:8px;height:160px;overflow:auto;font-family:monospace;font-size:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -136,21 +149,23 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
     </div>
 
-    <!-- Engine controls (kept compact so UI remains visually unchanged) -->
+    <!-- Engine controls: levels 1..8 to match lichess-like levels -->
     <div style="width:100%; margin-top:8px; display:flex; gap:8px; align-items:center; justify-content:center;">
       <label class="small">Engine:</label>
       <select id="engineColor">
         <option value="black">Engine as Black</option>
         <option value="white">Engine as White</option>
       </select>
-      <label class="small">Skill</label>
-      <select id="engineSkill">
-        <!-- Stockfish Skill Level 0..20 -->
-        <option value="0">0</option>
+      <label class="small">Level</label>
+      <select id="engineLevel">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
         <option value="5">5</option>
-        <option value="10">10</option>
-        <option value="15" selected>15</option>
-        <option value="20">20</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8" selected>8</option>
       </select>
       <label class="small">Move time (ms)</label>
       <input id="engineMoveTime" type="number" min="50" step="50" value="300" style="width:84px; padding:6px 8px; border-radius:6px; border:1px solid #e6eefc;" />
@@ -213,7 +228,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
     // engine controls
     const engineColorSelect = document.getElementById('engineColor');
-    const engineSkillSelect = document.getElementById('engineSkill');
+    const engineLevelSelect = document.getElementById('engineLevel');
     const engineMoveTimeInput = document.getElementById('engineMoveTime');
     const toggleEngineBtn = document.getElementById('toggleEngineBtn');
 
@@ -226,17 +241,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     let engine = null; // Worker
     let engineEnabled = false;
     let engineColor = 'black';
-    let engineSkill = 15;
+    let engineLevel = 8; // 1..8
     let engineMoveTime = 300;
 
-    // drawing state (unchanged)
-    let drawing = false;
-    let drawPointerId = null;
-    let drawStart = null;
-    let tempLine = null;
-    let tempHead = null;
-    let finalizedArrows = [];
-    let selectedSquareHighlights = {};
+    // drawing state (minimal helpers)
     let lastMoveSquares = [];
 
     // left-click detection
@@ -247,6 +255,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
     }
 
+    // safe loader for chess.js
     async function ensureChessLoaded(){
       if(typeof Chess !== 'undefined') return;
       try{
@@ -264,11 +273,27 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
     }
 
+    // choose piece theme
     async function chooseTheme(){
       const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
       try{ const res = await fetch(test,{method:'HEAD',cache:'no-store'}); return res.ok?CUSTOM_PIECE_THEME:FALLBACK_THEME;}catch(e){return FALLBACK_THEME}
     }
 
+    // Minimal overlay resize helper to avoid ReferenceError
+    function updateOverlaySize(){
+      try{
+        const boardEl = document.getElementById('board');
+        const svg = document.getElementById('draw-overlay');
+        if(!boardEl || !svg) return;
+        const rect = boardEl.getBoundingClientRect();
+        svg.style.width = Math.max(0, Math.round(rect.width)) + 'px';
+        svg.style.height = Math.max(0, Math.round(rect.height)) + 'px';
+        svg.setAttribute('viewBox', `0 0 ${Math.max(0, Math.round(rect.width))} ${Math.max(0, Math.round(rect.height))}`);
+      }catch(e){ console.warn('updateOverlaySize failed', e); }
+    }
+    window.addEventListener('resize', updateOverlaySize);
+
+    // create board
     function createBoard(theme){
       const orientation = (isPaired && myColor==='black') ? 'black' : 'white';
       if(board && typeof board.destroy === 'function'){ try{ board.destroy(); }catch(e){} }
@@ -306,9 +331,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       // If playing against engine and engine controls the side the user tried to move, block
       if(engineEnabled){
-        const playerSide = (engineColor==='white') ? 'b' : 'w';
+        const humanSide = (engineColor==='white') ? 'b' : 'w';
         const piece = game.get(source);
-        if(piece && piece.color !== playerSide){ setMsg('Not your piece (engine game)',900); return 'snapback'; }
+        if(piece && piece.color !== humanSide){ setMsg('Not your piece (engine game)',900); return 'snapback'; }
       }
 
       if(isPaired && myColor){
@@ -338,12 +363,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       setPersistentLastMove(source, target);
 
-      try{ 
-        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
-          if(window.firebaseMultiplayer.getMyId) {
-            // if in a real paired game we still keep previous semantics
-          }
-          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } }); 
+      try{
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){
+          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
         }
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
           window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
@@ -351,12 +373,16 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ console.error('onDrop emit error:', e); }
 
       // If engine is enabled and it's engine's turn now, ask engine to play
-      if(engineEnabled){
-        // If engine just moved (shouldn't be), skip
-        maybeAskEngineToMove();
-      }
+      if(engineEnabled){ maybeAskEngineToMove(); }
 
       return;
+    }
+
+    // map levels 1..8 to search depths (adjustable)
+    function levelToDepth(level){
+      const lvl = Number(level)||1;
+      const map = {1:1,2:2,3:3,4:4,5:6,6:8,7:10,8:12};
+      return map[Math.max(1, Math.min(8, lvl))] || 4;
     }
 
     // ask engine to move when it's engine's turn
@@ -367,43 +393,84 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       const engColor = (engineColor==='white') ? 'w' : 'b';
       if(turn !== engColor) return; // not engine's turn
 
-      // send position and go command
       const fen = game.fen();
-      engine.postMessage('position fen ' + fen);
-      // set skill level each time (Stockfish supports setoption Skill Level)
-      engine.postMessage('setoption name Skill Level value ' + engineSkill);
-      // use movetime (ms) for a predictable response
-      const mt = Math.max(50, Number(engineMoveTime) || 300);
-      engine.postMessage('go movetime ' + mt);
-      setMsg('Engine thinking...', 0);
+      postToEngine('position fen ' + fen);
+      const depth = levelToDepth(engineLevel);
+      postToEngine('setoption name Threads value 1');
+      postToEngine('isready');
+      // choose go by depth (deterministic)
+      postToEngine('go depth ' + depth);
+      panelLog('log','Engine thinking (level ' + engineLevel + ', depth ' + depth + ')...');
+      setMsg('Engine thinking (level ' + engineLevel + ')', 0);
     }
 
-    // engine message handling
-    function initEngineWorker(){
-      // destroy existing
-      if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
+    // ===========================
+    // Engine worker initialization
+    // ===========================
+    // Use local stockfish worker at /js/stockfish.js (you must host this file)
+    const WORKER_PATH = '/js/stockfish.js';
+
+    // Debug panel logger functions (panelLog used throughout)
+    function panelLogAdd(text, level){
       try{
-        // use a CDN stockfish.js that runs in a WebWorker
-        engine = new Worker('https://cdn.jsdelivr.net/npm/stockfish@15.1.3/src/stockfish.js');
+        const el = document.getElementById('engineLog');
+        if(!el) return;
+        const row = document.createElement('div');
+        row.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+        row.style.whiteSpace = 'pre-wrap';
+        row.style.padding = '2px 4px';
+        row.style.marginBottom = '2px';
+        if(level === 'warn'){ row.style.color = '#ffd166'; }
+        else if(level === 'error'){ row.style.color = '#ff6b6b'; }
+        el.appendChild(row);
+        el.scrollTop = el.scrollHeight;
+      }catch(e){}
+    }
+    function panelLog(level, text){
+      try{
+        if(level === 'log') console.log(text);
+        else if(level === 'warn') console.warn(text);
+        else if(level === 'error') console.error(text);
+        else console.log(text);
+      }catch(e){}
+      try{ panelLogAdd(text, level); }catch(e){}
+    }
+
+    // postToEngine wrapper (logs outgoing commands)
+    function postToEngine(cmd){
+      try{
+        panelLog('log','[engine <=] ' + cmd);
+        if(!engine){ panelLog('warn','[engine] no engine worker available'); return; }
+        engine.postMessage(cmd);
       }catch(e){
-        try{ engine = new Worker('https://raw.githubusercontent.com/niklasf/stockfish.wasm/master/src/stockfish.js'); }catch(e2){ console.warn('Failed to create Stockfish worker', e2); engine = null; }
+        panelLog('error','[engine <=] post failed: ' + (e && e.message ? e.message : e));
       }
-      if(!engine){ setMsg('Engine not available',2000); return; }
-      engine.onmessage = function(e){
-        const line = typeof e.data === 'string' ? e.data : (e.data && e.data.message) ? e.data.message : '';
-        // look for bestmove
-        if(!line) return;
-        // console.log('[engine]', line);
+    }
+
+    // hook engine logging to on-page panel
+    function hookEngineLogging(worker){
+      if(!worker) return;
+      worker.onmessage = function(e){
+        const raw = e.data;
+        const line = (typeof raw === 'string') ? raw : (raw && raw.message) ? raw.message : JSON.stringify(raw);
+        panelLog('log','[engine =>] ' + line);
+
+        try{
+          if(typeof line !== 'string' || !line) return;
+          if(line.indexOf('uciok')!==-1) panelLog('log','[engine] uciok received');
+          if(line.indexOf('readyok')!==-1) panelLog('log','[engine] readyok received');
+        }catch(err){ panelLog('warn','engine parse warning ' + (err && err.message ? err.message : err)); }
+
+        // handle bestmove automatically: apply it to the game
         if(line.startsWith('bestmove')){
           const parts = line.split(' ');
-          if(parts.length>=2){
+          if(parts.length >= 2){
             const mv = parts[1];
             if(mv && mv !== '(none)'){
-              // SAN not provided; apply UCI move
               const from = mv.substring(0,2);
               const to = mv.substring(2,4);
               let promo = null;
-              if(mv.length>=5) promo = mv[4];
+              if(mv.length >= 5) promo = mv[4];
               try{
                 const moveObj = { from: from, to: to };
                 if(promo) moveObj.promotion = promo;
@@ -412,20 +479,41 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
                   if(board) board.position(game.fen());
                   refreshNotation();
                   setPersistentLastMove(from, to);
-                  setMsg('Engine moved ' + applied.san, 1000);
-                  // emit engine move to firebase if appropriate
-                  try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove) window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from, to, san: applied.san, promotion: applied.promotion||null } }); }catch(e){}
+                  panelLog('log','[engine] applied move ' + (applied.san || (from+to)));
+                  setMsg('Engine moved ' + (applied.san || (from+to)), 1000);
+                  try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove) window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from, to, san: applied.san||null, promotion: applied.promotion||null } }); }catch(e){}
+                } else {
+                  panelLog('warn','[engine] engine move could not be applied: ' + mv);
                 }
-              }catch(e){ console.warn('Failed to apply engine move', e); }
+              }catch(e){ panelLog('warn','Failed to apply engine move ' + (e && e.message ? e.message : e)); }
             }
           }
-        } else if(line.indexOf('info')===0){
-          // optional: could parse depth / score
         }
       };
-      // initialize UCI
-      engine.postMessage('uci');
-      engine.postMessage('isready');
+
+      worker.onerror = function(err){
+        panelLog('error','[engine] worker error: ' + (err && err.message ? err.message : JSON.stringify(err)));
+      };
+      worker.onmessageerror = function(err){
+        panelLog('error','[engine] onmessageerror: ' + (err && err.message ? err.message : JSON.stringify(err)));
+      };
+    }
+
+    // init engine worker (local only for reliability)
+    function initEngineWorker(){
+      if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
+      try{
+        panelLog('log','[engine] creating worker from ' + WORKER_PATH);
+        engine = new Worker(WORKER_PATH);
+        hookEngineLogging(engine);
+        // initialize UCI
+        postToEngine('uci');
+        postToEngine('isready');
+        panelLog('log','[engine] worker created and initialized from ' + WORKER_PATH);
+      }catch(e){
+        panelLog('error','[engine] worker create failed for ' + WORKER_PATH + ' ' + (e && e.message ? e.message : e));
+        engine = null;
+      }
     }
 
     // notation refresh
@@ -450,7 +538,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ console.warn('refreshNotation error', e); }
     }
 
-    // inbound move handler
+    // inbound move handler (multiplayer)
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
@@ -499,10 +587,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
     }
 
-    // helpers for overlay and drawing are unchanged (kept as original)
-    // ... (functions getBoardInner, getSquareCenters, squareAtClientXY, createSvgLine, createSvgArrowHead, finalizeArrow, updateOverlaySize etc.)
-    // pointer wiring is unchanged
-
     // boot
     async function boot(){
       await ensureChessLoaded();
@@ -519,7 +603,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       try{
         const saved = (emailInputBottom && emailInputBottom.value) ? emailInputBottom.value.trim() : (localStorage.getItem('username') || localStorage.getItem('email') || '');
         if(saved){
-          // call goOnline automatically so student remains online until logout
           setTimeout(()=>{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.autoJoin) window.firebaseMultiplayer.autoJoin(saved); }, 200);
         }
       }catch(e){}
@@ -533,10 +616,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       // initialize engine UI state
       engineColor = engineColorSelect.value || 'black';
-      engineSkill = Number(engineSkillSelect.value) || 15;
+      engineLevel = Number(engineLevelSelect.value) || 8;
       engineMoveTime = Number(engineMoveTimeInput.value) || 300;
 
-      engineSkillSelect.addEventListener('change', ()=>{ engineSkill = Number(engineSkillSelect.value)||15; if(engine) engine.postMessage('setoption name Skill Level value ' + engineSkill); });
+      engineLevelSelect.addEventListener('change', ()=>{ engineLevel = Number(engineLevelSelect.value)||8; });
       engineColorSelect.addEventListener('change', ()=>{ engineColor = engineColorSelect.value || 'black'; });
       engineMoveTimeInput.addEventListener('change', ()=>{ engineMoveTime = Number(engineMoveTimeInput.value)||300; });
 
@@ -545,8 +628,8 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(engineEnabled){
           toggleEngineBtn.textContent = 'Engine: ON';
           initEngineWorker();
-          // If engine starts and it's engine to move on initial position, ask it
-          setTimeout(()=>{ maybeAskEngineToMove(); }, 200);
+          // If engine starts and it's engine to move on current position, ask it
+          setTimeout(()=>{ maybeAskEngineToMove(); }, 300);
         } else {
           toggleEngineBtn.textContent = 'Play vs Engine';
           if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
@@ -563,7 +646,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(board) board.position(game.fen()); 
         refreshNotation(); 
         setMsg('Undid move',900);
-        // Emit FEN update after undo
         try{ 
           if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
             window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' });
@@ -591,7 +673,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       multiplayStatus.textContent = 'Not connected';
       readonlyNote.style.display = 'none';
       createBoard(currentTheme);
-      // stop engine if running
       if(engine){ try{ engine.terminate(); }catch(e){} engine = null; }
       engineEnabled = false; toggleEngineBtn.textContent = 'Play vs Engine';
     });
@@ -613,14 +694,11 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         refreshNotation();
         setMsg('FEN loaded',1100);
         setTimeout(updateOverlaySize, 30);
-        // Emit the loaded FEN
         try{ 
           if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
             window.firebaseMultiplayer.emitFen({ fen: game.fen(), action: 'loadFen' });
           }
         }catch(e){}
-
-        // If engine enabled, ask engine to move if necessary
         setTimeout(()=>{ maybeAskEngineToMove(); }, 200);
       }catch(e){ setMsg('Invalid FEN',1400); console.warn(e); }
     });
@@ -634,14 +712,11 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       refreshNotation(); 
       setMsg('Reset to start',900); 
       setTimeout(updateOverlaySize, 30); 
-      // Emit reset FEN
       try{ 
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
           window.firebaseMultiplayer.emitFen({ fen: game.fen(), action: 'reset' });
         }
       }catch(e){}
-
-      // If engine enabled, ask engine to move if it should
       setTimeout(()=>{ maybeAskEngineToMove(); }, 200);
     });
 
@@ -652,7 +727,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
   })();
   </script>
 
-  <!-- FIREBASE (modified presence & spectate-response handling) -->
+  <!-- FIREBASE (presence + spectate-response handling) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script>
@@ -687,12 +762,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       function goOnline(email){
         myEmail = email || ('anon-'+myId);
         const node = onlineRef.child(myId);
-        // write role explicitly so master can detect user type
         node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
           .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
           .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
 
-        // NOTE: we intentionally DO NOT call onDisconnect().remove() so the student remains listed until explicit logout.
         if(presenceTimer) clearInterval(presenceTimer);
         presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
       }
@@ -727,7 +800,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       function sendChallengeTo(targetId){ if(!targetId) return; const ch = challengesRef.child(targetId).push(); ch.set({ fromId: myId, fromEmail: myEmail, ts: firebase.database.ServerValue.TIMESTAMP }).then(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge sent'; setTimeout(()=> ch.remove().catch(()=>{}), 60_000); }).catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge failed'; }); }
 
-      // handle incoming challenge (unchanged)
+      // handle incoming challenge
       challengesRef.child(myId).on('child_added', snap=>{
         const data = snap.val(); const key = snap.key;
         if(!data) return;
@@ -763,16 +836,14 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         masterMovesRef.on('child_added', snap=>{
           const m = snap.val();
           if(!m) return;
-          // Only process moves from master (by field contains 'm_' prefix for master ID)
           if(!m.by || !m.by.startsWith('m_')) {
-            return; // Skip if not from master
+            return;
           }
           if(m.payload){
             try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
           }
         });
       }
-      // Start watching master moves immediately when online
       watchMasterMoves();
 
       // notifications
@@ -798,12 +869,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         snap.ref.remove().catch(()=>{});
       });
 
-      // ---- Spectate invites (listen + deterministic response) ----
+      // Spectate invites
       let isSpectatedByMaster = false;
       const spectateInvitePath = 'spectateInvites/'+myId;
-      console.log(`[STUDENT] Setting up spectate invite listener on ${spectateInvitePath}, myId=${myId}`);
 
-      // fetch existing invites once (race-safe)
       db.ref(spectateInvitePath).once('value', snap => {
         if(snap.exists()){
           snap.forEach(child => {
@@ -811,39 +880,35 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
           });
         }
       }).catch(err => {
-        console.error(`[STUDENT] fetch invites error:`, err);
+        console.error('fetch invites error:', err);
       });
 
-      // attach child_added for future invites
       db.ref(spectateInvitePath).on('child_added', snap => {
         processInvite(snap);
-      }, err => { console.error('[STUDENT] invite child_added error', err); });
+      }, err => { console.error('invite child_added error', err); });
 
       function processInvite(snap){
         const inv = snap.val();
         if(!inv) return;
         const fromEmail = inv.fromEmail || inv.fromId || 'Master';
-        console.log('[STUDENT] Spectate invite', inv);
         const accept = confirm(fromEmail + ' wants to spectate your board. Accept?');
         if(accept){
           isSpectatedByMaster = true;
           document.getElementById('multiplayStatus').textContent = 'Master is spectating';
-          // respond on deterministic path spectateResponses/<masterId>/<myId>
           if(inv.fromId){
             const respPath = `spectateResponses/${inv.fromId}/${myId}`;
             const respRef = db.ref(respPath);
             const payload = { studentId: myId, accepted: true, boardId: inv.boardId || null, ts: firebase.database.ServerValue.TIMESTAMP };
-            respRef.set(payload).then(()=>{ console.log('[STUDENT] wrote spectate response', respPath, payload); }).catch(err=>console.warn('response write failed', err));
+            respRef.set(payload).then(()=>{}).catch(()=>{});
           }
         } else {
           if(inv.fromId){
             const respPath = `spectateResponses/${inv.fromId}/${myId}`;
             const respRef = db.ref(respPath);
             const payload = { studentId: myId, accepted: false, boardId: inv.boardId || null, ts: firebase.database.ServerValue.TIMESTAMP };
-            respRef.set(payload).then(()=>{ console.log('[STUDENT] wrote decline response', respPath, payload); }).catch(()=>{});
+            respRef.set(payload).then(()=>{}).catch(()=>{});
           }
         }
-        // remove invite after handling
         try{ snap.ref.remove().catch(()=>{}); }catch(e){}
       }
 
@@ -873,15 +938,12 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
 
-      // Join button — reads username input and goes online
       document.getElementById('joinBtnBottom').addEventListener('click', function(){
         const email = (document.getElementById('emailInputBottom').value||'').trim();
         if(!email) return alert('Enter username to join online');
-        const asSpect = document.getElementById('spectatorToggle').checked;
         goOnline(email);
       });
 
-      // expose helper for auto-join from boot
       window.firebaseMultiplayer = {
         emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
         emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
@@ -900,12 +962,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
 
       window.addEventListener('beforeunload', ()=>{ /* do not auto-remove presence on unload per request */ });
-    })();  /* end inner IIFE */
+    })();
 
-  })(); /* end outer IIFE */
+  })();
   </script>
 </body>
 </html>
-
-
-
