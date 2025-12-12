@@ -201,7 +201,8 @@
     let currentCandidateIndex = -1;
 
     // Solution state
-    let solutionMoves = [];     // array of tokens (SAN strings or coordinate tokens)
+    let solutionMoves = [];
+    let solutionShownOnce = false;     // array of tokens (SAN strings or coordinate tokens)
     let solutionMoveTypes = []; // array of 'san' or 'coord' matching solutionMoves
     let solutionIndex = 0;      // next move index in solutionMoves (0-based)
     let initialFen = null;      // initial position fen when puzzle loaded
@@ -721,6 +722,7 @@
         statRatingSum += rating;
         updateStatsDisplay();
         refreshNotation(-1);
+        solutionShownOnce = false;
         solutionStatus.textContent = `Loaded: ${(raw['puzzleid']||cand.meta.file)} (${solutionMoves.length} moves)`;
         // If first move is the side indicated by the FEN (i.e. index 0 belongs to the side to move), those are "opponent" moves.
         if(solutionMoves && solutionMoves.length>0 && solutionIndex % 2 === 0 && autoOpponent.checked){
