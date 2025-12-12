@@ -64,17 +64,12 @@
     <input id="email" type="email" placeholder="Enter Email">
     <input id="password" type="password" placeholder="Enter Password">
 
-    <button onclick="loginMaster()">Login as Master</button>
-    <button onclick="loginStudent('student1')">Login as Student 1</button>
-    <button onclick="loginStudent('student2')">Login as Student 2</button>
-    <button onclick="loginStudent('student3')">Login as Student 3</button>
-    <button onclick="loginStudent('student4')">Login as Student 4</button>
+    <button onclick="login()">Login</button>
   </div>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
   <script>
     // Firebase Configuration
@@ -91,44 +86,48 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
 
-    // MASTER UID (only this user can access master.html)
-    const MASTER_UID = "PLCwUQ474lQrbxOJwFGgZ1ERheH3";
+    // UID → ROLE + TARGET PAGE
+    const USER_MAP = {
+      "ImAu93ICbAhwIcCPBQ8jvPz8DTQ2": { role: "student1", page: "student.html" },
+      "G0G5lGUdMdRXduAcydCWPeTYdep2": { role: "student2", page: "student2.html" },
+      "QAvO73vpF0ckJeNaIt5ZFKBhQK52": { role: "student3", page: "student3.html" },
+      "w2POcef2AkOY0BYdVwSXgZ75aVC3": { role: "student4", page: "student4.html" },
+      "PLCwUQ474lQrbxOJwFGgZ1ERheH3": { role: "master", page: "master.html" }
+    };
 
     // -------------------------
-    // LOGIN AS MASTER
+    // UNIVERSAL LOGIN HANDLER
     // -------------------------
-    function loginMaster() {
-      let email = document.getElementById("email").value;
-      let pass = document.getElementById("password").value;
+    function login() {
+      const email = document.getElementById("email").value.trim();
+      const pass = document.getElementById("password").value.trim();
+
+      if (!email || !pass) {
+        alert("Enter email and password.");
+        return;
+      }
 
       auth.signInWithEmailAndPassword(email, pass)
         .then(userCredential => {
-          const user = userCredential.user;
+          const uid = userCredential.user.uid;
 
-          if (user.uid === MASTER_UID) {
-            localStorage.setItem("role", "master");
-            window.location.href = "master.html";
-          } else {
-            auth.signOut();
-            alert("You are NOT allowed to login as Master.");
+          // Check mapping
+          if (!USER_MAP[uid]) {
+            alert("This user does not have an assigned role.");
+            return;
           }
-        })
-        .catch(err => alert(err.message));
-    }
 
-    // -------------------------
-    // LOGIN AS STUDENT
-    // -------------------------
-    function loginStudent(studentID) {
-      let email = document.getElementById("email").value;
-      let pass = document.getElementById("password").value;
+          const { role, page } = USER_MAP[uid];
 
-      auth.signInWithEmailAndPassword(email, pass)
-        .then(() => {
-          localStorage.setItem("role", studentID);
-          window.location.href = "student.html";
+          // Store role
+          localStorage.setItem("role", role);
+
+          // Redirect to mapped page
+          window.location.href = page;
         })
-        .catch(err => alert(err.message));
+        .catch(err => {
+          alert(err.message);
+        });
     }
   </script>
 
