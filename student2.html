@@ -17,1010 +17,1011 @@
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
     .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
     #board-wrapper{ width:100%; max-width:760px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; padding:16px; }
-    #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
-    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:88vh; min-width:520px; min-height:520px; box-shadow: 0 6px 18px rgba(2,6,23,0.04); border-radius:8px; padding:6px; }
-    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
+    #board-wrapper, #board { touch-action: none; user-select: none; -webkit-user-select:none; }
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; background:#fff; max-height:88vh; min-width:520px; min-height:520px; box-shadow:0 6px 18px rgba(2,6,23,0.04); border-radius:8px; padding:6px; }
+    .resizer{ display:flex; gap:10px; align-items:center; justify-content:center; width:100%; }
     .resizer .range{ width:320px; }
-    .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
-    textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
-    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:180px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-    .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
-    .notation .move.current { background:#0f172a; color:#fff; }
-    .tactic-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .solution-controls { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
-    .solution-controls .small { margin-left:6px; margin-right:2px; }
-    @media (max-width:900px){
-      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
-      .resizer .range{ width:200px; }
-    }
-    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
-    .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
-    .logout-btn { background:#dc2626; }
-    .stats { margin-top:10px; display:flex; gap:16px; align-items:center; justify-content:flex-end; font-weight:600; color:#111; }
-    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
-    .puzzle-meta { margin-left:8px; font-weight:600; color:#222; }
+    .resizer small{ color:#444; min-width:48px; text-align:center; font-size:13px; }
+    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:180px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; }
+    .tactic-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .solution-controls{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    .stats{ margin-top:10px; display:flex; gap:16px; font-weight:600; color:#111; justify-content:flex-end; }
+    .status-bubble{ padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; }
   </style>
 </head>
 <body>
 
-  <!-- ACCESS CHECK -->
-  <script>
-    (function(){
-      const allowedRoles = ['student2'];
-      const role = localStorage.getItem('role');
-      if(!role || allowedRoles.indexOf(role) === -1){
-        try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
-      }
-    })();
-  </script>
+<script>
+(function(){
+  const allowedRoles=['student2'];
+  const role=localStorage.getItem('role');
+  if(!role || !allowedRoles.includes(role)){
+    window.location.replace('index.html');
+  }
+})();
+</script>
 
-  <div class="panel">
-    <div class="controls" aria-hidden="false">
-      <button id="undoBtn">Undo</button>
-      <button id="flipBtn">Flip</button>
-      <button id="resignBtn" title="Resign / Reset" style="background:#8b0f0f;">Resign</button>
-      <button id="logoutBtn" class="logout-btn" style="margin-left:auto;">Logout</button>
-    </div>
-
-    <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
-      <input id="boardSizeRange" name="board-size" class="range" type="range" min="360" max="1400" step="10" value="760" aria-label="Board size">
-      <small id="boardSizeLabel">760px</small>
-    </div>
-
-    <div id="board-wrapper" style="margin-top:12px;">
-      <div id="board" aria-label="Chessboard container"></div>
-      <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
-    </div>
-
-    <div id="msg" class="info" aria-live="polite">Ready</div>
-
-    <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
-
-    <!-- SAN ANSWER BOX -->
-    <div id="sanAnswerBox"
-         style="margin-top:10px; padding:10px; border:1px solid #d0d7ff;
-                background:#f8faff; border-radius:6px; font-family:monospace;
-                white-space:pre-wrap; display:none;">
-    </div>
-
+<div class="panel">
+  <div class="controls">
+    <button id="undoBtn">Undo</button>
+    <button id="flipBtn">Flip</button>
+    <button id="resignBtn" style="background:#8b0f0f;">Resign</button>
+    <button id="logoutBtn" class="logout-btn" style="margin-left:auto;">Logout</button>
   </div>
-  <!-- Puzzle controls -->
-  <div class="panel" style="margin-top:18px;">
-    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <div class="tactic-row" aria-label="Puzzle controls">
-        <label class="small">Tactic:</label>
-        <select id="tacticSelect"><option>Loading tactics…</option></select>
 
-        <label class="small">Min rating:</label>
-        <select id="ratingMin">
-          <option>0</option>
-          <option>600</option>
-          <option selected>800</option>
-          <option>1000</option>
-          <option>1200</option>
-        </select>
+  <div class="resizer" style="margin-top:6px;">
+    <input id="boardSizeRange" class="range" type="range" min="360" max="1400" step="10" value="760">
+    <small id="boardSizeLabel">760px</small>
+  </div>
 
-        <label class="small">Max rating:</label>
-        <select id="ratingMax">
-          <option selected>99999</option>
-          <option>1000</option>
-          <option>1200</option>
-          <option>1400</option>
-          <option>1600</option>
-        </select>
+  <div id="board-wrapper" style="margin-top:12px;">
+    <div id="board"></div>
+    <svg id="draw-overlay"></svg>
+  </div>
 
-        <button id="loadPuzzleBtn">Load (first)</button>
-        <button id="randomPuzzleBtn">Random</button>
-      </div>
+  <div id="msg" class="info">Ready</div>
 
-      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-        <button id="prevPuzzleBtn">Previous</button>
-        <button id="nextPuzzleBtn">Next</button>
-        <div class="puzzle-meta" id="currentPuzzleId">No puzzle</div>
-      </div>
-    </div>
+  <div id="movesList" class="notation">No moves yet.</div>
 
-    <div class="solution-controls" id="solutionControls" style="margin-top:12px;">
-      <label><input type="checkbox" id="autoOpponent" checked /> 
-        <span class="small">Auto opponent moves</span>
-      </label>
+  <!-- SAN Answer Box -->
+  <div id="sanAnswerBox"
+       style="margin-top:10px; padding:10px; border:1px solid #d0d7ff;
+              background:#f8faff; border-radius:6px; font-family:monospace;
+              white-space:pre-wrap; display:none;">
+  </div>
+</div>
+<!-- Puzzle controls -->
+<div class="panel" style="margin-top:18px;">
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <div class="tactic-row">
+      <label class="small">Tactic:</label>
+      <select id="tacticSelect"><option>Loading tactics…</option></select>
 
-      <!-- THIS BUTTON'S BEHAVIOR IS NOW TOTALLY REPLACED -->
-      <button id="showSolutionBtn">Show Solution</button>
-
-      <button id="resetSolutionBtn">Reset Solution</button>
-
-      <label class="small">Speed:</label>
-      <select id="solutionSpeed">
-        <option value="1200">1.2s</option>
-        <option value="800">0.8s</option>
-        <option value="500" selected>0.5s</option>
-        <option value="250">0.25s</option>
+      <label class="small">Min rating:</label>
+      <select id="ratingMin">
+        <option>0</option>
+        <option>600</option>
+        <option selected>800</option>
+        <option>1000</option>
+        <option>1200</option>
       </select>
 
-      <div id="solutionStatus" class="muted small" style="margin-left:auto;">
-        No solution loaded
-      </div>
+      <label class="small">Max rating:</label>
+      <select id="ratingMax">
+        <option selected>99999</option>
+        <option>1000</option>
+        <option>1200</option>
+        <option>1400</option>
+        <option>1600</option>
+      </select>
+
+      <button id="loadPuzzleBtn">Load (first)</button>
+      <button id="randomPuzzleBtn">Random</button>
     </div>
 
-    <div class="stats" id="statsBar">
-      <div>Correct: <span id="statCorrect">0</span></div>
-      <div>Incorrect: <span id="statIncorrect">0</span></div>
-      <div>Total attempts: <span id="statAttempts">0</span></div>
-      <div>Puzzles: <span id="statPuzzles">0</span></div>
-      <div>Avg rating: <span id="statAvgRating">0</span></div>
-    </div>
-
-  </div>
-
-  <div class="panel multiplayer-panel" style="margin-top:18px;" id="multiplayerPanel">
-    <div style="display:flex; gap:8px; align-items:center;">
-      <label for="emailInputBottom" class="small">Your username:</label>
-      <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
-      <button id="joinBtnBottom">Join Online</button>
-    </div>
-
-    <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
-      <div id="multiplayStatus" class="muted">Not connected</div>
-      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
-    </div>
-  </div>
-  <div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
-    <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
-    <div class="row">
-      <button data-piece="q">Q</button>
-      <button data-piece="r">R</button>
-      <button data-piece="b">B</button>
-      <button data-piece="n">N</button>
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+      <button id="prevPuzzleBtn">Previous</button>
+      <button id="nextPuzzleBtn">Next</button>
+      <div class="puzzle-meta" id="currentPuzzleId">No puzzle</div>
     </div>
   </div>
 
-  <!-- libs -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
+  <div class="solution-controls" style="margin-top:12px;">
+    <label><input type="checkbox" id="autoOpponent" checked /> 
+      <span class="small">Auto opponent moves</span>
+    </label>
 
-  <script>
-  (function(){
-    // Config
-    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
-    const LIST_URL   = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
+    <!-- REPLACED: Show Solution now only displays SAN text -->
+    <button id="showSolutionBtn">Show Solution</button>
 
-    // DOM references
-    const boardEl        = document.getElementById('board');
-    const boardWrapper   = document.getElementById('board-wrapper');
-    const drawOverlay    = document.getElementById('draw-overlay');
-    const boardSizeRange = document.getElementById('boardSizeRange');
-    const boardSizeLabel = document.getElementById('boardSizeLabel');
-    const msgEl          = document.getElementById('msg');
-    const movesList      = document.getElementById('movesList');
+    <!-- Reset just clears SAN box -->
+    <button id="resetSolutionBtn">Reset Solution</button>
 
-    const sanAnswerBox   = document.getElementById('sanAnswerBox'); // NEW — box for SAN answer output
+    <label class="small">Speed:</label>
+    <select id="solutionSpeed">
+      <option value="1200">1.2s</option>
+      <option value="800">0.8s</option>
+      <option value="500" selected>0.5s</option>
+      <option value="250">0.25s</option>
+    </select>
 
-    const tacticSelect   = document.getElementById('tacticSelect');
-    const ratingMin      = document.getElementById('ratingMin');
-    const ratingMax      = document.getElementById('ratingMax');
-    const loadPuzzleBtn  = document.getElementById('loadPuzzleBtn');
-    const randomPuzzleBtn= document.getElementById('randomPuzzleBtn');
-    const prevPuzzleBtn  = document.getElementById('prevPuzzleBtn');
-    const nextPuzzleBtn  = document.getElementById('nextPuzzleBtn');
-    const currentPuzzleIdEl = document.getElementById('currentPuzzleId');
+    <div id="solutionStatus" class="muted small" style="margin-left:auto;">
+      No solution loaded
+    </div>
+  </div>
 
-    const autoOpponent       = document.getElementById('autoOpponent');
-    const showSolutionBtn    = document.getElementById('showSolutionBtn');
-    const resetSolutionBtn   = document.getElementById('resetSolutionBtn');
-    const solutionSpeed      = document.getElementById('solutionSpeed');
-    const solutionStatus     = document.getElementById('solutionStatus');
+  <div class="stats">
+    <div>Correct: <span id="statCorrect">0</span></div>
+    <div>Incorrect: <span id="statIncorrect">0</span></div>
+    <div>Total attempts: <span id="statAttempts">0</span></div>
+    <div>Puzzles: <span id="statPuzzles">0</span></div>
+    <div>Avg rating: <span id="statAvgRating">0</span></div>
+  </div>
+</div>
 
-    const statCorrectEl  = document.getElementById('statCorrect');
-    const statIncorrectEl= document.getElementById('statIncorrect');
-    const statAttemptsEl = document.getElementById('statAttempts');
-    const statPuzzlesEl  = document.getElementById('statPuzzles');
-    const statAvgRatingEl= document.getElementById('statAvgRating');
+<div class="panel multiplayer-panel" style="margin-top:18px;">
+  <div style="display:flex; gap:8px; align-items:center;">
+    <label for="emailInputBottom" class="small">Your username:</label>
+    <input id="emailInputBottom" type="text" placeholder="your username (e.g. student1)" />
+    <button id="joinBtnBottom">Join Online</button>
+  </div>
 
-    const undoBtn   = document.getElementById('undoBtn');
-    const flipBtn   = document.getElementById('flipBtn');
-    const resignBtn = document.getElementById('resignBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
+  <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
+    <div id="multiplayStatus" class="muted">Not connected</div>
+    <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
+  </div>
+</div>
+<!-- libs -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
-    const emailInputBottom = document.getElementById('emailInputBottom');
-    const joinBtnBottom    = document.getElementById('joinBtnBottom');
-    const multiplayStatus  = document.getElementById('multiplayStatus');
-    const pairedBubble     = document.getElementById('pairedBubble');
+<script>
+(function(){
 
-    // State
-    let board = null;
-    let game  = null;
-    let currentCandidateList  = [];
-    let currentCandidateIndex = -1;
+  const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+  const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
 
-    // Solution data
-    let solutionMoves      = [];  // SAN list
-    let solutionMoveTypes  = [];  // always 'san' for your case
-    let solutionIndex      = 0;
-    let initialFen         = null;
-    let initialSideToMove  = null;
-    let solutionTimer      = null;
+  // DOM references
+  const boardEl        = document.getElementById('board');
+  const boardWrapper   = document.getElementById('board-wrapper');
+  const drawOverlay    = document.getElementById('draw-overlay');
+  const boardSizeRange = document.getElementById('boardSizeRange');
+  const boardSizeLabel = document.getElementById('boardSizeLabel');
+  const msgEl          = document.getElementById('msg');
+  const movesList      = document.getElementById('movesList');
+  const sanAnswerBox   = document.getElementById('sanAnswerBox');
 
-    // Stats
-    let statCorrect = 0;
-    let statIncorrect = 0;
-    let statAttempts = 0;
-    let statPuzzles = 0;
-    let statRatingSum = 0;
+  const tacticSelect     = document.getElementById('tacticSelect');
+  const ratingMin        = document.getElementById('ratingMin');
+  const ratingMax        = document.getElementById('ratingMax');
+  const loadPuzzleBtn    = document.getElementById('loadPuzzleBtn');
+  const randomPuzzleBtn  = document.getElementById('randomPuzzleBtn');
+  const prevPuzzleBtn    = document.getElementById('prevPuzzleBtn');
+  const nextPuzzleBtn    = document.getElementById('nextPuzzleBtn');
+  const currentPuzzleIdEl= document.getElementById('currentPuzzleId');
 
-    // Utility
-    function setMsg(t, ms=0){
-      msgEl.textContent = t || '';
-      if(ms>0){
-        setTimeout(()=>{ if(msgEl.textContent===t) msgEl.textContent=''; }, ms);
-      }
+  const autoOpponent     = document.getElementById('autoOpponent');
+  const showSolutionBtn  = document.getElementById('showSolutionBtn');
+  const resetSolutionBtn = document.getElementById('resetSolutionBtn');
+  const solutionSpeed    = document.getElementById('solutionSpeed');
+  const solutionStatus   = document.getElementById('solutionStatus');
+
+  const statCorrectEl    = document.getElementById('statCorrect');
+  const statIncorrectEl  = document.getElementById('statIncorrect');
+  const statAttemptsEl   = document.getElementById('statAttempts');
+  const statPuzzlesEl    = document.getElementById('statPuzzles');
+  const statAvgRatingEl  = document.getElementById('statAvgRating');
+
+  const undoBtn          = document.getElementById('undoBtn');
+  const flipBtn          = document.getElementById('flipBtn');
+  const resignBtn        = document.getElementById('resignBtn');
+  const logoutBtn        = document.getElementById('logoutBtn');
+
+  const joinBtnBottom    = document.getElementById('joinBtnBottom');
+  const emailInputBottom = document.getElementById('emailInputBottom');
+
+  // State
+  let board       = null;
+  let game        = null;
+  let solutionMoves = [];
+  let solutionMoveTypes = [];
+  let solutionIndex = 0;
+  let initialFen  = null;
+  let initialSideToMove = null;   // NEW (Option B logic)
+  let solutionTimer = null;
+
+  let currentCandidateList  = [];
+  let currentCandidateIndex = -1;
+
+  let statCorrect = 0;
+  let statIncorrect = 0;
+  let statAttempts = 0;
+  let statPuzzles = 0;
+  let statRatingSum = 0;
+
+  function setMsg(t,ms=0){
+    msgEl.textContent = t;
+    if(ms>0){
+      setTimeout(()=>{
+        if(msgEl.textContent===t) msgEl.textContent='';
+      },ms);
     }
+  }
 
-    function pieceTheme(piece){
-      return PIECES_BASE + piece + '.svg';
+  function pieceTheme(p){ return PIECES_BASE + p + '.svg'; }
+
+  function ensureChessLoaded(){
+    return new Promise(resolve=>{
+      if(typeof Chess!=='undefined') return resolve();
+      const start=Date.now();
+      (function wait(){
+        if(typeof Chess!=='undefined') return resolve();
+        if(Date.now()-start>3000) return resolve();
+        setTimeout(wait,50);
+      })();
+    });
+  }
+
+  // Create board
+  function createBoard(){
+    if(board && board.destroy){
+      try{ board.destroy(); }catch(e){}
     }
+    if(!game) game = new Chess();
 
-    function ensureChessLoaded(){
-      return new Promise(resolve=>{
-        if(typeof Chess !== 'undefined') return resolve();
-        const start = Date.now();
-        (function check(){
-          if(typeof Chess !== 'undefined') return resolve();
-          if(Date.now() - start > 3000) return resolve();
-          setTimeout(check,50);
-        })();
-      });
-    }
-
-    // Create board
-    function createBoard(){
-      if(board && typeof board.destroy === 'function'){
-        try{ board.destroy(); }catch(e){}
-      }
-      if(!game) game = new Chess();
-      board = Chessboard('board', {
-        draggable: true,
-        position : game.fen(),
-        onDrop   : onDrop,
-        onSnapEnd: onSnapEnd,
-        pieceTheme: pieceTheme
-      });
-      board.position(game.fen());
-      updateOverlaySize();
-    }
-
-    function onSnapEnd(){
-      if(board && game) board.position(game.fen());
-    }
-
-    // Promotion modal
-    const promoteModal = document.getElementById('promoteModal');
-    let pendingPromo = null;
-
-    function showPromotionDialog(){ promoteModal.style.display='block'; }
-    function hidePromotionDialog(){ promoteModal.style.display='none'; }
-
-    promoteModal.addEventListener('click', e=>{
-      if(e.target && e.target.dataset && e.target.dataset.piece){
-        const p = e.target.dataset.piece;
-        if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(p);
-        pendingPromo = null;
-        hidePromotionDialog();
-      }
+    board = Chessboard('board',{
+      draggable:true,
+      position: game.fen(),
+      onDrop: onDrop,
+      onSnapEnd: ()=>board.position(game.fen()),
+      pieceTheme: pieceTheme
     });
 
-    // Last-move highlight
-    let lastMoveSquares = [];
-    function setPersistentLastMove(src, tgt){
-      lastMoveSquares.forEach(sq=>{
-        const el = document.querySelector('.square-' + sq);
-        if(el) el.classList.remove('cb-last-move');
+    board.position(game.fen());
+    updateOverlaySize();
+  }
+
+  // PROMOTION
+  const promoteModal = document.getElementById("promoteModal");
+  let pendingPromo=null;
+
+  function showPromotionDialog(){ promoteModal.style.display='block'; }
+  function hidePromotionDialog(){ promoteModal.style.display='none'; }
+
+  promoteModal.addEventListener('click',e=>{
+    if(e.target.dataset && e.target.dataset.piece){
+      const piece = e.target.dataset.piece;
+      if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(piece);
+      pendingPromo=null;
+      hidePromotionDialog();
+    }
+  });
+
+  // LAST-MOVE HIGHLIGHT
+  let lastMoveSquares=[];
+  function setPersistentLastMove(src,tgt){
+    lastMoveSquares.forEach(s=>{
+      const el=document.querySelector('.square-'+s);
+      if(el) el.classList.remove('cb-last-move');
+    });
+    lastMoveSquares=[src,tgt];
+    [src,tgt].forEach(s=>{
+      const el=document.querySelector('.square-'+s);
+      if(el) el.classList.add('cb-last-move');
+    });
+  }
+
+  // REFRESH NOTATION (student's played moves)
+  function refreshNotation(){
+    const h = game.history();
+    if(h.length===0){
+      movesList.innerHTML='No moves yet.';
+      return;
+    }
+    movesList.innerHTML='';
+    for(let i=0;i<h.length;i+=2){
+      const no=Math.floor(i/2)+1;
+      const w=h[i]||'';
+      const b=h[i+1]||'';
+      const d=document.createElement('div');
+      d.className='move';
+      d.textContent=`${no}. ${w} ${b}`;
+      movesList.appendChild(d);
+    }
+  }
+
+  // DROP HANDLER (student move)
+  async function onDrop(source,target){
+    if(!game) return 'snapback';
+
+    const legal = game.moves({verbose:true});
+    const promo = legal.find(m=>m.from===source && m.to===target && m.promotion);
+
+    let chosenPromo=null;
+    if(promo){
+      chosenPromo = await new Promise(res=>{
+        pendingPromo={resolve:res};
+        showPromotionDialog();
       });
-      lastMoveSquares = [src, tgt];
-      [src, tgt].forEach(sq=>{
-        const el = document.querySelector('.square-' + sq);
-        if(el) el.classList.add('cb-last-move');
-      });
+      if(!chosenPromo) chosenPromo='q';
     }
 
-    // Refresh notation (board move history, not SAN answer)
-    function refreshNotation(highlightIndex=-1){
-      try{
-        const hist = game.history();
-        if(hist.length===0){
-          movesList.innerHTML = 'No moves yet.';
-          return;
+    const mv = game.move({from:source, to:target, promotion:chosenPromo});
+    if(!mv){
+      setMsg("Illegal move",800);
+      return 'snapback';
+    }
+
+    board.position(game.fen());
+    setPersistentLastMove(mv.from,mv.to);
+    refreshNotation();
+
+    return;
+  }
+
+  // -------- CSV Parsing --------
+  function normalizeHeader(h){ return (h||'').trim().toLowerCase().replace(/\s+/g,''); }
+
+  function parseCsvText(csv){
+    csv = csv.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    const lines = csv.split('\n');
+
+    let headerIdx=0;
+    while(headerIdx<lines.length && !lines[headerIdx].trim()) headerIdx++;
+    if(headerIdx>=lines.length) return [];
+
+    function parseLine(line){
+      const out=[]; let cur=''; let inQ=false;
+      for(let i=0;i<line.length;i++){
+        const c=line[i];
+        if(c=='"'){
+          if(inQ && line[i+1]=='"'){ cur+='"'; i++; continue; }
+          inQ=!inQ; continue;
         }
-        movesList.innerHTML = '';
-        for(let i=0; i<hist.length; i+=2){
-          const no = Math.floor(i/2) + 1;
-          const w = hist[i] || '';
-          const b = hist[i+1] || '';
+        if(c===',' && !inQ){ out.push(cur); cur=''; continue; }
+        cur+=c;
+      }
+      out.push(cur);
+      return out;
+    }
 
-          const div = document.createElement('div');
-          div.className = 'move';
+    const header=parseLine(lines[headerIdx]).map(normalizeHeader);
+    const rows=[];
+    for(let i=headerIdx+1;i<lines.length;i++){
+      if(!lines[i].trim()) continue;
+      const vals=parseLine(lines[i]);
+      while(vals.length<header.length) vals.push('');
+      const obj={};
+      for(let j=0;j<header.length;j++) obj[header[j]]=vals[j].trim();
+      rows.push(obj);
+    }
+    return rows;
+  }
 
-          div.innerHTML = `<strong>${no}.</strong> ${w} ${b}`;
-          movesList.appendChild(div);
+  // ------- LOAD LIST --------
+  async function fetchJsonQuiet(url){
+    try{
+      const r=await fetch(url,{cache:'no-cache'});
+      if(!r.ok) throw new Error("http "+r.status);
+      return await r.json();
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadListAndPopulate(){
+    const files=await fetchJsonQuiet(LIST_URL);
+    if(!files || !Array.isArray(files)){
+      tacticSelect.innerHTML="<option>No list</option>";
+      return;
+    }
+
+    const manifest={entries:[], tactics:{}};
+
+    files.forEach(fn=>{
+      const key=fn.replace(/\.csv$/i,'').toLowerCase();
+      const fileUrl="/IQ4U-Chess-Classroom/assets/puzzle/"+fn;
+      manifest.entries.push({filename:fn,fileUrl,tactic:key});
+      if(!manifest.tactics[key]) manifest.tactics[key]=[];
+      manifest.tactics[key].push({filename:fn,fileUrl});
+    });
+
+    tacticSelect.innerHTML='<option value="">— Select tactic —</option>';
+    Object.keys(manifest.tactics).sort().forEach(t=>{
+      const opt=document.createElement('option');
+      opt.value=t;
+      opt.textContent=`${t} (${manifest.tactics[t].length})`;
+      tacticSelect.appendChild(opt);
+    });
+
+    window._clientManifest=manifest;
+  }
+
+  // -------- SAN Extraction --------
+  function sanitizeSanToken(s){
+    if(!s) return '';
+    return s.replace(/\{.*?\}/g,'')
+            .replace(/\$\d+/g,'')
+            .replace(/\(.*?\)/g,' ')
+            .replace(/\d+\.+/g,'')
+            .replace(/[+#?!]*$/g,'')
+            .trim();
+  }
+
+  function extractMovesFromRow(row){
+    if(!row) return {tokens:[],types:[]};
+
+    const get=(names)=>{
+      for(const n of names){
+        if(row[n] && row[n].trim()) return row[n].trim();
+      }
+      return '';
+    };
+
+    const sanField = get(['san','sanmoves','san_moves','san_tokens']);
+    const pgnField = get(['pgn']);
+    const movesField= get(['moves']);
+
+    if(sanField){
+      let s=sanField.replace(/\{.*?\}/g,'')
+                    .replace(/\+\?\!\?*/g,'')
+                    .replace(/\(.*?\)/g,' ')
+                    .replace(/\d+\.+/g,' ')
+                    .replace(/\s+/g,' ')
+                    .trim();
+      const toks=s.split(' ').map(sanitizeSanToken).filter(Boolean);
+      return {tokens:toks, types:toks.map(()=> 'san')};
+    }
+
+    if(pgnField){
+      let s=pgnField.replace(/\[.*?\]/g,'')
+                    .replace(/\{.*?\}/g,'')
+                    .replace(/\(.*?\)/g,' ')
+                    .replace(/\d+\.+/g,' ')
+                    .replace(/\s+/g,' ')
+                    .trim();
+      const toks=s.split(' ').map(sanitizeSanToken).filter(Boolean);
+      return {tokens:toks, types:toks.map(()=> 'san')};
+    }
+
+    if(movesField){
+      const toks=movesField.replace(/\s+/g,' ').trim().split(' ');
+      return {tokens:toks, types:toks.map(()=> 'coord')};
+    }
+
+    return {tokens:[], types:[]};
+  }
+
+  // ------- LOAD PUZZLE --------
+  async function loadPuzzleByCandidateIndex(idx){
+    const cand=currentCandidateList[idx];
+    if(!cand){
+      solutionStatus.textContent='No puzzle';
+      return;
+    }
+
+    currentCandidateIndex=idx;
+
+    const raw=cand.row;
+    currentPuzzleIdEl.textContent = raw['puzzleid'] || cand.meta.filename;
+
+    let fen = (raw['fen']||'').trim();
+    fen = fen.replace(/^"+|"+$/g,'').trim();
+    const parts=fen.split(/\s+/);
+    if(parts.length<6) fen = fen + " w - - 0 1";
+
+    initialFen=fen;
+    game = new Chess(initialFen);
+    board.position(game.fen());
+
+    initialSideToMove = game.turn();  // ***** IMPORTANT OPTION B LOGIC *****
+
+    const extracted=extractMovesFromRow(raw);
+    solutionMoves=extracted.tokens;
+    solutionMoveTypes=extracted.types;
+    solutionIndex=0;
+
+    refreshNotation();
+    sanAnswerBox.style.display="none";
+
+    statPuzzles++;
+    const rating=parseInt((raw['rating']||'').replace(/[^0-9]/g,''),10)||0;
+    statRatingSum+=rating;
+    updateStatsDisplay();
+
+    solutionStatus.textContent = `Loaded (${solutionMoves.length} moves)`;
+
+    // OPTION B: Auto-play only if FEN side-to-move = opponent
+    if(solutionMoves.length>0 && autoOpponent.checked && game.turn()===initialSideToMove){
+      setTimeout(()=> autoPlayOpponentNext(),200);
+    }
+  }
+
+  async function buildCandidatesForTactic(tactic){
+    currentCandidateList=[];
+    currentCandidateIndex=-1;
+
+    if(!window._clientManifest || !window._clientManifest.tactics[tactic]){
+      solutionStatus.textContent='No puzzles';
+      return;
+    }
+
+    const files=window._clientManifest.tactics[tactic];
+    const minR=parseInt(ratingMin.value,10)||0;
+    const maxR=parseInt(ratingMax.value,10)||99999;
+
+    let total=0;
+    const MAX=400;
+
+    for(const fi of files){
+      if(total>=MAX) break;
+      try{
+        const resp=await fetch(fi.fileUrl);
+        if(!resp.ok) continue;
+        const text=await resp.text();
+        const rows=parseCsvText(text);
+
+        for(const r of rows){
+          if(total>=MAX) break;
+          const rating=parseInt((r['rating']||'').replace(/[^0-9]/g,''),10)||0;
+          if(rating<minR || rating>maxR) continue;
+
+          currentCandidateList.push({row:r, meta:{filename:fi.filename,fileUrl:fi.fileUrl}});
+          total++;
         }
       }catch(e){}
     }
 
-    // Student move handler
-    async function onDrop(source, target){
-      if(!game) return 'snapback';
+    solutionStatus.textContent = `${currentCandidateList.length} puzzles found`;
+    if(currentCandidateList.length>0){
+      currentCandidateIndex=0;
+      currentPuzzleIdEl.textContent = currentCandidateList[0].row['puzzleid'] || 'Puzzle';
+    }
+  }
 
-      const legal = game.moves({ verbose:true }) || [];
-      const candidatePromo = legal.find(m => m.from===source && m.to===target && m.promotion);
+  // ------- AUTO-OPPONENT (OPTION B FIXED) --------
+  function clearSolutionTimer(){
+    if(solutionTimer){
+      clearTimeout(solutionTimer);
+      solutionTimer=null;
+    }
+  }
 
-      let chosenPromo = null;
-      if(candidatePromo){
-        chosenPromo = await new Promise(res=>{
-          pendingPromo = { resolve: res };
-          showPromotionDialog();
-        });
-        if(!chosenPromo) chosenPromo = 'q';
-      }
+  function autoPlayOpponentNext(){
+    clearSolutionTimer();
 
-      const mv = game.move({ from:source, to:target, promotion:chosenPromo });
-      if(mv === null){
-        setMsg('Illegal move',900);
-        return 'snapback';
-      }
+    if(!solutionMoves.length) return;
 
-      board.position(game.fen());
-      setPersistentLastMove(mv.from, mv.to);
-      refreshNotation();
-
+    // Only play if it's actually opponent's turn
+    if(game.turn() !== initialSideToMove){
+      solutionStatus.textContent="Your turn";
       return;
     }
 
-    // CSV parsing helpers
-    function normalizeHeaderCell(h){
-      return (h||'').toString().trim().toLowerCase().replace(/\s+/g,'');
-    }
+    if(solutionIndex >= solutionMoves.length) return;
 
-    function parseCsvText(csvText){
-      csvText = csvText.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-      const lines = csvText.split('\n');
+    const delay = parseInt(solutionSpeed.value,10) || 500;
 
-      let headerLineIdx = 0;
-      while(headerLineIdx < lines.length && lines[headerLineIdx].trim()==='') headerLineIdx++;
-      if(headerLineIdx >= lines.length) return [];
-
-      const parseLine = (line)=>{
-        const out = [];
-        let cur='', inQ = false;
-        for(let i=0;i<line.length;i++){
-          const ch = line[i];
-          if(ch === '"'){
-            if(inQ && line[i+1] === '"'){ cur+='"'; i++; continue; }
-            inQ = !inQ; continue;
-          }
-          if(ch===',' && !inQ){ out.push(cur); cur=''; continue; }
-          cur += ch;
-        }
-        out.push(cur);
-        return out;
-      };
-
-      const headerCols = parseLine(lines[headerLineIdx]).map(normalizeHeaderCell);
-      const rows = [];
-      for(let i = headerLineIdx+1; i<lines.length; i++){
-        if(!lines[i].trim()) continue;
-        const vals = parseLine(lines[i]);
-        while(vals.length < headerCols.length) vals.push('');
-        const obj = {};
-        for(let j=0;j<headerCols.length;j++){
-          obj[headerCols[j]] = vals[j].trim();
-        }
-        rows.push(obj);
-      }
-      return rows;
-    }
-
-    // Load puzzle list manifest
-    async function fetchJsonQuiet(url){
-      try{
-        const r = await fetch(url,{cache:'no-cache'});
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        return await r.json();
-      }catch(e){
-        console.warn('fetchJsonQuiet failed', e);
-        return null;
-      }
-    }
-
-    async function loadListAndPopulate(){
-      const files = await fetchJsonQuiet(LIST_URL);
-      if(!files || !Array.isArray(files)){
-        tacticSelect.innerHTML = '<option>No list</option>';
+    function step(){
+      // Only opponent moves here
+      if(game.turn() !== initialSideToMove){
+        solutionStatus.textContent="Your turn";
         return;
       }
 
-      const manifest = { entries:[], tactics:{} };
-      files.forEach(fn=>{
-        const key = fn.replace(/\.csv$/i,'').toLowerCase();
-        const fileUrl = '/IQ4U-Chess-Classroom/assets/puzzle/' + fn;
-        manifest.entries.push({ filename:fn, fileUrl, tactic:key });
-        manifest.tactics[key] = manifest.tactics[key] || [];
-        manifest.tactics[key].push({ filename:fn, fileUrl });
-      });
+      const token = solutionMoves[solutionIndex];
+      const type  = solutionMoveTypes[solutionIndex];
 
-      tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
-      Object.keys(manifest.tactics).sort().forEach(t=>{
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = `${t} (${manifest.tactics[t].length})`;
-        tacticSelect.appendChild(opt);
-      });
-
-      window._clientManifest = manifest;
-    }
-
-    // Extract SAN moves
-    function sanitizeSanToken(s){
-      if(!s) return '';
-      return s.toString()
-              .replace(/\{.*?\}/g,'')
-              .replace(/\$\d+/g,'')
-              .replace(/\d+\.+/g,'')
-              .replace(/[+#?!]*$/g,'')
-              .trim();
-    }
-
-    function extractMovesFromRow(row){
-      if(!row) return { tokens:[], types:[] };
-
-      const tryGet = names=>{
-        for(const n of names){
-          if(row[n] && row[n].toString().trim())
-            return row[n].toString().trim();
-        }
-        return '';
-      };
-
-      const sanField = tryGet(['san','sanmoves','san_moves','san_tokens']);
-      const movesField = tryGet(['moves','move','mv']);
-      const pgnField = tryGet(['pgn']);
-
-      if(sanField){
-        let s = sanField.replace(/\{.*?\}/g,'')
-                        .replace(/\$\d+/g,'')
-                        .replace(/\(.*?\)/g,' ')
-                        .replace(/\d+\.+/g,' ')
-                        .replace(/\s+/g,' ')
-                        .trim();
-        const toks = s.split(' ')
-                      .map(t=>sanitizeSanToken(t))
-                      .filter(Boolean);
-        return { tokens:toks, types:toks.map(()=> 'san') };
-      }
-
-      if(pgnField){
-        let s = pgnField.replace(/\[.*?\]/g,'')
-                        .replace(/\{.*?\}/g,'')
-                        .replace(/\(.*?\)/g,' ')
-                        .replace(/\d+\.+/g,' ')
-                        .replace(/\s+/g,' ')
-                        .trim();
-        const toks = s.split(' ')
-                      .map(t=>sanitizeSanToken(t))
-                      .filter(Boolean);
-        return { tokens:toks, types:toks.map(()=> 'san') };
-      }
-
-      if(movesField){
-        const clean = movesField.replace(/\s+/g,' ').trim().split(' ');
-        return { tokens:clean, types:clean.map(()=> 'coord') };
-      }
-
-      return { tokens:[], types:[] };
-    }
-
-    // Load a puzzle by index
-    async function loadPuzzleByCandidateIndex(idx){
-      const cand = currentCandidateList[idx];
-      if(!cand){
-        solutionStatus.textContent = 'No puzzle';
+      const mv = applyMoveToken(token,type);
+      if(!mv){
+        solutionStatus.textContent="Opponent move failed";
         return;
       }
 
-      currentCandidateIndex = idx;
-      currentPuzzleIdEl.textContent = cand.row['puzzleid'] || cand.meta.file;
+      solutionIndex++;
+      solutionStatus.textContent=`Opponent played (${solutionIndex}/${solutionMoves.length})`;
 
-      const raw = cand.row;
+      // Continue if next move is still opponent
+      if(solutionIndex < solutionMoves.length && game.turn()===initialSideToMove){
+        solutionTimer=setTimeout(step,delay);
+      }
+    }
 
-      let fenRaw = (raw['fen'] || '').toString().trim();
-      if(!fenRaw){
-        solutionStatus.textContent = 'No FEN in row';
-        return;
+    solutionTimer=setTimeout(step,200);
+  }
+
+  function applyMoveToken(token,type){
+    try{
+      if(type==='san'){
+        const mv=game.move(token,{sloppy:true});
+        if(!mv) return null;
+        board.position(game.fen());
+        setPersistentLastMove(mv.from,mv.to);
+        refreshNotation();
+        return mv;
       }
 
-      fenRaw = fenRaw.replace(/^"+|"+$/g,'').trim();
-      let fenParts = fenRaw.split(/\s+/);
-      if(fenParts.length < 6){
-        fenRaw = fenRaw + ' w - - 0 1';
-      }
+      // coord (rare)
+      const m = token.trim();
+      const match=m.match(/^([a-h][1-8])([a-h][1-8])([nbrq])?$/i);
+      if(!match) return null;
+      const from=match[1], to=match[2];
+      const prom = match[3] ? match[3].toLowerCase() : undefined;
 
-      initialFen = fenRaw;
-
-      try{ game = new Chess(initialFen); }
-      catch(e){ game = new Chess(); }
+      const mv=game.move({from,to,promotion:prom});
+      if(!mv) return null;
 
       board.position(game.fen());
-
-      const parts = initialFen.split(/\s+/);
-      initialSideToMove = parts[1] || 'w';
-
-      const extracted = extractMovesFromRow(raw);
-      solutionMoves = extracted.tokens || [];
-      solutionMoveTypes = extracted.types || [];
-
-      solutionIndex = 0;
+      setPersistentLastMove(mv.from,mv.to);
       refreshNotation();
+      return mv;
+    }catch(e){
+      return null;
+    }
+  }
 
-      sanAnswerBox.style.display = "none"; // hide SAN box when loading new puzzle
-
-      statPuzzles++;
-      const rating = parseInt((raw['rating']||'').replace(/[^0-9]/g,''),10) || 0;
-      statRatingSum += rating;
-      updateStatsDisplay();
-
-      solutionStatus.textContent = `Loaded (${solutionMoves.length} moves)`;
+  // -------- SHOW SOLUTION (SAN ONLY — NO BOARD CHANGE) --------
+  showSolutionBtn.addEventListener('click',()=>{
+    if(!solutionMoves.length){
+      sanAnswerBox.textContent="No solution available.";
+      sanAnswerBox.style.display="block";
+      return;
     }
 
-    // Build candidate list for a tactic
-    async function buildCandidatesForTactic(tacticName){
-      currentCandidateList = [];
-      currentCandidateIndex = -1;
-
-      if(!window._clientManifest || !window._clientManifest.tactics[tacticName]){
-        solutionStatus.textContent = 'No puzzles';
-        return;
-      }
-
-      const files = window._clientManifest.tactics[tacticName];
-      const minR = parseInt(ratingMin.value,10)||0;
-      const maxR = parseInt(ratingMax.value,10)||99999;
-
-      let total = 0;
-      const maxGlobal = 400;
-
-      for(const fi of files){
-        if(total >= maxGlobal) break;
-        try{
-          const resp = await fetch(fi.fileUrl,{cache:'no-cache'});
-          if(!resp.ok) continue;
-          const text = await resp.text();
-          const rows = parseCsvText(text);
-
-          for(const r of rows){
-            if(total >= maxGlobal) break;
-
-            const rating = parseInt((r['rating']||'').replace(/[^0-9]/g,''),10) || 0;
-            if(rating < minR || rating > maxR) continue;
-
-            currentCandidateList.push({
-              row:r,
-              meta:{file:fi.filename, fileUrl:fi.fileUrl}
-            });
-            total++;
-          }
-        }catch(err){
-          console.warn('CSV error', err);
-        }
-      }
-
-      solutionStatus.textContent = `${currentCandidateList.length} puzzles found`;
-
-      if(currentCandidateList.length>0){
-        currentCandidateIndex = 0;
-        currentPuzzleIdEl.textContent = currentCandidateList[0].row['puzzleid'] || 'Puzzle';
-      }
+    let out="";
+    for(let i=0;i<solutionMoves.length;i+=2){
+      const n=Math.floor(i/2)+1;
+      const w=solutionMoves[i]||"";
+      const b=solutionMoves[i+1]||"";
+      out += `${n}. ${w} ${b}\n`;
     }
 
-    // Stats update
-    function updateStatsDisplay(){
-      statCorrectEl.textContent   = statCorrect;
-      statIncorrectEl.textContent = statIncorrect;
-      statAttemptsEl.textContent  = statAttempts;
-      statPuzzlesEl.textContent   = statPuzzles;
-      statAvgRatingEl.textContent = statPuzzles ? Math.round(statRatingSum/statPuzzles) : 0;
+    sanAnswerBox.textContent=out.trim();
+    sanAnswerBox.style.display="block";
+    solutionStatus.textContent="Showing SAN answer";
+  });
+
+  resetSolutionBtn.addEventListener('click',()=>{
+    sanAnswerBox.textContent="";
+    sanAnswerBox.style.display="none";
+    solutionStatus.textContent="Answer cleared";
+  });
+
+  // ------- STATS --------
+  function updateStatsDisplay(){
+    statCorrectEl.textContent=statCorrect;
+    statIncorrectEl.textContent=statIncorrect;
+    statAttemptsEl.textContent=statAttempts;
+    statPuzzlesEl.textContent=statPuzzles;
+    statAvgRatingEl.textContent = statPuzzles ? Math.round(statRatingSum/statPuzzles) : 0;
+  }
+
+  // ------- NAVIGATION --------
+  function loadFirstCandidate(){
+    if(!currentCandidateList.length) return;
+    loadPuzzleByCandidateIndex(0);
+  }
+
+  function loadRandomCandidate(){
+    if(!currentCandidateList.length) return;
+    const i=Math.floor(Math.random()*currentCandidateList.length);
+    loadPuzzleByCandidateIndex(i);
+  }
+
+  function loadNextCandidate(){
+    if(currentCandidateIndex < currentCandidateList.length-1)
+      loadPuzzleByCandidateIndex(currentCandidateIndex+1);
+  }
+
+  function loadPrevCandidate(){
+    if(currentCandidateIndex > 0)
+      loadPuzzleByCandidateIndex(currentCandidateIndex-1);
+  }
+
+  // ------- BOARD SIZE --------
+  boardSizeRange.addEventListener('input',e=>{
+    setBoardSize(e.target.value);
+  });
+
+  function setBoardSize(px){
+    px=Math.max(360,Math.min(1400,Number(px)));
+    boardWrapper.style.maxWidth=px+'px';
+    boardSizeLabel.textContent=px+'px';
+    board.resize();
+    setTimeout(updateOverlaySize,20);
+  }
+
+  function updateOverlaySize(){
+    const r=boardEl.getBoundingClientRect();
+    drawOverlay.style.width=r.width+'px';
+    drawOverlay.style.height=r.height+'px';
+  }
+
+  // ------- BUTTON EVENTS --------
+  tacticSelect.addEventListener('change',()=>{
+    if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value);
+  });
+
+  ratingMin.addEventListener('change',()=>{
+    if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value);
+  });
+
+  ratingMax.addEventListener('change',()=>{
+    if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value);
+  });
+
+  loadPuzzleBtn.addEventListener('click',()=>{
+    if(tacticSelect.value){
+      buildCandidatesForTactic(tacticSelect.value)
+        .then(()=>loadFirstCandidate());
     }
+  });
 
-    // BUTTON: Show Solution (REPLACED — now ONLY shows SAN text)
-    showSolutionBtn.addEventListener('click', ()=>{
-      if(!solutionMoves || solutionMoves.length === 0){
-        sanAnswerBox.textContent = "No solution available.";
-        sanAnswerBox.style.display = "block";
-        return;
-      }
+  randomPuzzleBtn.addEventListener('click',()=>{
+    if(tacticSelect.value){
+      buildCandidatesForTactic(tacticSelect.value)
+        .then(()=>loadRandomCandidate());
+    }
+  });
 
-      let out = "";
-      for(let i=0; i<solutionMoves.length; i+=2){
-        const moveNum = Math.floor(i/2) + 1;
-        const w = solutionMoves[i] || "";
-        const b = solutionMoves[i+1] || "";
-        out += `${moveNum}. ${w} ${b}\n`;
-      }
+  prevPuzzleBtn.addEventListener('click',loadPrevCandidate);
+  nextPuzzleBtn.addEventListener('click',loadNextCandidate);
 
-      sanAnswerBox.textContent = out.trim();
-      sanAnswerBox.style.display = "block";
-      solutionStatus.textContent = "Showing SAN answer";
-    });
-
-    // Reset Solution = ONLY clears SAN box (NO board reset anymore)
-    resetSolutionBtn.addEventListener('click', ()=>{
-      sanAnswerBox.style.display = "none";
-      sanAnswerBox.textContent = "";
-      solutionStatus.textContent = "Answer cleared";
-    });
-
-    // Undo
-    undoBtn.addEventListener('click', ()=>{
-      const mv = game.undo();
-      if(mv){
-        board.position(game.fen());
-        refreshNotation();
-        setMsg('Undid move',900);
-      }
-    });
-
-    // Flip
-    flipBtn.addEventListener('click', ()=>{
-      board.flip();
-      setTimeout(updateOverlaySize,20);
-    });
-
-    // Resign
-    resignBtn.addEventListener('click', ()=>{
-      game.reset();
-      board.position('start');
+  undoBtn.addEventListener('click',()=>{
+    const mv=game.undo();
+    if(mv){
+      board.position(game.fen());
       refreshNotation();
-
-      solutionMoves = [];
-      solutionIndex = 0;
-      initialFen = null;
-
-      statAttempts = 0;
-      statCorrect = 0;
-      statIncorrect = 0;
-      statPuzzles = 0;
-      statRatingSum = 0;
-      updateStatsDisplay();
-
-      sanAnswerBox.style.display = "none";
-      sanAnswerBox.textContent = "";
-
-      setMsg('You resigned — game reset',1500);
-    });
-
-    // Logout
-    logoutBtn.addEventListener('click', ()=>{
-      localStorage.removeItem('role');
-      localStorage.removeItem('username');
-      localStorage.removeItem('email');
-      window.location.href = 'index.html';
-    });
-
-    // Board size
-    boardSizeRange.addEventListener('input', e=>{
-      setBoardSize(e.target.value);
-    });
-
-    function setBoardSize(px){
-      px = Number(px);
-      px = Math.max(360, Math.min(1400, px));
-      boardWrapper.style.maxWidth = px + 'px';
-      boardSizeLabel.textContent = px + 'px';
-
-      board.resize();
-      setTimeout(updateOverlaySize,20);
+      setMsg("Undo",700);
     }
+  });
 
-    function updateOverlaySize(){
-      const rect = boardEl.getBoundingClientRect();
-      drawOverlay.style.width  = rect.width + 'px';
-      drawOverlay.style.height = rect.height + 'px';
-    }
+  flipBtn.addEventListener('click',()=>{
+    board.flip();
+    setTimeout(updateOverlaySize,20);
+  });
 
-    // Candidate navigation
-    function loadFirstCandidate(){
-      if(currentCandidateList.length === 0) return;
-      loadPuzzleByCandidateIndex(0);
-    }
+  resignBtn.addEventListener('click',()=>{
+    game.reset();
+    board.position('start');
+    refreshNotation();
 
-    function loadRandomCandidate(){
-      if(currentCandidateList.length === 0) return;
-      const i = Math.floor(Math.random()*currentCandidateList.length);
-      loadPuzzleByCandidateIndex(i);
-    }
+    solutionMoves=[];
+    initialFen=null;
+    solutionIndex=0;
 
-    function loadNextCandidate(){
-      if(currentCandidateIndex < currentCandidateList.length-1){
-        loadPuzzleByCandidateIndex(currentCandidateIndex+1);
-      }
-    }
+    sanAnswerBox.style.display="none";
+    sanAnswerBox.textContent="";
 
-    function loadPrevCandidate(){
-      if(currentCandidateIndex > 0){
-        loadPuzzleByCandidateIndex(currentCandidateIndex-1);
-      }
-    }
+    statAttempts=0;
+    statCorrect=0;
+    statIncorrect=0;
+    statPuzzles=0;
+    statRatingSum=0;
+    updateStatsDisplay();
 
-    // Event wiring
-    tacticSelect.addEventListener('change', ()=>{
-      if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value);
-    });
-    ratingMin.addEventListener('change', ()=>{
-      if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value);
-    });
-    ratingMax.addEventListener('change', ()=>{
-      if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value);
-    });
+    setMsg("You resigned — game reset",1200);
+  });
 
-    loadPuzzleBtn.addEventListener('click', ()=>{
-      if(!tacticSelect.value) return;
-      buildCandidatesForTactic(tacticSelect.value).then(()=> loadFirstCandidate());
-    });
+  logoutBtn.addEventListener('click',()=>{
+    localStorage.removeItem('role');
+    localStorage.removeItem('username');
+    localStorage.removeItem('email');
+    window.location.href="index.html";
+  });
 
-    randomPuzzleBtn.addEventListener('click', ()=>{
-      if(!tacticSelect.value) return;
-      buildCandidatesForTactic(tacticSelect.value).then(()=> loadRandomCandidate());
-    });
-
-    prevPuzzleBtn.addEventListener('click', loadPrevCandidate);
-    nextPuzzleBtn.addEventListener('click', loadNextCandidate);
-
-    // Boot sequence
-    (async function boot(){
-      await ensureChessLoaded();
-      game = new Chess();
-      createBoard();
-
-      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || 760;
-      setBoardSize(initial);
-
-      await loadListAndPopulate();
-
-      setMsg('Ready',700);
-    })();
-
+  // ------- BOOT --------
+  (async function boot(){
+    await ensureChessLoaded();
+    game=new Chess();
+    createBoard();
+    setBoardSize(760);
+    await loadListAndPopulate();
+    setMsg("Ready",700);
   })();
-  </script>
-  <!-- FIREBASE (presence & watch behavior unchanged) -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
-  <script>
+})();
+</script>
+<!-- FIREBASE (presence & multiplayer sync) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+<script>
+(function(){
+
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+    authDomain: "iq4u-chess-classroom.firebaseapp.com",
+    databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "iq4u-chess-classroom",
+    storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+    messagingSenderId: "833620718306",
+    appId: "1:833620718306:web:b599bb6936fe0da4bb"
+  };
+
+  try { firebase.initializeApp(FIREBASE_CONFIG); }
+  catch(e){ console.warn("Firebase init error:", e); }
+
   (function(){
-    const FIREBASE_CONFIG = {
-      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
-      authDomain: "iq4u-chess-classroom.firebaseapp.com",
-      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "iq4u-chess-classroom",
-      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
-      messagingSenderId: "833620718306",
-      appId: "1:833620718306:web:b599bb6936fe0da4bb"
-    };
 
-    try{ firebase.initializeApp(FIREBASE_CONFIG); }
-    catch(e){ console.warn('Firebase init error', e); }
+    const db = firebase.database();
 
-    (function(){
-      const db = firebase.database();
-      const onlineRef = db.ref('online');
-      const gamesRef  = db.ref('games');
-      let movesRef    = null;
+    const onlineRef = db.ref("online");
+    const notifRef  = db.ref("notifications");
+    const masterMovesRoot = db.ref("moves");
 
-      let myId = sessionStorage.getItem('iq4u_clientId') ||
-                 ('c_' + Math.random().toString(36).slice(2,10));
-      sessionStorage.setItem('iq4u_clientId', myId);
+    let myId = sessionStorage.getItem("iq4u_clientId");
+    if(!myId){
+      myId = "c_" + Math.random().toString(36).slice(2,10);
+      sessionStorage.setItem("iq4u_clientId", myId);
+    }
 
-      let myEmail = '';
-      let currentGameId = null;
-      let presenceTimer = null;
+    let myEmail = "";
+    let presenceTimer = null;
+    let currentGameId = null;
 
-      function goOnline(email){
-        myEmail = email || ('anon-'+myId);
-        const node = onlineRef.child(myId);
+    // Join online
+    function goOnline(email){
+      myEmail = email || ("anon-"+myId);
 
-        node.set({
-          email: myEmail,
-          role: 'student',
-          ts: firebase.database.ServerValue.TIMESTAMP
-        }).then(()=>{
-          document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail;
-        }).catch(()=>{
-          document.getElementById('multiplayStatus').textContent = 'Presence write error';
-        });
+      const node = onlineRef.child(myId);
+      node.set({
+        email: myEmail,
+        role: "student",
+        ts: firebase.database.ServerValue.TIMESTAMP
+      }).then(()=>{
+        document.getElementById("multiplayStatus").textContent = "Connected as " + myEmail;
+      }).catch(()=>{
+        document.getElementById("multiplayStatus").textContent = "Presence error";
+      });
 
-        if(presenceTimer) clearInterval(presenceTimer);
-        presenceTimer = setInterval(()=>{
-          node.update({ ts: firebase.database.ServerValue.TIMESTAMP });
-        }, 25000);
+      if(presenceTimer) clearInterval(presenceTimer);
+      presenceTimer = setInterval(()=>{
+        node.update({ ts: firebase.database.ServerValue.TIMESTAMP });
+      }, 25000);
+    }
+
+    function goOffline(){
+      if(presenceTimer) clearInterval(presenceTimer);
+      onlineRef.child(myId).remove().catch(()=>{});
+      document.getElementById("multiplayStatus").textContent = "Not connected";
+    }
+
+    // --- MASTER WATCH (teacher override) ---
+    let masterWatchRef = masterMovesRoot.child(myId);
+    masterWatchRef.on("child_added", snap=>{
+      const m = snap.val();
+      if(!m) return;
+
+      if(!m.by || !m.by.startsWith("m_")) return; // Ignore student echoes
+
+      if(m.payload){
+        try{
+          if(typeof window.onBoardMove === "function"){
+            window.onBoardMove(m.payload);
+          }
+        }catch(e){}
+      }
+    });
+
+    // --- NOTIFICATIONS ---
+    notifRef.child(myId).on("child_added", snap=>{
+      const n = snap.val();
+      if(!n) return;
+
+      if(n.type === "startGame" && n.gameId){
+        currentGameId = n.gameId;
+        watchGameMoves(currentGameId);
+
+        document.getElementById("pairedBubble").style.display="inline-block";
+
+        let color=null;
+        if(n.white===myId) color="white";
+        else if(n.black===myId) color="black";
+
+        if(color){
+          document.getElementById("multiplayStatus").textContent = 
+            "Paired: You are " + color.charAt(0).toUpperCase()+color.slice(1);
+        }
+
+        try{
+          localStorage.setItem("iq4u_last_game", n.gameId);
+          if(color) localStorage.setItem("iq4u_last_color", color);
+        }catch(e){}
       }
 
-      function goOffline(){
-        if(presenceTimer) clearInterval(presenceTimer);
-        onlineRef.child(myId).remove().catch(()=>{});
-        document.getElementById('multiplayStatus').textContent = 'Not connected';
+      snap.ref.remove().catch(()=>{});
+    });
+
+    // --- CHALLENGE DECLINED ---
+    db.ref("challengeDeclined/"+myId).on("child_added", snap=>{
+      const d=snap.val();
+      if(d){
+        document.getElementById("multiplayStatus").textContent =
+          (d.email||"Player")+" declined your challenge";
       }
+      snap.ref.remove().catch(()=>{});
+    });
 
-      let masterMovesRef = null;
-      function watchMasterMoves(){
-        if(masterMovesRef) return;
-        masterMovesRef = db.ref('moves/'+myId);
+    // --- WATCH GAME MOVES ---
+    function watchGameMoves(gameId){
+      const ref = db.ref("moves/"+gameId);
 
-        masterMovesRef.on('child_added', snap=>{
-          const m = snap.val();
-          if(!m) return;
+      ref.on("child_added", snap=>{
+        const m = snap.val();
+        if(!m) return;
 
-          // Ignore student echoes; accept only master control messages.
-          if(!m.by || !m.by.startsWith('m_')) return;
+        if(m.by && m.by===myId) return; // ignore self
 
-          if(m.payload){
-            try{
-              if(typeof window.onBoardMove === 'function'){
-                window.onBoardMove(m.payload);
-              }
-            }catch(e){}
-          }
-        });
-      }
-      watchMasterMoves();
-
-      // Notifications (start game, decline, etc.)
-      db.ref('notifications/'+myId).on('child_added', snap=>{
-        const n = snap.val();
-        if(!n) return;
-
-        if(n.type === 'startGame' && n.gameId){
-          currentGameId = n.gameId;
-          watchMoves(currentGameId);
-
-          document.getElementById('pairedBubble').style.display='inline-block';
-
-          let color = null;
-          if(n.white === myId) color = 'white';
-          else if(n.black === myId) color = 'black';
-
-          if(color){
-            document.getElementById('multiplayStatus').textContent =
-              'Paired: You are ' + color.charAt(0).toUpperCase()+color.slice(1);
-          }
-
-          if(window._onFirebaseGameStart){
-            window._onFirebaseGameStart({
-              gameId: currentGameId,
-              color: color,
-              myId: myId
-            });
-          }
-
+        // Remote move payload
+        if(m.payload){
           try{
-            localStorage.setItem('iq4u_last_game', currentGameId);
-            if(color) localStorage.setItem('iq4u_last_color', color);
+            if(typeof window.onBoardMove === "function"){
+              window.onBoardMove(m.payload);
+            }
+          }catch(e){}
+        }
+        else if(m.fen){
+          try{
+            if(typeof window.onBoardMove === "function"){
+              window.onBoardMove({fen:m.fen, move:m.move||null});
+            }
           }catch(e){}
         }
 
-        snap.ref.remove().catch(()=>{});
-      });
+        // Resignation
+        if(m.payload && m.payload.type==="resign"){
+          try{
+            if(window.game) window.game.reset();
+            if(window.board) window.board.position("start");
 
-      // Challenge declined
-      db.ref('challengeDeclined/'+myId).on('child_added', snap=>{
-        const d = snap.val();
-        if(!d) return;
+            document.getElementById("pairedBubble").style.display="none";
+            document.getElementById("multiplayStatus").textContent = 
+              "Opponent resigned / game ended";
 
-        document.getElementById('multiplayStatus').textContent =
-          (d.email||'Player') + ' declined your challenge';
-
-        snap.ref.remove().catch(()=>{});
-      });
-
-      // Watch game moves
-      function watchMoves(gameId){
-        if(!gameId) return;
-
-        movesRef = db.ref('moves/'+gameId);
-
-        movesRef.on('child_added', snap=>{
-          const m = snap.val();
-          if(!m) return;
-
-          // Ignore our own outbound moves
-          if(m.by && m.by === myId) return;
-
-          if(m.payload){
-            try{
-              if(typeof window.onBoardMove === 'function')
-                window.onBoardMove(m.payload);
-            }catch(e){}
-          } else if(m.fen){
-            try{
-              if(typeof window.onBoardMove === 'function'){
-                window.onBoardMove({
-                  fen: m.fen,
-                  move: m.move||null
-                });
-              }
-            }catch(e){}
-          }
-
-          // Handle resignation
-          if(m.payload && m.payload.type === 'resign'){
-            try{
-              if(window.game) window.game.reset();
-              if(window.board) window.board.position('start');
-
-              document.getElementById('pairedBubble').style.display='none';
-              document.getElementById('multiplayStatus').textContent =
-                'Opponent resigned / game ended';
-
-              localStorage.removeItem('iq4u_last_game');
-              localStorage.removeItem('iq4u_last_color');
-            }catch(e){}
-          }
-        });
-      }
-
-      // Emit move into a multiplayer game
-      function emitMoveForGame(gameId, payload){
-        if(!gameId || !payload) return;
-        const node = db.ref('moves/'+gameId).push();
-        node.set({
-          payload: payload,
-          by: myId,
-          ts: firebase.database.ServerValue.TIMESTAMP
-        }).catch(()=>{});
-      }
-
-      // UI wiring for join
-      document.getElementById('joinBtnBottom').addEventListener('click', ()=>{
-        const email = document.getElementById('emailInputBottom').value.trim();
-        if(!email){
-          alert('Enter username to join online');
-          return;
+            localStorage.removeItem("iq4u_last_game");
+            localStorage.removeItem("iq4u_last_color");
+          }catch(e){}
         }
-        goOnline(email);
       });
+    }
 
-      // Export minimal API for board updates
-      window.firebaseMultiplayer = {
-        emitMove: function(arg){
-          if(!currentGameId) return;
-          emitMoveForGame(currentGameId, arg);
-        },
-        emitFen: function(arg){
-          const movesRef = db.ref('moves/' + myId);
-          const node = movesRef.push();
-          node.set({
-            payload: arg,
-            by: myId,
-            ts: firebase.database.ServerValue.TIMESTAMP
-          }).catch(()=>{});
-        },
-        startWatchingGame: watchMoves,
-        getMyId: ()=> myId,
-        getMyEmail: ()=> myEmail,
-        goOffline: goOffline,
-        autoJoin: function(name){
-          if(!name) return;
-          document.getElementById('emailInputBottom').value = name;
-          goOnline(name);
-        },
-        getMyColor: ()=> null
-      };
+    // --- SEND MOVE TO REMOTE GAME ---
+    function sendMove(gameId,payload){
+      if(!gameId) return;
+      const node = db.ref("moves/"+gameId).push();
+      node.set({
+        payload:payload,
+        by: myId,
+        ts: firebase.database.ServerValue.TIMESTAMP
+      }).catch(()=>{});
+    }
 
-      window.addEventListener('beforeunload', ()=>{
-        // Intentionally do NOT auto-remove presence (per your original version)
-      });
+    // Join button
+    document.getElementById("joinBtnBottom").addEventListener("click",()=>{
+      const email = document.getElementById("emailInputBottom").value.trim();
+      if(!email){
+        alert("Enter username");
+        return;
+      }
+      goOnline(email);
+    });
 
-    })();
+    // Export multiplayer API
+    window.firebaseMultiplayer = {
+      emitMove: function(payload){
+        if(!currentGameId) return;
+        sendMove(currentGameId,payload);
+      },
+      emitFen: function(payload){
+        const node = masterMovesRoot.child(myId).push();
+        node.set({
+          payload:payload,
+          by:myId,
+          ts:firebase.database.ServerValue.TIMESTAMP
+        }).catch(()=>{});
+      },
+      startWatchingGame: watchGameMoves,
+      getMyId: ()=>myId,
+      getMyEmail: ()=>myEmail,
+      goOffline: goOffline,
+      autoJoin: function(name){
+        if(!name) return;
+        document.getElementById("emailInputBottom").value=name;
+        goOnline(name);
+      },
+      getMyColor: ()=>null
+    };
+
+    window.addEventListener("beforeunload",()=>{
+      // presence persists, no auto-remove
+    });
+
   })();
-  </script>
+
+})();
+</script>
 </body>
 </html>
 
