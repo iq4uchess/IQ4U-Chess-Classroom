@@ -8,17 +8,55 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
-    /* same styles as in your working file */
-    html,body{ overscroll-behavior-y: contain; height:100%; }
+    html,body{ overscroll-behavior-y: contain; height:100%; margin:0; padding:0; }
     body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
     .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; width:100%; box-sizing:border-box; }
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
     #engineLog{ font-family:monospace; font-size:12px; overflow:auto; height:140px; background:#0b1220; color:#e6eefc; padding:8px; border-radius:8px; }
     .small{ font-size:13px; color:#555; }
+    #board-container { margin: 20px auto; width: 400px; max-width: 100%; }
+    .board-b72b1 { border: 2px solid #404040; border-radius: 4px; }
+    #status { margin: 10px 0; font-weight: bold; }
+    .controls { display: flex; gap: 10px; margin: 10px 0; justify-content: center; }
   </style>
 </head>
 <body>
+
+<h1>Student3 - Play vs Stockfish</h1>
+
+<div id="board-container"></div>
+
+<div id="status">White to move</div>
+
+<div class="controls">
+  <button id="resetBtn">Reset Game</button>
+  <button id="undoBtn">Undo Move</button>
+</div>
+
+<div class="panel" style="width:80%;max-width:920px;margin-top:12px;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <label class="small">Engine:</label>
+    <select id="engineColor">
+      <option value="white">Engine as White</option>
+      <option value="black" selected>Engine as Black</option>
+      <option value="both">Engine vs Engine</option>
+      <option value="none">Human vs Human</option>
+    </select>
+    <label class="small">Level:</label>
+    <select id="engineLevel">
+      <option value="1">1 (Easy)</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+      <option value="8" selected>8 (Hard)</option>
+    </select>
+    <button id="toggleEngineBtn">Start Engine</button>
+  </div>
+</div>
 
 <div class="panel" style="width:80%;max-width:920px;margin-top:12px;">
   <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -28,131 +66,319 @@
   <div id="engineLog"></div>
 </div>
 
-<div class="panel" style="width:80%;max-width:920px;margin-top:12px;">
-  <div style="display:flex;align-items:center;gap:10px;">
-    <label class="small">Engine:</label>
-    <select id="engineColor"><option value="white">Engine as White</option><option value="black">Engine as Black</option></select>
-    <label class="small">Level:</label>
-    <select id="engineLevel">
-      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-      <option value="7">7</option><option value="8" selected>8</option>
-    </select>
-    <button id="toggleEngineBtn">Play vs Engine</button>
-  </div>
-</div>
-
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
 
 <script>
 (function(){
-  // Engine worker URL (pure JS build)
+  // Engine worker URL
   const ENGINE_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
 
-  // Engine state
+  // Game state
+  let game = new Chess();
+  let board = null;
   let engine = null;
   let engineEnabled = false;
   let engineColor = 'black';
   let engineLevel = 8;
+  let playerColor = 'white';
+  let isThinking = false;
 
-  // DOM
+  // DOM elements
   const engineLogEl = document.getElementById('engineLog');
   const engineClearBtn = document.getElementById('engineClearBtn');
   const engineLevelSelect = document.getElementById('engineLevel');
   const engineColorSelect = document.getElementById('engineColor');
   const toggleEngineBtn = document.getElementById('toggleEngineBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const statusEl = document.getElementById('status');
 
-  // Game state (you can merge this with your existing game & board)
-  let game = null;
-
-  // Log helpers
+  // Log helper
   function panelLog(msg, type='log'){
     const line = document.createElement('div');
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    line.textContent = `[${new Date().toLocaleTimeString().slice(0,8)}] ${msg}`;
     if(type==='warn') line.style.color = '#ffd166';
     if(type==='error') line.style.color = '#ff6b6b';
+    if(type==='engine') line.style.color = '#4ade80';
     engineLogEl.appendChild(line);
     engineLogEl.scrollTop = engineLogEl.scrollHeight;
-    if(type==='error') console.error(msg);
-    else if(type==='warn') console.warn(msg);
-    else console.log(msg);
   }
 
   engineClearBtn.onclick = () => engineLogEl.innerHTML = '';
 
-  // Engine message hookup
-  function hookEngine(worker){
+  // Initialize chessboard
+  function initBoard() {
+    const config = {
+      draggable: true,
+      position: 'start',
+      onDragStart: onDragStart,
+      onDrop: onDrop,
+      onSnapEnd: onSnapEnd,
+      pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
+    };
+    board = Chessboard('board-container', config);
+    updateStatus();
+  }
+
+  // Update game status
+  function updateStatus() {
+    let status = '';
+    
+    if (game.in_checkmate()) {
+      status = 'Game over, ' + (game.turn() === 'w' ? 'black' : 'white') + ' wins by checkmate!';
+    } else if (game.in_draw()) {
+      status = 'Game over, drawn position';
+    } else {
+      status = (game.turn() === 'w' ? 'White' : 'Black') + ' to move';
+      if (game.in_check()) {
+        status += ', ' + (game.turn() === 'w' ? 'white' : 'black') + ' is in check';
+      }
+    }
+    
+    statusEl.innerHTML = status;
+  }
+
+  // Drag start handler
+  function onDragStart(source, piece, position, orientation) {
+    if (!engineEnabled) return true;
+    
+    // Don't allow dragging if it's engine's turn
+    const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
+    if (engineColor === 'both' || 
+        (engineColor === 'white' && currentPlayer === 'white') ||
+        (engineColor === 'black' && currentPlayer === 'black')) {
+      return false;
+    }
+    
+    // Don't allow dragging if game is over
+    if (game.game_over()) return false;
+    
+    // Only allow dragging own pieces
+    if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+        (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Drop handler
+  function onDrop(source, target) {
+    // Try the move
+    const move = game.move({
+      from: source,
+      to: target,
+      promotion: 'q' // Always promote to queen for simplicity
+    });
+    
+    // If illegal move, snap back
+    if (move === null) return 'snapback';
+    
+    // Update board and status
+    updateStatus();
+    
+    // If engine is enabled and it's engine's turn, ask engine to move
+    if (engineEnabled && engine && !game.game_over()) {
+      const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
+      if (engineColor === 'both' || 
+          (engineColor === 'white' && currentPlayer === 'white') ||
+          (engineColor === 'black' && currentPlayer === 'black')) {
+        setTimeout(askEngineToMove, 100);
+      }
+    }
+    
+    return 'snap';
+  }
+
+  // Snap end handler
+  function onSnapEnd() {
+    board.position(game.fen());
+  }
+
+  // Engine message handler
+  function hookEngine(worker) {
     worker.onmessage = e => {
       const line = typeof e.data === 'string' ? e.data : (e.data && e.data.message) ? e.data.message : JSON.stringify(e.data);
-      panelLog('[engine =>] ' + line);
-      if(line.startsWith('bestmove')){
-        panelLog('Engine move found: ' + line);
-        // You can call your own apply-move logic here
+      
+      // Only log important messages to reduce noise
+      if (line.startsWith('bestmove')) {
+        panelLog('[engine] ' + line, 'engine');
+        processBestMove(line);
+      } else if (line.startsWith('info depth') && line.includes('pv')) {
+        // You can log thinking info if needed
+        // panelLog('[engine thinking] ' + line);
+      } else if (line === 'readyok') {
+        panelLog('[engine] Ready', 'engine');
+      } else if (line.startsWith('uciok')) {
+        panelLog('[engine] UCI ready', 'engine');
       }
     };
+    
     worker.onerror = e => {
-      panelLog('Engine worker error: ' + (e.message||JSON.stringify(e)), 'error');
+      panelLog('Engine worker error: ' + (e.message || JSON.stringify(e)), 'error');
     };
   }
 
-  // POST to engine
-  function postToEngine(cmd){
-    if(!engine) return;
-    panelLog('[engine <=] ' + cmd);
-    engine.postMessage(cmd);
+  // Process engine's best move
+  function processBestMove(line) {
+    if (!line.startsWith('bestmove')) return;
+    
+    const parts = line.split(' ');
+    if (parts.length < 2) return;
+    
+    const moveStr = parts[1];
+    if (moveStr === '(none)') return;
+    
+    // Convert UCI to chess.js format
+    const from = moveStr.substring(0, 2);
+    const to = moveStr.substring(2, 4);
+    const promotion = moveStr.length > 4 ? moveStr.substring(4, 5) : null;
+    
+    // Make the move
+    const move = game.move({
+      from: from,
+      to: to,
+      promotion: promotion || 'q'
+    });
+    
+    if (move) {
+      board.position(game.fen());
+      updateStatus();
+      isThinking = false;
+      
+      // If engine vs engine and game not over, trigger next move
+      if (engineColor === 'both' && !game.game_over()) {
+        setTimeout(askEngineToMove, 500);
+      }
+    }
   }
 
-  // Convert level to depth heuristic
-  function levelToDepth(l){
-    const map = {1:1,2:2,3:3,4:4,5:6,6:8,7:10,8:12};
-    return map[l] || 4;
+  // Ask engine to make a move
+  function askEngineToMove() {
+    if (!engine || game.game_over() || isThinking) return;
+    
+    const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
+    if (engineColor === 'both' || 
+        (engineColor === 'white' && currentPlayer === 'white') ||
+        (engineColor === 'black' && currentPlayer === 'black')) {
+      
+      isThinking = true;
+      panelLog(`[engine] Thinking as ${currentPlayer}...`, 'engine');
+      
+      // Send position to engine
+      engine.postMessage('position fen ' + game.fen());
+      
+      // Set skill level (0-20, where 20 is strongest)
+      const skillLevel = Math.min(20, engineLevel * 2.5);
+      engine.postMessage('setoption name Skill Level value ' + skillLevel);
+      
+      // Ask for move with time constraint
+      engine.postMessage('go movetime 1000');
+    }
+  }
+
+  // Convert level to depth
+  function levelToDepth(l) {
+    const map = {1:1,2:2,3:3,4:5,5:8,6:12,7:16,8:20};
+    return map[l] || 5;
   }
 
   // Initialize engine
-  function initEngine(){
-    if(engine){
-      try{ engine.terminate(); }catch(e){}
+  function initEngine() {
+    if (engine) {
+      try { engine.terminate(); } catch(e) {}
       engine = null;
     }
-    panelLog('Creating Stockfish worker from cdnjs...');
+    
+    panelLog('Creating Stockfish engine...');
     engine = new Worker(ENGINE_WORKER_URL);
     hookEngine(engine);
-    postToEngine('uci');
-    postToEngine('isready');
-    panelLog('Engine initialized from ' + ENGINE_WORKER_URL);
-  }
-
-  // Ask engine to play
-  function askEngine(fen){
-    if(!engine) return;
-    postToEngine('position fen ' + fen);
-    const depth = levelToDepth(engineLevel);
-    postToEngine(`go depth ${depth}`);
-    panelLog('Engine thinking at level ' + engineLevel + ' (depth ' + depth + ')');
+    
+    // Initialize UCI
+    engine.postMessage('uci');
+    engine.postMessage('isready');
+    
+    // Set UCI options for better performance
+    engine.postMessage('setoption name Threads value 2');
+    engine.postMessage('setoption name Hash value 64');
+    
+    panelLog('Engine initialized. Ready to play!');
   }
 
   // Toggle engine
-  toggleEngineBtn.addEventListener('click', ()=>{
+  toggleEngineBtn.addEventListener('click', () => {
     engineEnabled = !engineEnabled;
     engineColor = engineColorSelect.value;
     engineLevel = Number(engineLevelSelect.value);
-    if(engineEnabled){
-      toggleEngineBtn.textContent = 'Engine ON';
+    
+    if (engineEnabled) {
+      toggleEngineBtn.textContent = 'Stop Engine';
+      toggleEngineBtn.style.background = '#dc2626';
       initEngine();
-      // example: if you have a global game object
-      if(window.game){
-        askEngine(window.game.fen());
+      
+      // If engine should move first
+      if ((engineColor === 'white' && game.turn() === 'w') || engineColor === 'both') {
+        setTimeout(askEngineToMove, 500);
       }
     } else {
-      toggleEngineBtn.textContent = 'Play vs Engine';
-      if(engine){ try{ engine.terminate(); }catch(e){} engine=null; }
+      toggleEngineBtn.textContent = 'Start Engine';
+      toggleEngineBtn.style.background = '#0f172a';
+      if (engine) {
+        try { engine.terminate(); } catch(e) {}
+        engine = null;
+      }
+      isThinking = false;
     }
   });
+
+  // Reset game
+  resetBtn.addEventListener('click', () => {
+    game = new Chess();
+    board.position('start');
+    updateStatus();
+    if (engineEnabled && engine && 
+        ((engineColor === 'white' && game.turn() === 'w') || engineColor === 'both')) {
+      setTimeout(askEngineToMove, 500);
+    }
+    panelLog('Game reset to starting position');
+  });
+
+  // Undo move
+  undoBtn.addEventListener('click', () => {
+    const moves = game.history();
+    if (moves.length > 0) {
+      game.undo();
+      game.undo(); // Undo both player and engine move
+      board.position(game.fen());
+      updateStatus();
+      panelLog('Undid last move');
+    }
+  });
+
+  // Engine color change
+  engineColorSelect.addEventListener('change', () => {
+    engineColor = engineColorSelect.value;
+    if (engineEnabled) {
+      panelLog(`Engine set to play as: ${engineColor}`);
+    }
+  });
+
+  // Engine level change
+  engineLevelSelect.addEventListener('change', () => {
+    engineLevel = Number(engineLevelSelect.value);
+    if (engineEnabled) {
+      panelLog(`Engine level set to: ${engineLevel}`);
+    }
+  });
+
+  // Initialize everything
+  initBoard();
+  panelLog('Chess board initialized. Click "Start Engine" to play vs Stockfish.');
 
 })();
 </script>
 
 </body>
 </html>
-
