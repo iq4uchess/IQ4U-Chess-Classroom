@@ -39,7 +39,7 @@
 
 <body>
 
-<h1>Student3 - Play vs Stockfish</h1>
+<h1>Student3 - Play vs Chess Engine</h1>
 
 <div class="panel">
   <div class="controls">
@@ -80,7 +80,7 @@
         <option value="2">2</option>
         <option value="3">3</option>
         <option value="4">4</option>
-        <option value="5">5 (Default)</option>
+        <option value="5" selected>5 (Default)</option>
         <option value="6">6</option>
         <option value="7">7</option>
         <option value="8">8</option>
@@ -108,43 +108,6 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
-
-<!-- Stockfish Worker - Inline Blob to avoid CORS issues -->
-<script>
-// Create Stockfish worker as a blob
-const stockfishCode = `
-  // Simple Stockfish-like engine (minimal implementation)
-  self.onmessage = function(e) {
-    const cmd = e.data;
-    
-    if (cmd === 'uci') {
-      self.postMessage('id name SimpleChessEngine 1.0');
-      self.postMessage('id author IQ4U');
-      self.postMessage('uciok');
-    } else if (cmd === 'isready') {
-      self.postMessage('readyok');
-    } else if (cmd.startsWith('position')) {
-      // Store position
-      self.position = cmd;
-    } else if (cmd.startsWith('setoption')) {
-      // Ignore options for now
-    } else if (cmd.startsWith('go')) {
-      // Generate a simple move
-      setTimeout(() => {
-        // Simple move generator - just pick a random legal move
-        // In a real implementation, you would parse the position
-        const moves = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5', 'a7a6'];
-        const randomMove = moves[Math.floor(Math.random() * moves.length)];
-        self.postMessage('bestmove ' + randomMove);
-      }, 500);
-    }
-  };
-`;
-
-// Create blob URL for Stockfish worker
-const stockfishBlob = new Blob([stockfishCode], { type: 'application/javascript' });
-const STOCKFISH_BLOB_URL = URL.createObjectURL(stockfishBlob);
-</script>
 
 <script>
 // GLOBAL GAME INSTANCE - REQUIRED FOR MASTER SPECTATING
@@ -348,9 +311,67 @@ window.game = null;
     return 'snap';
   }
 
+  // Simple chess engine
+  function createSimpleEngine() {
+    let currentPosition = '';
+    
+    return {
+      postMessage: function(cmd) {
+        if (cmd === 'uci') {
+          setTimeout(() => {
+            if (this.onmessage) this.onmessage({data: 'id name SimpleChessEngine 1.0'});
+            setTimeout(() => {
+              if (this.onmessage) this.onmessage({data: 'id author IQ4U'});
+              setTimeout(() => {
+                if (this.onmessage) this.onmessage({data: 'uciok'});
+              }, 10);
+            }, 10);
+          }, 10);
+        } else if (cmd === 'isready') {
+          setTimeout(() => {
+            if (this.onmessage) this.onmessage({data: 'readyok'});
+          }, 10);
+        } else if (cmd.startsWith('position fen')) {
+          currentPosition = cmd.substring(13);
+        } else if (cmd.startsWith('go')) {
+          setTimeout(() => {
+            // Generate a legal move for the correct color
+            const moves = game.moves({verbose: true});
+            if (moves.length > 0) {
+              // Filter moves for the correct side to move
+              const currentSide = game.turn(); // 'w' or 'b'
+              const legalMoves = moves.filter(m => {
+                // Only return moves for the current side
+                const piece = game.get(m.from);
+                return piece && piece.color === currentSide;
+              });
+              
+              if (legalMoves.length > 0) {
+                // Pick a random legal move
+                const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+                const uciMove = randomMove.from + randomMove.to + (randomMove.promotion || '');
+                if (this.onmessage) this.onmessage({data: 'bestmove ' + uciMove});
+              } else {
+                if (this.onmessage) this.onmessage({data: 'bestmove (none)'});
+              }
+            } else {
+              if (this.onmessage) this.onmessage({data: 'bestmove (none)'});
+            }
+          }, 500 + (engineLevel * 100)); // More time for higher levels
+        }
+      },
+      
+      terminate: function() {
+        // Clean up
+      },
+      
+      onmessage: null
+    };
+  }
+
   // Engine message handler
-  function hookEngine(worker) {
-    worker.onmessage = function(e) {
+  function hookEngine(engineObj) {
+    engineObj.onmessage = function(e) {
       const line = e.data;
       
       if (line.startsWith('bestmove')) {
@@ -361,10 +382,6 @@ window.game = null;
       } else if (line.startsWith('uciok')) {
         panelLog('[engine] UCI ready', 'engine');
       }
-    };
-    
-    worker.onerror = function(e) {
-      panelLog('Engine worker error: ' + e.message, 'error');
     };
   }
 
@@ -417,7 +434,16 @@ window.game = null;
       }
     } else {
       panelLog('Engine made illegal move: ' + moveStr, 'error');
+      panelLog('Current FEN: ' + game.fen(), 'error');
+      panelLog('Available moves: ' + game.moves().join(', '), 'error');
       isThinking = false;
+      
+      // Try to make a different move
+      setTimeout(() => {
+        if (engineEnabled && !game.game_over() && !isHumanTurn()) {
+          askEngineToMove();
+        }
+      }, 500);
     }
   }
 
@@ -436,11 +462,8 @@ window.game = null;
       // Send position to engine
       engine.postMessage('position fen ' + game.fen());
       
-      // Set thinking time based on skill level
-      const thinkTime = Math.max(500, engineLevel * 200); // 500ms to 4000ms
-      
       // Ask for move
-      engine.postMessage('go movetime ' + thinkTime);
+      engine.postMessage('go');
     }
   }
 
@@ -448,75 +471,29 @@ window.game = null;
   function startEngine() {
     panelLog('Starting Chess Engine...');
     
-    if (engine) {
+    if (engine && engine.terminate) {
       try { engine.terminate(); } catch(e) {}
       engine = null;
     }
     
-    // Create Web Worker with our blob URL
-    try {
-      engine = new Worker(STOCKFISH_BLOB_URL);
-      hookEngine(engine);
-      
-      // Initialize
-      engine.postMessage('uci');
-      engine.postMessage('isready');
-      
-      engineEnabled = true;
-      engineOnBtn.style.display = 'none';
-      engineOffBtn.style.display = 'inline-block';
-      
-      panelLog('Engine started. Skill level: ' + engineLevel);
-      panelLog('Note: Using simple chess engine for demonstration');
-      
-      // If engine should move first
-      if (!game.game_over() && !isHumanTurn()) {
-        setTimeout(askEngineToMove, 500);
-      }
-    } catch (error) {
-      panelLog('Failed to start engine: ' + error.message, 'error');
-      panelLog('Creating fallback simple engine...', 'warn');
-      
-      // Create a simple fallback engine
-      engine = {
-        postMessage: function(cmd) {
-          if (cmd === 'uci') {
-            setTimeout(() => {
-              if (this.onmessage) this.onmessage({data: 'uciok'});
-            }, 50);
-          } else if (cmd === 'isready') {
-            setTimeout(() => {
-              if (this.onmessage) this.onmessage({data: 'readyok'});
-            }, 50);
-          } else if (cmd.startsWith('position fen')) {
-            this.position = game.fen();
-          } else if (cmd.startsWith('go')) {
-            setTimeout(() => {
-              // Generate a simple legal move
-              const moves = game.moves();
-              if (moves.length > 0) {
-                const randomMove = moves[Math.floor(Math.random() * moves.length)];
-                if (this.onmessage) this.onmessage({data: 'bestmove ' + randomMove});
-              } else {
-                if (this.onmessage) this.onmessage({data: 'bestmove (none)'});
-              }
-            }, 800);
-          }
-        },
-        terminate: function() {
-          engine = null;
-        }
-      };
-      
-      hookEngine(engine);
-      engineEnabled = true;
-      engineOnBtn.style.display = 'none';
-      engineOffBtn.style.display = 'inline-block';
-      panelLog('Fallback engine started');
-      
-      if (!game.game_over() && !isHumanTurn()) {
-        setTimeout(askEngineToMove, 500);
-      }
+    // Create simple chess engine
+    engine = createSimpleEngine();
+    hookEngine(engine);
+    
+    // Initialize
+    engine.postMessage('uci');
+    engine.postMessage('isready');
+    
+    engineEnabled = true;
+    engineOnBtn.style.display = 'none';
+    engineOffBtn.style.display = 'inline-block';
+    
+    panelLog('Engine started. Skill level: ' + engineLevel);
+    panelLog('Engine playing as: ' + engineColor);
+    
+    // If engine should move first
+    if (!game.game_over() && !isHumanTurn()) {
+      setTimeout(askEngineToMove, 500);
     }
   }
 
