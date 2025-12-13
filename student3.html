@@ -6,93 +6,216 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IQ4U — Student Puzzle (student3)</title>
 
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <!-- Chessboard.js CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDIsdZ" crossorigin="anonymous">
+  
   <style>
     html,body{ overscroll-behavior-y: contain; height:100%; margin:0; padding:0; }
-    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
-    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
-    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; width:100%; box-sizing:border-box; }
+    body{ 
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; 
+      margin:16px; 
+      background:#f6f7fb; 
+      color:#111; 
+      -webkit-font-smoothing:antialiased; 
+      display:flex; 
+      flex-direction:column; 
+      align-items:center; 
+    }
+    button{ 
+      padding:8px 12px; 
+      border:none; 
+      background:#0f172a; 
+      color:#fff; 
+      border-radius:8px; 
+      cursor:pointer; 
+      font-size:14px;
+    }
+    button:hover {
+      background:#1e293b;
+    }
+    .panel{ 
+      background:#fff; 
+      padding:16px; 
+      border-radius:10px; 
+      box-shadow:0 6px 18px rgba(2,6,23,.04); 
+      margin:12px auto; 
+      width:100%; 
+      max-width:900px;
+      box-sizing:border-box; 
+    }
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
-    #engineLog{ font-family:monospace; font-size:12px; overflow:auto; height:140px; background:#0b1220; color:#e6eefc; padding:8px; border-radius:8px; }
+    #engineLog{ 
+      font-family:'Courier New', monospace; 
+      font-size:12px; 
+      overflow:auto; 
+      height:140px; 
+      background:#0b1220; 
+      color:#e6eefc; 
+      padding:10px; 
+      border-radius:8px; 
+      margin-top:10px;
+    }
     .small{ font-size:13px; color:#555; }
-    #board-container { margin: 20px auto; width: 400px; max-width: 100%; }
-    .board-b72b1 { border: 2px solid #404040; border-radius: 4px; }
-    #status { margin: 10px 0; font-weight: bold; }
-    .controls { display: flex; gap: 10px; margin: 10px 0; justify-content: center; }
+    
+    /* Board container */
+    #board {
+      width: 500px;
+      height: 500px;
+      max-width: 90vw;
+      max-height: 90vw;
+      margin: 20px auto;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    
+    #status { 
+      margin: 15px 0; 
+      font-weight: bold;
+      font-size: 16px;
+      background: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .controls { 
+      display: flex; 
+      gap: 12px; 
+      margin: 15px 0; 
+      justify-content: center; 
+      flex-wrap: wrap;
+    }
+    
+    .engine-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      background: white;
+      font-size: 14px;
+    }
+    
+    label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    h1 {
+      color: #0f172a;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    #engineOnBtn {
+      background: #10b981;
+    }
+    
+    #engineOffBtn {
+      background: #ef4444;
+      display: none;
+    }
   </style>
 </head>
 <body>
 
 <h1>Student3 - Play vs Stockfish</h1>
 
-<div id="board-container"></div>
+<div id="board"></div>
 
 <div id="status">White to move</div>
 
 <div class="controls">
   <button id="resetBtn">Reset Game</button>
   <button id="undoBtn">Undo Move</button>
+  <button id="flipBtn">Flip Board</button>
 </div>
 
-<div class="panel" style="width:80%;max-width:920px;margin-top:12px;">
-  <div style="display:flex;align-items:center;gap:10px;">
-    <label class="small">Engine:</label>
-    <select id="engineColor">
-      <option value="white">Engine as White</option>
-      <option value="black" selected>Engine as Black</option>
-      <option value="both">Engine vs Engine</option>
-      <option value="none">Human vs Human</option>
-    </select>
-    <label class="small">Level:</label>
-    <select id="engineLevel">
-      <option value="1">1 (Easy)</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-      <option value="5">5</option>
-      <option value="6">6</option>
-      <option value="7">7</option>
-      <option value="8" selected>8 (Hard)</option>
-    </select>
-    <button id="toggleEngineBtn">Start Engine</button>
+<div class="panel">
+  <div class="engine-controls">
+    <div>
+      <label class="small">Engine Side:</label>
+      <select id="engineColor">
+        <option value="white">Engine as White</option>
+        <option value="black" selected>Engine as Black</option>
+        <option value="both">Engine vs Engine</option>
+        <option value="none">Human vs Human</option>
+      </select>
+    </div>
+    
+    <div>
+      <label class="small">Skill Level:</label>
+      <select id="engineLevel">
+        <option value="1">1 (Easy)</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8" selected>8 (Hard)</option>
+        <option value="10">10 (Expert)</option>
+        <option value="15">15 (Master)</option>
+        <option value="20">20 (Max)</option>
+      </select>
+    </div>
+    
+    <button id="engineOnBtn">Start Engine</button>
+    <button id="engineOffBtn" style="display:none;">Stop Engine</button>
   </div>
 </div>
 
-<div class="panel" style="width:80%;max-width:920px;margin-top:12px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
+<div class="panel">
+  <div class="log-header">
     <strong>Engine Debug Log</strong>
-    <button id="engineClearBtn">Clear</button>
+    <button id="engineClearBtn">Clear Log</button>
   </div>
   <div id="engineLog"></div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+<!-- Chessboard.js -->
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js" integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD" crossorigin="anonymous"></script>
+
+<!-- Chess.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
 
 <script>
 (function(){
-  // Engine worker URL
-  const ENGINE_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
-
-  // Game state
+  // Initialize game and board
   let game = new Chess();
   let board = null;
   let engine = null;
   let engineEnabled = false;
   let engineColor = 'black';
   let engineLevel = 8;
-  let playerColor = 'white';
   let isThinking = false;
+  let boardFlipped = false;
 
   // DOM elements
   const engineLogEl = document.getElementById('engineLog');
   const engineClearBtn = document.getElementById('engineClearBtn');
   const engineLevelSelect = document.getElementById('engineLevel');
   const engineColorSelect = document.getElementById('engineColor');
-  const toggleEngineBtn = document.getElementById('toggleEngineBtn');
+  const engineOnBtn = document.getElementById('engineOnBtn');
+  const engineOffBtn = document.getElementById('engineOffBtn');
   const resetBtn = document.getElementById('resetBtn');
   const undoBtn = document.getElementById('undoBtn');
+  const flipBtn = document.getElementById('flipBtn');
   const statusEl = document.getElementById('status');
 
   // Log helper
@@ -100,13 +223,12 @@
     const line = document.createElement('div');
     line.textContent = `[${new Date().toLocaleTimeString().slice(0,8)}] ${msg}`;
     if(type==='warn') line.style.color = '#ffd166';
-    if(type==='error') line.style.color = '#ff6b6b';
-    if(type==='engine') line.style.color = '#4ade80';
+    else if(type==='error') line.style.color = '#ff6b6b';
+    else if(type==='engine') line.style.color = '#4ade80';
+    else if(type==='move') line.style.color = '#60a5fa';
     engineLogEl.appendChild(line);
     engineLogEl.scrollTop = engineLogEl.scrollHeight;
   }
-
-  engineClearBtn.onclick = () => engineLogEl.innerHTML = '';
 
   // Initialize chessboard
   function initBoard() {
@@ -116,10 +238,13 @@
       onDragStart: onDragStart,
       onDrop: onDrop,
       onSnapEnd: onSnapEnd,
-      pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png'
+      pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png',
+      orientation: 'white'
     };
-    board = Chessboard('board-container', config);
+    
+    board = Chessboard('board', config);
     updateStatus();
+    panelLog('Chess board initialized');
   }
 
   // Update game status
@@ -130,6 +255,12 @@
       status = 'Game over, ' + (game.turn() === 'w' ? 'black' : 'white') + ' wins by checkmate!';
     } else if (game.in_draw()) {
       status = 'Game over, drawn position';
+    } else if (game.in_stalemate()) {
+      status = 'Game over, stalemate';
+    } else if (game.in_threefold_repetition()) {
+      status = 'Game over, threefold repetition';
+    } else if (game.insufficient_material()) {
+      status = 'Game over, insufficient material';
     } else {
       status = (game.turn() === 'w' ? 'White' : 'Black') + ' to move';
       if (game.in_check()) {
@@ -138,22 +269,26 @@
     }
     
     statusEl.innerHTML = status;
+    
+    // Log the move if there was one
+    const moves = game.history();
+    if (moves.length > 0) {
+      const lastMove = moves[moves.length - 1];
+      const player = moves.length % 2 === 1 ? 'White' : 'Black';
+      panelLog(`${player}: ${lastMove}`, 'move');
+    }
   }
 
   // Drag start handler
   function onDragStart(source, piece, position, orientation) {
-    if (!engineEnabled) return true;
-    
-    // Don't allow dragging if it's engine's turn
-    const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
-    if (engineColor === 'both' || 
-        (engineColor === 'white' && currentPlayer === 'white') ||
-        (engineColor === 'black' && currentPlayer === 'black')) {
-      return false;
-    }
-    
     // Don't allow dragging if game is over
     if (game.game_over()) return false;
+    
+    // Don't allow dragging if engine is thinking
+    if (isThinking) return false;
+    
+    // Don't allow dragging if it's engine's turn
+    if (engineEnabled && !isHumanTurn()) return false;
     
     // Only allow dragging own pieces
     if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
@@ -164,29 +299,61 @@
     return true;
   }
 
+  // Check if it's human's turn
+  function isHumanTurn() {
+    if (!engineEnabled) return true;
+    
+    const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
+    
+    if (engineColor === 'both') return false;
+    if (engineColor === 'none') return true;
+    if (engineColor === 'white' && currentPlayer === 'white') return false;
+    if (engineColor === 'black' && currentPlayer === 'black') return false;
+    
+    return true;
+  }
+
   // Drop handler
   function onDrop(source, target) {
     // Try the move
-    const move = game.move({
-      from: source,
-      to: target,
-      promotion: 'q' // Always promote to queen for simplicity
-    });
+    let move = null;
+    
+    // Check for pawn promotion
+    const piece = game.get(source);
+    if (piece && piece.type === 'p') {
+      if ((piece.color === 'w' && target[1] === '8') || 
+          (piece.color === 'b' && target[1] === '1')) {
+        // Promote to queen by default
+        move = game.move({
+          from: source,
+          to: target,
+          promotion: 'q'
+        });
+      }
+    }
+    
+    // If not a promotion, try regular move
+    if (!move) {
+      move = game.move({
+        from: source,
+        to: target,
+        promotion: 'q'
+      });
+    }
     
     // If illegal move, snap back
-    if (move === null) return 'snapback';
+    if (move === null) {
+      panelLog('Illegal move: ' + source + '-' + target, 'warn');
+      return 'snapback';
+    }
     
-    // Update board and status
+    // Update board
+    board.position(game.fen());
     updateStatus();
     
     // If engine is enabled and it's engine's turn, ask engine to move
-    if (engineEnabled && engine && !game.game_over()) {
-      const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
-      if (engineColor === 'both' || 
-          (engineColor === 'white' && currentPlayer === 'white') ||
-          (engineColor === 'black' && currentPlayer === 'black')) {
-        setTimeout(askEngineToMove, 100);
-      }
+    if (engineEnabled && engine && !game.game_over() && !isHumanTurn()) {
+      setTimeout(askEngineToMove, 100);
     }
     
     return 'snap';
@@ -200,24 +367,23 @@
   // Engine message handler
   function hookEngine(worker) {
     worker.onmessage = e => {
-      const line = typeof e.data === 'string' ? e.data : (e.data && e.data.message) ? e.data.message : JSON.stringify(e.data);
+      const line = typeof e.data === 'string' ? e.data : '';
       
-      // Only log important messages to reduce noise
       if (line.startsWith('bestmove')) {
         panelLog('[engine] ' + line, 'engine');
         processBestMove(line);
-      } else if (line.startsWith('info depth') && line.includes('pv')) {
-        // You can log thinking info if needed
-        // panelLog('[engine thinking] ' + line);
       } else if (line === 'readyok') {
         panelLog('[engine] Ready', 'engine');
       } else if (line.startsWith('uciok')) {
         panelLog('[engine] UCI ready', 'engine');
+        // Set engine options
+        engine.postMessage('setoption name Threads value 2');
+        engine.postMessage('setoption name Hash value 128');
       }
     };
     
     worker.onerror = e => {
-      panelLog('Engine worker error: ' + (e.message || JSON.stringify(e)), 'error');
+      panelLog('Engine error: ' + e.message, 'error');
     };
   }
 
@@ -237,21 +403,33 @@
     const promotion = moveStr.length > 4 ? moveStr.substring(4, 5) : null;
     
     // Make the move
-    const move = game.move({
-      from: from,
-      to: to,
-      promotion: promotion || 'q'
-    });
+    let move = null;
+    if (promotion) {
+      move = game.move({
+        from: from,
+        to: to,
+        promotion: promotion
+      });
+    } else {
+      move = game.move({
+        from: from,
+        to: to
+      });
+    }
     
     if (move) {
+      // Update board
       board.position(game.fen());
       updateStatus();
       isThinking = false;
       
       // If engine vs engine and game not over, trigger next move
       if (engineColor === 'both' && !game.game_over()) {
-        setTimeout(askEngineToMove, 500);
+        setTimeout(askEngineToMove, 300);
       }
+    } else {
+      panelLog('Engine made illegal move: ' + moveStr, 'error');
+      isThinking = false;
     }
   }
 
@@ -270,112 +448,127 @@
       // Send position to engine
       engine.postMessage('position fen ' + game.fen());
       
-      // Set skill level (0-20, where 20 is strongest)
-      const skillLevel = Math.min(20, engineLevel * 2.5);
+      // Set skill level (0-20)
+      const skillLevel = Math.min(20, engineLevel);
       engine.postMessage('setoption name Skill Level value ' + skillLevel);
       
       // Ask for move with time constraint
-      engine.postMessage('go movetime 1000');
+      engine.postMessage('go movetime 1500');
     }
   }
 
-  // Convert level to depth
-  function levelToDepth(l) {
-    const map = {1:1,2:2,3:3,4:5,5:8,6:12,7:16,8:20};
-    return map[l] || 5;
-  }
-
-  // Initialize engine
-  function initEngine() {
+  // Start engine
+  function startEngine() {
+    panelLog('Starting Stockfish engine...');
+    
     if (engine) {
       try { engine.terminate(); } catch(e) {}
       engine = null;
     }
     
-    panelLog('Creating Stockfish engine...');
-    engine = new Worker(ENGINE_WORKER_URL);
+    // Create Web Worker with Stockfish
+    engine = new Worker('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');
     hookEngine(engine);
     
     // Initialize UCI
     engine.postMessage('uci');
     engine.postMessage('isready');
     
-    // Set UCI options for better performance
-    engine.postMessage('setoption name Threads value 2');
-    engine.postMessage('setoption name Hash value 64');
+    engineEnabled = true;
+    engineOnBtn.style.display = 'none';
+    engineOffBtn.style.display = 'inline-block';
     
-    panelLog('Engine initialized. Ready to play!');
+    panelLog('Engine started. Skill level: ' + engineLevel);
+    
+    // If engine should move first
+    if (!game.game_over() && !isHumanTurn()) {
+      setTimeout(askEngineToMove, 500);
+    }
   }
 
-  // Toggle engine
-  toggleEngineBtn.addEventListener('click', () => {
-    engineEnabled = !engineEnabled;
-    engineColor = engineColorSelect.value;
-    engineLevel = Number(engineLevelSelect.value);
+  // Stop engine
+  function stopEngine() {
+    engineEnabled = false;
+    isThinking = false;
     
-    if (engineEnabled) {
-      toggleEngineBtn.textContent = 'Stop Engine';
-      toggleEngineBtn.style.background = '#dc2626';
-      initEngine();
-      
-      // If engine should move first
-      if ((engineColor === 'white' && game.turn() === 'w') || engineColor === 'both') {
-        setTimeout(askEngineToMove, 500);
+    if (engine) {
+      try { 
+        engine.terminate(); 
+        panelLog('Engine stopped');
+      } catch(e) {
+        panelLog('Error stopping engine: ' + e.message, 'error');
       }
-    } else {
-      toggleEngineBtn.textContent = 'Start Engine';
-      toggleEngineBtn.style.background = '#0f172a';
-      if (engine) {
-        try { engine.terminate(); } catch(e) {}
-        engine = null;
-      }
-      isThinking = false;
+      engine = null;
     }
-  });
+    
+    engineOnBtn.style.display = 'inline-block';
+    engineOffBtn.style.display = 'none';
+  }
 
-  // Reset game
+  // Event listeners
+  engineOnBtn.addEventListener('click', startEngine);
+  engineOffBtn.addEventListener('click', stopEngine);
+  
+  engineClearBtn.onclick = () => {
+    engineLogEl.innerHTML = '';
+    panelLog('Log cleared');
+  };
+
   resetBtn.addEventListener('click', () => {
     game = new Chess();
     board.position('start');
     updateStatus();
-    if (engineEnabled && engine && 
-        ((engineColor === 'white' && game.turn() === 'w') || engineColor === 'both')) {
+    panelLog('Game reset to starting position');
+    
+    if (engineEnabled && !game.game_over() && !isHumanTurn()) {
       setTimeout(askEngineToMove, 500);
     }
-    panelLog('Game reset to starting position');
   });
 
-  // Undo move
   undoBtn.addEventListener('click', () => {
     const moves = game.history();
     if (moves.length > 0) {
       game.undo();
-      game.undo(); // Undo both player and engine move
+      if (moves.length > 1 && engineColor !== 'both') {
+        game.undo(); // Undo both player and engine move
+      }
       board.position(game.fen());
       updateStatus();
       panelLog('Undid last move');
     }
   });
 
-  // Engine color change
+  flipBtn.addEventListener('click', () => {
+    boardFlipped = !boardFlipped;
+    board.orientation(boardFlipped ? 'black' : 'white');
+    panelLog('Board flipped to ' + (boardFlipped ? 'black' : 'white') + ' view');
+  });
+
   engineColorSelect.addEventListener('change', () => {
     engineColor = engineColorSelect.value;
-    if (engineEnabled) {
-      panelLog(`Engine set to play as: ${engineColor}`);
+    panelLog(`Engine side: ${engineColor}`);
+    
+    if (engineEnabled && !game.game_over() && !isHumanTurn()) {
+      setTimeout(askEngineToMove, 300);
     }
   });
 
-  // Engine level change
   engineLevelSelect.addEventListener('change', () => {
     engineLevel = Number(engineLevelSelect.value);
     if (engineEnabled) {
-      panelLog(`Engine level set to: ${engineLevel}`);
+      panelLog(`Engine skill level set to: ${engineLevel}`);
     }
   });
 
-  // Initialize everything
-  initBoard();
-  panelLog('Chess board initialized. Click "Start Engine" to play vs Stockfish.');
+  // Initialize everything when page loads
+  $(document).ready(function() {
+    initBoard();
+    panelLog('Ready! Click "Start Engine" to play against Stockfish.');
+    
+    // Add some sample log entries
+    panelLog('Welcome to Student3 - Chess with Stockfish');
+    panelLog('Select engine side and skill level, then click Start Engine');
+  });
 
 })();
 </script>
