@@ -178,9 +178,9 @@
 window.game = null;
 
 (function(){
-  // Config
-  const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
-  const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
+  // Config - USING RELATIVE PATH FOR PUZZLES
+  const PIECES_BASE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+  const LIST_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/puzzles_list.json';
 
   // DOM
   const boardEl = document.getElementById('board');
@@ -417,29 +417,114 @@ window.game = null;
     location.href='index.html'; 
   };
 
-  /* ---- PUZZLE SYSTEM (unchanged except for FEN emission) ---- */
+  /* ---- PUZZLE SYSTEM ---- */
   let puzzlesList = [];
   let currentPuzzle = null;
 
   async function loadPuzzlesList() {
     try {
-      const response = await fetch(LIST_URL);
-      puzzlesList = await response.json();
-      populateTacticSelect();
+      // Try multiple paths in case one fails
+      const paths = [
+        LIST_URL,
+        'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/puzzles_list.json',
+        '/assets/puzzles_list.json',
+        'assets/puzzles_list.json',
+        'https://raw.githubusercontent.com/iq4uchess/IQ4U-Chess-Classroom/main/assets/puzzles_list.json'
+      ];
+      
+      let loaded = false;
+      let lastError = null;
+      
+      for (const url of paths) {
+        try {
+          console.log('Trying to load puzzles from:', url);
+          const response = await fetch(url + '?t=' + Date.now());
+          if (response.ok) {
+            puzzlesList = await response.json();
+            console.log('Loaded', puzzlesList.length, 'puzzles from', url);
+            populateTacticSelect();
+            loaded = true;
+            break;
+          }
+        } catch(e) {
+          lastError = e;
+          console.warn('Failed to load from', url, e);
+        }
+      }
+      
+      if (!loaded) {
+        // Fallback to sample data if loading fails
+        console.log('Using fallback sample puzzles');
+        puzzlesList = getSamplePuzzles();
+        populateTacticSelect();
+        setMsg('Using sample puzzles (network issue)', 3000);
+      }
     } catch(e) {
-      setMsg('Failed to load puzzles', 2000);
+      console.error('Failed to load puzzles:', e);
+      // Use sample puzzles as last resort
+      puzzlesList = getSamplePuzzles();
+      populateTacticSelect();
+      setMsg('Using sample puzzles', 3000);
     }
+  }
+
+  // Fallback sample puzzles
+  function getSamplePuzzles() {
+    return [
+      {
+        id: 1,
+        fen: "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+        moves: ["Nxe5", "Nxe5", "d4"],
+        moveTypes: ["san", "san", "san"],
+        tactic: "Fork",
+        rating: 1200
+      },
+      {
+        id: 2,
+        fen: "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+        moves: ["O-O", "Nf6", "Ng5"],
+        moveTypes: ["san", "san", "san"],
+        tactic: "Attack",
+        rating: 1100
+      },
+      {
+        id: 3,
+        fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 6 5",
+        moves: ["d3", "Bc5", "O-O"],
+        moveTypes: ["san", "san", "san"],
+        tactic: "Development",
+        rating: 1000
+      },
+      {
+        id: 4,
+        fen: "r2qkbnr/ppp2ppp/2np4/4p3/4P3/3P1N2/PPP2PPP/RNBQKB1R w KQkq - 0 5",
+        moves: ["Bf4", "Bg4", "h3"],
+        moveTypes: ["san", "san", "san"],
+        tactic: "Pin",
+        rating: 1300
+      }
+    ];
   }
 
   function populateTacticSelect() {
     tacticSelect.innerHTML = '';
-    const tactics = [...new Set(puzzlesList.map(p => p.tactic))];
+    
+    // Add "All" option first
+    const allOpt = document.createElement('option');
+    allOpt.value = '';
+    allOpt.textContent = 'All tactics';
+    tacticSelect.appendChild(allOpt);
+    
+    // Get unique tactics
+    const tactics = [...new Set(puzzlesList.map(p => p.tactic || 'Unknown'))];
+    
     tactics.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t;
       opt.textContent = t;
       tacticSelect.appendChild(opt);
     });
+    
     filterCandidates();
   }
 
@@ -453,8 +538,15 @@ window.game = null;
       const rating = p.rating || 0;
       return rating >= minRating && rating <= maxRating;
     });
+    
     currentCandidateIndex = -1;
     setMsg(`Found ${currentCandidateList.length} puzzles`, 1500);
+    
+    // Update buttons state
+    loadPuzzleBtn.disabled = currentCandidateList.length === 0;
+    randomPuzzleBtn.disabled = currentCandidateList.length === 0;
+    prevPuzzleBtn.disabled = true;
+    nextPuzzleBtn.disabled = true;
   }
 
   function loadPuzzleAtIndex(index) {
@@ -481,17 +573,22 @@ window.game = null;
     if (solutionTimer) {
       clearInterval(solutionTimer);
       solutionTimer = null;
+      showSolutionBtn.textContent = 'Show Solution';
     }
     
     // Update UI
     currentPuzzleIdEl.textContent = `#${currentPuzzle.id || (index + 1)} (${currentPuzzle.rating || '?'})`;
-    solutionStatus.textContent = `Loaded: ${currentPuzzle.tactic || 'Tactic'}`;
+    solutionStatus.textContent = `Loaded: ${currentPuzzle.tactic || 'Tactic'} (${currentPuzzle.rating || '?'})`;
     refreshNotation();
     
     // Update stats
     statPuzzles++;
     statRatingSum += (currentPuzzle.rating || 0);
     updateStats();
+    
+    // Update navigation buttons
+    prevPuzzleBtn.disabled = currentCandidateIndex <= 0;
+    nextPuzzleBtn.disabled = currentCandidateIndex >= currentCandidateList.length - 1;
     
     window.emitFenToMaster();
   }
@@ -501,6 +598,8 @@ window.game = null;
       if (solutionTimer) {
         clearInterval(solutionTimer);
         solutionTimer = null;
+        showSolutionBtn.textContent = 'Show Solution';
+        solutionStatus.textContent = 'Solution complete';
       }
       return;
     }
@@ -542,6 +641,27 @@ window.game = null;
     statPuzzlesEl.textContent = statPuzzles;
     const avg = statPuzzles > 0 ? Math.round(statRatingSum / statPuzzles) : 0;
     statAvgRatingEl.textContent = avg;
+  }
+
+  // Auto opponent simulation
+  let autoOpponentTimer = null;
+  
+  function setupAutoOpponent() {
+    if (autoOpponentTimer) {
+      clearInterval(autoOpponentTimer);
+      autoOpponentTimer = null;
+    }
+    
+    if (autoOpponent.checked && currentPuzzle && !solutionDisplayed && solutionIndex < solutionMoves.length) {
+      autoOpponentTimer = setInterval(() => {
+        if (solutionIndex < solutionMoves.length) {
+          playNextSolutionMove();
+        } else {
+          clearInterval(autoOpponentTimer);
+          autoOpponentTimer = null;
+        }
+      }, 1500); // Auto opponent moves every 1.5 seconds
+    }
   }
 
   // Event listeners for puzzle controls
@@ -617,7 +737,17 @@ window.game = null;
   });
 
   autoOpponent.addEventListener('change', () => {
+    setupAutoOpponent();
     window.emitFenToMaster();
+  });
+
+  // Update speed when changed
+  solutionSpeed.addEventListener('change', () => {
+    if (solutionTimer) {
+      clearInterval(solutionTimer);
+      const speed = parseInt(solutionSpeed.value) || 500;
+      solutionTimer = setInterval(playNextSolutionMove, speed);
+    }
   });
 
   /* ---- BOOT ---- */
@@ -626,6 +756,9 @@ window.game = null;
     refreshNotation();
     await loadPuzzlesList();
     setMsg('Ready', 700);
+    
+    // Auto-setup auto opponent
+    autoOpponent.addEventListener('change', setupAutoOpponent);
   })();
 
 })();
