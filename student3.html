@@ -22,18 +22,28 @@
     .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
     .resizer .range{ width:320px; }
     .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
-    #engineLog{ font-family:monospace; font-size:12px; overflow:auto; height:140px; background:#0b1220; color:#e6eefc; padding:8px; border-radius:8px; }
+    textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
+    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:180px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
+    .notation .move.current { background:#0f172a; color:#fff; }
+    .tactic-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .solution-controls { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    .solution-controls .small { margin-left:6px; margin-right:2px; }
+    @media (max-width:900px){
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
+      .resizer .range{ width:200px; }
+    }
+    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
+    .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
+    .logout-btn { background:#dc2626; }
+    .stats { margin-top:10px; display:flex; gap:16px; align-items:center; justify-content:flex-end; font-weight:600; color:#111; }
+    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
+    .puzzle-meta { margin-left:8px; font-weight:600; color:#222; }
     .engine-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
     select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; background: white; font-size: 14px; }
     h1 { color: #0f172a; margin-bottom: 10px; text-align: center; }
     #engineOnBtn { background: #10b981; }
     #engineOffBtn { background: #ef4444; display: none; }
-    .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    @media (max-width:900px){
-      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
-      .resizer .range{ width:200px; }
-    }
-    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
   </style>
 </head>
 
@@ -46,6 +56,7 @@
     <button id="undoBtn">Undo</button>
     <button id="flipBtn">Flip</button>
     <button id="resetBtn" style="background:#8b0f0f;">Reset Game</button>
+    <button id="logoutBtn" class="logout-btn" style="margin-left:auto;">Logout</button>
   </div>
 
   <div class="resizer">
@@ -58,6 +69,8 @@
   </div>
 
   <div id="status" class="info">White to move</div>
+  
+  <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
 </div>
 
 <!-- Engine Controls Panel -->
@@ -95,13 +108,29 @@
   </div>
 </div>
 
-<!-- Engine Log Panel -->
-<div class="panel" style="margin-top:18px;">
-  <div class="log-header">
-    <strong>Engine Debug Log</strong>
-    <button id="engineClearBtn">Clear Log</button>
+<!-- Online Presence Panel (same as student2.html) -->
+<div class="panel multiplayer-panel" style="margin-top:18px;" id="multiplayerPanel">
+  <div style="display:flex; gap:8px; align-items:center;">
+    <label for="emailInputBottom" class="small">Your username:</label>
+    <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student3)" />
+    <button id="joinBtnBottom">Join Online</button>
   </div>
-  <div id="engineLog"></div>
+
+  <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
+    <div id="multiplayStatus" class="muted">Not connected</div>
+    <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
+  </div>
+</div>
+
+<!-- Promotion Modal -->
+<div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
+  <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
+  <div class="row">
+    <button data-piece="q">Q</button>
+    <button data-piece="r">R</button>
+    <button data-piece="b">B</button>
+    <button data-piece="n">N</button>
+  </div>
 </div>
 
 <!-- Same libraries as student2.html -->
@@ -123,8 +152,7 @@ window.game = null;
   const boardSizeRange = document.getElementById('boardSizeRange');
   const boardSizeLabel = document.getElementById('boardSizeLabel');
   const statusEl = document.getElementById('status');
-  const engineLogEl = document.getElementById('engineLog');
-  const engineClearBtn = document.getElementById('engineClearBtn');
+  const movesList = document.getElementById('movesList');
   const engineLevelSelect = document.getElementById('engineLevel');
   const engineColorSelect = document.getElementById('engineColor');
   const engineOnBtn = document.getElementById('engineOnBtn');
@@ -132,6 +160,11 @@ window.game = null;
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const emailInputBottom = document.getElementById('emailInputBottom');
+  const joinBtnBottom = document.getElementById('joinBtnBottom');
+  const multiplayStatus = document.getElementById('multiplayStatus');
+  const pairedBubble = document.getElementById('pairedBubble');
 
   // State
   let board = null;
@@ -143,6 +176,20 @@ window.game = null;
   let engineLevel = 5;
   let isThinking = false;
   let lastMoveSquares = [];
+  let pendingPromo = null;
+
+  // Promotion Modal
+  const promoteModal = document.getElementById('promoteModal');
+  function showPromotionDialog(){ promoteModal.style.display='block'; }
+  function hidePromotionDialog(){ promoteModal.style.display='none'; }
+  promoteModal.addEventListener('click', function(e){
+    if(e.target && e.target.dataset && e.target.dataset.piece){
+      const p = e.target.dataset.piece;
+      if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(p);
+      pendingPromo = null;
+      hidePromotionDialog();
+    }
+  });
 
   // FEN Emitter (for master spectating)
   window.emitFenToMaster = function() {
@@ -175,6 +222,8 @@ window.game = null;
       pieceTheme: pieceTheme,
       orientation: 'white'
     });
+    updateStatus();
+    refreshNotation();
   }
   
   function onSnapEnd(){ 
@@ -205,6 +254,37 @@ window.game = null;
     statusEl.innerHTML = status;
   }
 
+  // Refresh move notation
+  function refreshNotation() {
+    try {
+      const hist = game.history();
+      if (!hist || hist.length === 0) {
+        movesList.innerHTML = 'No moves yet.';
+        return;
+      }
+      
+      movesList.innerHTML = '';
+      for (let i = 0; i < hist.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const whiteMove = hist[i] || '';
+        const blackMove = hist[i + 1] || '';
+        
+        const div = document.createElement('div');
+        div.className = 'move';
+        div.innerHTML = `<strong>${moveNum}.</strong>&nbsp;${whiteMove}`;
+        if (blackMove) {
+          div.innerHTML += `&nbsp;${blackMove}`;
+        }
+        movesList.appendChild(div);
+      }
+      
+      // Scroll to latest move
+      movesList.scrollTop = movesList.scrollHeight;
+    } catch (e) {
+      console.warn('Notation refresh error:', e);
+    }
+  }
+
   /* ---- LAST MOVE HIGHLIGHT ---- */
   function setPersistentLastMove(src, tgt){
     lastMoveSquares.forEach(sq=>{
@@ -217,19 +297,6 @@ window.game = null;
       if(el) el.classList.add('cb-last-move');
       lastMoveSquares.push(cls.replace('square-',''));
     });
-  }
-
-  // Log helper
-  function panelLog(msg, type='log'){
-    const line = document.createElement('div');
-    line.textContent = `[${new Date().toLocaleTimeString().slice(0,8)}] ${msg}`;
-    if(type==='warn') line.style.color = '#ffd166';
-    else if(type==='error') line.style.color = '#ff6b6b';
-    else if(type==='engine') line.style.color = '#4ade80';
-    else if(type==='move') line.style.color = '#60a5fa';
-    engineLogEl.appendChild(line);
-    engineLogEl.scrollTop = engineLogEl.scrollHeight;
-    console.log(msg);
   }
 
   // Drag start handler
@@ -273,22 +340,27 @@ window.game = null;
   }
 
   // Drop handler
-  function onDrop(source, target) {
+  async function onDrop(source, target) {
     // Try the move
     const moveObj = { from: source, to: target };
     
     // Check for pawn promotion
-    const piece = game.get(source);
-    if (piece && piece.type === 'p') {
-      if ((piece.color === 'w' && target[1] === '8') || 
-          (piece.color === 'b' && target[1] === '1')) {
-        moveObj.promotion = 'q'; // Auto-promote to queen
-      }
+    const legal = game.moves({verbose:true}) || [];
+    const candidatePromo = legal.find(m => m.from === source && m.to === target && m.promotion);
+    let chosenPromo = null;
+    
+    if (candidatePromo) {
+      chosenPromo = await new Promise(resolve => { 
+        pendingPromo = { from:source, to:target, resolve }; 
+        showPromotionDialog(); 
+      });
+      pendingPromo = null;
+      if (!chosenPromo) chosenPromo = 'q';
+      moveObj.promotion = chosenPromo;
     }
 
     const mv = game.move(moveObj);
     if (mv === null) {
-      panelLog('Illegal move: ' + source + '-' + target, 'warn');
       return 'snapback';
     }
 
@@ -296,9 +368,7 @@ window.game = null;
     board.position(game.fen());
     setPersistentLastMove(mv.from, mv.to);
     updateStatus();
-    
-    // Log the move
-    panelLog(`Human moved: ${mv.san}`, 'move');
+    refreshNotation();
     
     // Update master board
     window.emitFenToMaster();
@@ -313,26 +383,18 @@ window.game = null;
 
   // Simple chess engine
   function createSimpleEngine() {
-    let currentPosition = '';
-    
     return {
       postMessage: function(cmd) {
         if (cmd === 'uci') {
           setTimeout(() => {
-            if (this.onmessage) this.onmessage({data: 'id name SimpleChessEngine 1.0'});
-            setTimeout(() => {
-              if (this.onmessage) this.onmessage({data: 'id author IQ4U'});
-              setTimeout(() => {
-                if (this.onmessage) this.onmessage({data: 'uciok'});
-              }, 10);
-            }, 10);
+            if (this.onmessage) this.onmessage({data: 'uciok'});
           }, 10);
         } else if (cmd === 'isready') {
           setTimeout(() => {
             if (this.onmessage) this.onmessage({data: 'readyok'});
           }, 10);
         } else if (cmd.startsWith('position fen')) {
-          currentPosition = cmd.substring(13);
+          // Store position (not used in simple engine)
         } else if (cmd.startsWith('go')) {
           setTimeout(() => {
             // Generate a legal move for the correct color
@@ -357,7 +419,7 @@ window.game = null;
             } else {
               if (this.onmessage) this.onmessage({data: 'bestmove (none)'});
             }
-          }, 500 + (engineLevel * 100)); // More time for higher levels
+          }, 300 + (engineLevel * 100)); // More time for higher levels
         }
       },
       
@@ -375,12 +437,7 @@ window.game = null;
       const line = e.data;
       
       if (line.startsWith('bestmove')) {
-        panelLog('[engine] ' + line, 'engine');
         processBestMove(line);
-      } else if (line === 'readyok') {
-        panelLog('[engine] Ready', 'engine');
-      } else if (line.startsWith('uciok')) {
-        panelLog('[engine] UCI ready', 'engine');
       }
     };
   }
@@ -420,10 +477,8 @@ window.game = null;
       board.position(game.fen());
       setPersistentLastMove(move.from, move.to);
       updateStatus();
+      refreshNotation();
       isThinking = false;
-      
-      // Log the move
-      panelLog(`Engine moved: ${move.san}`, 'engine');
       
       // Update master board
       window.emitFenToMaster();
@@ -433,9 +488,7 @@ window.game = null;
         setTimeout(askEngineToMove, 1000);
       }
     } else {
-      panelLog('Engine made illegal move: ' + moveStr, 'error');
-      panelLog('Current FEN: ' + game.fen(), 'error');
-      panelLog('Available moves: ' + game.moves().join(', '), 'error');
+      console.log('Engine made illegal move: ' + moveStr);
       isThinking = false;
       
       // Try to make a different move
@@ -457,7 +510,6 @@ window.game = null;
         (engineColor === 'black' && currentPlayer === 'black')) {
       
       isThinking = true;
-      panelLog(`[engine] Thinking as ${currentPlayer}...`, 'engine');
       
       // Send position to engine
       engine.postMessage('position fen ' + game.fen());
@@ -469,8 +521,6 @@ window.game = null;
 
   // Start engine
   function startEngine() {
-    panelLog('Starting Chess Engine...');
-    
     if (engine && engine.terminate) {
       try { engine.terminate(); } catch(e) {}
       engine = null;
@@ -488,8 +538,10 @@ window.game = null;
     engineOnBtn.style.display = 'none';
     engineOffBtn.style.display = 'inline-block';
     
-    panelLog('Engine started. Skill level: ' + engineLevel);
-    panelLog('Engine playing as: ' + engineColor);
+    // Update multiplayer status
+    if (multiplayStatus) {
+      multiplayStatus.textContent = 'Playing vs Engine';
+    }
     
     // If engine should move first
     if (!game.game_over() && !isHumanTurn()) {
@@ -505,15 +557,17 @@ window.game = null;
     if (engine && engine.terminate) {
       try { 
         engine.terminate(); 
-        panelLog('Engine stopped');
-      } catch(e) {
-        panelLog('Error stopping engine: ' + e.message, 'error');
-      }
+      } catch(e) {}
       engine = null;
     }
     
     engineOnBtn.style.display = 'inline-block';
     engineOffBtn.style.display = 'none';
+    
+    // Update multiplayer status
+    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Engine') {
+      multiplayStatus.textContent = 'Engine stopped';
+    }
   }
 
   // Reset game
@@ -522,7 +576,7 @@ window.game = null;
     window.game = game; // Update global reference
     board.position('start');
     updateStatus();
-    panelLog('Game reset to starting position');
+    refreshNotation();
     
     // Clear last move highlights
     lastMoveSquares.forEach(sq=>{
@@ -542,7 +596,6 @@ window.game = null;
   // Undo move
   function undoMove() {
     if (!game || game.history().length === 0) {
-      panelLog('No moves to undo', 'warn');
       return;
     }
     
@@ -556,7 +609,7 @@ window.game = null;
     
     board.position(game.fen());
     updateStatus();
-    panelLog('Undid last move');
+    refreshNotation();
     
     // Clear last move highlights
     lastMoveSquares.forEach(sq=>{
@@ -587,8 +640,6 @@ window.game = null;
   $(document).ready(function() {
     // Initialize board
     createBoard();
-    updateStatus();
-    panelLog('Chess board initialized. Click "Start Engine" to play vs Chess Engine.');
     
     // Set initial board size
     const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 760;
@@ -597,11 +648,6 @@ window.game = null;
     // Engine controls
     engineOnBtn.addEventListener('click', startEngine);
     engineOffBtn.addEventListener('click', stopEngine);
-    
-    engineClearBtn.addEventListener('click', () => {
-      engineLogEl.innerHTML = '';
-      panelLog('Log cleared');
-    });
 
     // Game controls
     resetBtn.addEventListener('click', resetGame);
@@ -610,10 +656,17 @@ window.game = null;
       if(board) board.flip(); 
     });
     
+    logoutBtn.onclick = () => { 
+      localStorage.clear(); 
+      if (window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) {
+        window.firebaseMultiplayer.goOffline();
+      }
+      location.href = 'index.html'; 
+    };
+    
     // Engine settings
     engineColorSelect.addEventListener('change', () => {
       engineColor = engineColorSelect.value;
-      panelLog(`Engine side: ${engineColor}`);
       
       if (engineEnabled && !game.game_over() && !isHumanTurn()) {
         setTimeout(askEngineToMove, 300);
@@ -622,9 +675,6 @@ window.game = null;
 
     engineLevelSelect.addEventListener('change', () => {
       engineLevel = Number(engineLevelSelect.value);
-      if (engineEnabled) {
-        panelLog(`Engine skill level set to: ${engineLevel}`);
-      }
     });
 
     // Board size range
@@ -638,6 +688,7 @@ window.game = null;
           if(game.load) game.load(payload);
           if(board) board.position(game.fen());
           updateStatus();
+          refreshNotation();
           return;
         }
         if(payload.move && payload.move.from && payload.move.to){
@@ -656,8 +707,15 @@ window.game = null;
         }
         if(board) board.position(game.fen());
         updateStatus();
+        refreshNotation();
       }catch(e){ console.warn('onBoardMove failed', e); }
     };
+    
+    // Auto-join if username exists
+    try{ 
+      const uname = localStorage.getItem('username') || localStorage.getItem('email') || ''; 
+      if(uname && emailInputBottom) emailInputBottom.value = uname; 
+    }catch(e){}
   });
 
 })();
@@ -688,7 +746,9 @@ window.game = null;
     sessionStorage.setItem('iq4u_clientId', myId);
 
     let myEmail = '';
+    let currentGameId = null;
     let presenceTimer = null;
+    let isSpectated = false;
 
     function goOnline(email){
       myEmail = email || ('anon-'+myId);
@@ -699,12 +759,27 @@ window.game = null;
         ()=>node.update({ ts: firebase.database.ServerValue.TIMESTAMP }),
         25000
       );
+      if (multiplayStatus) {
+        multiplayStatus.textContent = 'Connected as ' + myEmail;
+      }
     }
 
     function goOffline(){
       if(presenceTimer) clearInterval(presenceTimer);
       onlineRef.child(myId).remove().catch(()=>{});
+      if (multiplayStatus) {
+        multiplayStatus.textContent = 'Not connected';
+      }
+      isSpectated = false;
+      if (pairedBubble) pairedBubble.style.display = 'none';
     }
+
+    joinBtnBottom.addEventListener('click', ()=>{
+      const email = (emailInputBottom.value||'').trim();
+      if(!email) return alert('Enter username');
+      localStorage.setItem('username', email);
+      goOnline(email);
+    });
 
     /* =========================================================
        SPECTATE INVITE HANDLER (IDENTICAL TO student2.html)
@@ -736,6 +811,14 @@ window.game = null;
         });
       }
 
+      // If accepted, set flag
+      if (accept) {
+        isSpectated = true;
+        if (multiplayStatus) {
+          multiplayStatus.textContent = 'Master is spectating';
+        }
+      }
+
       snap.ref.remove().catch(()=>{});
     });
 
@@ -743,6 +826,14 @@ window.game = null;
        FIREBASE MULTIPLAYER OBJECT (IDENTICAL TO student2.html)
        ========================================================= */
     window.firebaseMultiplayer = {
+      emitMove: function(arg){
+        if(!currentGameId) return;
+        db.ref('moves/'+currentGameId).push({
+          payload: arg,
+          by: myId,
+          ts: firebase.database.ServerValue.TIMESTAMP
+        });
+      },
       emitFen: function(arg){
         // Write to moves/<myId> path
         db.ref('moves/'+myId).push({
@@ -756,9 +847,10 @@ window.game = null;
       goOffline: goOffline
     };
 
-    // Auto-join if username exists in localStorage
+    // Auto-join if username exists
     setTimeout(() => {
-      const saved = localStorage.getItem('username') || localStorage.getItem('email') || '';
+      const saved = (emailInputBottom && emailInputBottom.value) ? emailInputBottom.value.trim() : 
+                   (localStorage.getItem('username') || localStorage.getItem('email') || '');
       if(saved){
         goOnline(saved);
       }
