@@ -6,144 +6,63 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IQ4U — Student Puzzle (student3)</title>
 
-  <!-- Chessboard.js CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDIsdZ" crossorigin="anonymous">
-  
+  <!-- Same CSS as student2.html -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
-    html,body{ overscroll-behavior-y: contain; height:100%; margin:0; padding:0; }
-    body{ 
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; 
-      margin:16px; 
-      background:#f6f7fb; 
-      color:#111; 
-      -webkit-font-smoothing:antialiased; 
-      display:flex; 
-      flex-direction:column; 
-      align-items:center; 
-    }
-    button{ 
-      padding:8px 12px; 
-      border:none; 
-      background:#0f172a; 
-      color:#fff; 
-      border-radius:8px; 
-      cursor:pointer; 
-      font-size:14px;
-    }
-    button:hover {
-      background:#1e293b;
-    }
-    .panel{ 
-      background:#fff; 
-      padding:16px; 
-      border-radius:10px; 
-      box-shadow:0 6px 18px rgba(2,6,23,.04); 
-      margin:12px auto; 
-      width:100%; 
-      max-width:900px;
-      box-sizing:border-box; 
-    }
-    .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
-    #engineLog{ 
-      font-family:'Courier New', monospace; 
-      font-size:12px; 
-      overflow:auto; 
-      height:140px; 
-      background:#0b1220; 
-      color:#e6eefc; 
-      padding:10px; 
-      border-radius:8px; 
-      margin-top:10px;
-    }
+    html,body{ overscroll-behavior-y: contain; height:100%; }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:980px; width:100%; box-sizing:border-box; }
     .small{ font-size:13px; color:#555; }
-    
-    /* Board container */
-    #board {
-      width: 500px;
-      height: 500px;
-      max-width: 90vw;
-      max-height: 90vw;
-      margin: 20px auto;
-      border-radius: 8px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    .muted{ color:#666; font-size:13px; }
+    .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
+    #board-wrapper{ width:100%; max-width:760px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; padding:16px; }
+    #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:88vh; min-width:520px; min-height:520px; box-shadow: 0 6px 18px rgba(2,6,23,0.04); border-radius:8px; padding:6px; }
+    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
+    .resizer .range{ width:320px; }
+    .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
+    #engineLog{ font-family:monospace; font-size:12px; overflow:auto; height:140px; background:#0b1220; color:#e6eefc; padding:8px; border-radius:8px; }
+    .engine-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; background: white; font-size: 14px; }
+    h1 { color: #0f172a; margin-bottom: 10px; text-align: center; }
+    #engineOnBtn { background: #10b981; }
+    #engineOffBtn { background: #ef4444; display: none; }
+    .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    @media (max-width:900px){
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
+      .resizer .range{ width:200px; }
     }
-    
-    #status { 
-      margin: 15px 0; 
-      font-weight: bold;
-      font-size: 16px;
-      background: white;
-      padding: 10px 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-    .controls { 
-      display: flex; 
-      gap: 12px; 
-      margin: 15px 0; 
-      justify-content: center; 
-      flex-wrap: wrap;
-    }
-    
-    .engine-controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    
-    select {
-      padding: 6px 10px;
-      border-radius: 6px;
-      border: 1px solid #ddd;
-      background: white;
-      font-size: 14px;
-    }
-    
-    label {
-      font-size: 14px;
-      font-weight: 500;
-    }
-    
-    h1 {
-      color: #0f172a;
-      margin-bottom: 10px;
-      text-align: center;
-    }
-    
-    .log-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    
-    #engineOnBtn {
-      background: #10b981;
-    }
-    
-    #engineOffBtn {
-      background: #ef4444;
-      display: none;
-    }
+    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
   </style>
 </head>
+
 <body>
 
 <h1>Student3 - Play vs Stockfish</h1>
 
-<div id="board"></div>
+<div class="panel">
+  <div class="controls">
+    <button id="undoBtn">Undo</button>
+    <button id="flipBtn">Flip</button>
+    <button id="resetBtn" style="background:#8b0f0f;">Reset Game</button>
+  </div>
 
-<div id="status">White to move</div>
+  <div class="resizer">
+    <input id="boardSizeRange" name="board-size" class="range" type="range" min="360" max="1400" step="10" value="760" aria-label="Board size">
+    <small id="boardSizeLabel">760px</small>
+  </div>
 
-<div class="controls">
-  <button id="resetBtn">Reset Game</button>
-  <button id="undoBtn">Undo Move</button>
-  <button id="flipBtn">Flip Board</button>
+  <div id="board-wrapper" style="margin-top:12px;">
+    <div id="board" aria-label="Chessboard container"></div>
+  </div>
+
+  <div id="status" class="info">White to move</div>
 </div>
 
-<div class="panel">
+<!-- Engine Controls Panel -->
+<div class="panel" style="margin-top:18px;">
   <div class="engine-controls">
     <div>
       <label class="small">Engine Side:</label>
@@ -177,7 +96,8 @@
   </div>
 </div>
 
-<div class="panel">
+<!-- Engine Log Panel -->
+<div class="panel" style="margin-top:18px;">
   <div class="log-header">
     <strong>Engine Debug Log</strong>
     <button id="engineClearBtn">Clear Log</button>
@@ -185,66 +105,84 @@
   <div id="engineLog"></div>
 </div>
 
-<!-- jQuery -->
-<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-
-<!-- Chessboard.js -->
-<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js" integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD" crossorigin="anonymous"></script>
-
-<!-- Chess.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
+<!-- Same libraries as student2.html -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
 <script>
-(function(){
-  // Initialize game and board
-  let game = new Chess();
-  let board = null;
-  let engine = null;
-  let engineEnabled = false;
-  let engineColor = 'black';
-  let engineLevel = 8;
-  let isThinking = false;
-  let boardFlipped = false;
+// GLOBAL GAME INSTANCE - REQUIRED FOR MASTER SPECTATING
+window.game = null;
 
-  // DOM elements
+(function(){
+  // Config
+  const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+  
+  // Engine worker URL
+  const ENGINE_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
+
+  // DOM
+  const boardEl = document.getElementById('board');
+  const boardWrapper = document.getElementById('board-wrapper');
+  const boardSizeRange = document.getElementById('boardSizeRange');
+  const boardSizeLabel = document.getElementById('boardSizeLabel');
+  const statusEl = document.getElementById('status');
   const engineLogEl = document.getElementById('engineLog');
   const engineClearBtn = document.getElementById('engineClearBtn');
   const engineLevelSelect = document.getElementById('engineLevel');
   const engineColorSelect = document.getElementById('engineColor');
   const engineOnBtn = document.getElementById('engineOnBtn');
   const engineOffBtn = document.getElementById('engineOffBtn');
-  const resetBtn = document.getElementById('resetBtn');
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
-  const statusEl = document.getElementById('status');
+  const resetBtn = document.getElementById('resetBtn');
 
-  // Log helper
-  function panelLog(msg, type='log'){
-    const line = document.createElement('div');
-    line.textContent = `[${new Date().toLocaleTimeString().slice(0,8)}] ${msg}`;
-    if(type==='warn') line.style.color = '#ffd166';
-    else if(type==='error') line.style.color = '#ff6b6b';
-    else if(type==='engine') line.style.color = '#4ade80';
-    else if(type==='move') line.style.color = '#60a5fa';
-    engineLogEl.appendChild(line);
-    engineLogEl.scrollTop = engineLogEl.scrollHeight;
+  // State
+  let board = null;
+  window.game = new Chess(); // EXPOSED GLOBALLY FOR SPECTATING
+  let engine = null;
+  let engineEnabled = false;
+  let engineColor = 'black';
+  let engineLevel = 8;
+  let isThinking = false;
+  let lastMoveSquares = [];
+
+  // FEN Emitter (for master spectating)
+  window.emitFenToMaster = function() {
+    if (!window.game || !window.firebaseMultiplayer) return;
+    try {
+      const fen = window.game.fen();
+      if (window.firebaseMultiplayer.emitFen) {
+        window.firebaseMultiplayer.emitFen({ fen: fen });
+      }
+    } catch(e) {
+      console.warn('FEN emit failed:', e);
+    }
+  };
+
+  // Helpers
+  function pieceTheme(piece){ 
+    return PIECES_BASE + piece + '.svg'; 
   }
-
-  // Initialize chessboard
-  function initBoard() {
-    const config = {
+  
+  function createBoard(){
+    if(board && typeof board.destroy==='function'){ 
+      try{ board.destroy(); }catch(e){} 
+    }
+    if(!window.game) window.game = new Chess();
+    board = Chessboard('board', {
       draggable: true,
-      position: 'start',
-      onDragStart: onDragStart,
+      position: window.game ? window.game.fen() : 'start',
       onDrop: onDrop,
       onSnapEnd: onSnapEnd,
-      pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png',
+      pieceTheme: pieceTheme,
       orientation: 'white'
-    };
-    
-    board = Chessboard('board', config);
-    updateStatus();
-    panelLog('Chess board initialized');
+    });
+    try{ board.position(window.game.fen()); }catch(e){}
+  }
+  
+  function onSnapEnd(){ 
+    if(board && window.game) board.position(window.game.fen());
   }
 
   // Update game status
@@ -269,34 +207,33 @@
     }
     
     statusEl.innerHTML = status;
-    
-    // Log the move if there was one
-    const moves = game.history();
-    if (moves.length > 0) {
-      const lastMove = moves[moves.length - 1];
-      const player = moves.length % 2 === 1 ? 'White' : 'Black';
-      panelLog(`${player}: ${lastMove}`, 'move');
-    }
   }
 
-  // Drag start handler
-  function onDragStart(source, piece, position, orientation) {
-    // Don't allow dragging if game is over
-    if (game.game_over()) return false;
-    
-    // Don't allow dragging if engine is thinking
-    if (isThinking) return false;
-    
-    // Don't allow dragging if it's engine's turn
-    if (engineEnabled && !isHumanTurn()) return false;
-    
-    // Only allow dragging own pieces
-    if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
-        (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
-      return false;
-    }
-    
-    return true;
+  /* ---- LAST MOVE HIGHLIGHT ---- */
+  function setPersistentLastMove(src, tgt){
+    lastMoveSquares.forEach(sq=>{
+      const el = document.querySelector('.square-'+sq);
+      if(el) el.classList.remove('cb-last-move');
+    });
+    lastMoveSquares = [];
+    ['square-'+src,'square-'+tgt].forEach(cls=>{
+      const el = document.querySelector('.'+cls);
+      if(el) el.classList.add('cb-last-move');
+      lastMoveSquares.push(cls.replace('square-',''));
+    });
+  }
+
+  // Log helper
+  function panelLog(msg, type='log'){
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString().slice(0,8)}] ${msg}`;
+    if(type==='warn') line.style.color = '#ffd166';
+    else if(type==='error') line.style.color = '#ff6b6b';
+    else if(type==='engine') line.style.color = '#4ade80';
+    else if(type==='move') line.style.color = '#60a5fa';
+    engineLogEl.appendChild(line);
+    engineLogEl.scrollTop = engineLogEl.scrollHeight;
+    console.log(msg);
   }
 
   // Check if it's human's turn
@@ -314,42 +251,54 @@
   }
 
   // Drop handler
-  function onDrop(source, target) {
-    // Try the move
-    let move = null;
-    
-    // Check for pawn promotion
-    const piece = game.get(source);
-    if (piece && piece.type === 'p') {
-      if ((piece.color === 'w' && target[1] === '8') || 
-          (piece.color === 'b' && target[1] === '1')) {
-        // Promote to queen by default
-        move = game.move({
-          from: source,
-          to: target,
-          promotion: 'q'
-        });
-      }
-    }
-    
-    // If not a promotion, try regular move
-    if (!move) {
-      move = game.move({
-        from: source,
-        to: target,
-        promotion: 'q'
-      });
-    }
-    
-    // If illegal move, snap back
-    if (move === null) {
-      panelLog('Illegal move: ' + source + '-' + target, 'warn');
+  async function onDrop(source, target) {
+    // Don't allow dragging if game is over
+    if (game.game_over()) {
+      panelLog('Game is over!', 'warn');
       return 'snapback';
     }
     
-    // Update board
+    // Don't allow dragging if engine is thinking
+    if (isThinking) {
+      panelLog('Engine is thinking...', 'warn');
+      return 'snapback';
+    }
+    
+    // Don't allow dragging if it's engine's turn
+    if (engineEnabled && !isHumanTurn()) {
+      panelLog('It\'s engine\'s turn!', 'warn');
+      return 'snapback';
+    }
+
+    // Try the move
+    const legalMoves = game.moves({ verbose: true }) || [];
+    const candidatePromo = legalMoves.find(m => m.from === source && m.to === target && m.promotion);
+    let chosenPromo = null;
+    
+    if (candidatePromo) {
+      // Always promote to queen for simplicity
+      chosenPromo = 'q';
+    }
+
+    const moveObj = { from: source, to: target };
+    if (chosenPromo) moveObj.promotion = chosenPromo;
+
+    const mv = game.move(moveObj);
+    if (mv === null) {
+      panelLog('Illegal move: ' + source + '-' + target, 'warn');
+      return 'snapback';
+    }
+
+    // Update board and status
     board.position(game.fen());
+    setPersistentLastMove(mv.from, mv.to);
     updateStatus();
+    
+    // Log the move
+    panelLog(`Human moved: ${source}-${target}${chosenPromo ? '=' + chosenPromo.toUpperCase() : ''}`, 'move');
+    
+    // Update master board
+    window.emitFenToMaster();
     
     // If engine is enabled and it's engine's turn, ask engine to move
     if (engineEnabled && engine && !game.game_over() && !isHumanTurn()) {
@@ -357,11 +306,6 @@
     }
     
     return 'snap';
-  }
-
-  // Snap end handler
-  function onSnapEnd() {
-    board.position(game.fen());
   }
 
   // Engine message handler
@@ -408,7 +352,7 @@
       move = game.move({
         from: from,
         to: to,
-        promotion: promotion
+        promotion: promotion.toLowerCase()
       });
     } else {
       move = game.move({
@@ -420,8 +364,15 @@
     if (move) {
       // Update board
       board.position(game.fen());
+      setPersistentLastMove(move.from, move.to);
       updateStatus();
       isThinking = false;
+      
+      // Log the move
+      panelLog(`Engine moved: ${from}-${to}${promotion ? '=' + promotion.toUpperCase() : ''}`, 'engine');
+      
+      // Update master board
+      window.emitFenToMaster();
       
       // If engine vs engine and game not over, trigger next move
       if (engineColor === 'both' && !game.game_over()) {
@@ -467,22 +418,26 @@
     }
     
     // Create Web Worker with Stockfish
-    engine = new Worker('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');
-    hookEngine(engine);
-    
-    // Initialize UCI
-    engine.postMessage('uci');
-    engine.postMessage('isready');
-    
-    engineEnabled = true;
-    engineOnBtn.style.display = 'none';
-    engineOffBtn.style.display = 'inline-block';
-    
-    panelLog('Engine started. Skill level: ' + engineLevel);
-    
-    // If engine should move first
-    if (!game.game_over() && !isHumanTurn()) {
-      setTimeout(askEngineToMove, 500);
+    try {
+      engine = new Worker(ENGINE_WORKER_URL);
+      hookEngine(engine);
+      
+      // Initialize UCI
+      engine.postMessage('uci');
+      engine.postMessage('isready');
+      
+      engineEnabled = true;
+      engineOnBtn.style.display = 'none';
+      engineOffBtn.style.display = 'inline-block';
+      
+      panelLog('Engine started. Skill level: ' + engineLevel);
+      
+      // If engine should move first
+      if (!game.game_over() && !isHumanTurn()) {
+        setTimeout(askEngineToMove, 500);
+      }
+    } catch (error) {
+      panelLog('Failed to start engine: ' + error.message, 'error');
     }
   }
 
@@ -505,71 +460,274 @@
     engineOffBtn.style.display = 'none';
   }
 
-  // Event listeners
-  engineOnBtn.addEventListener('click', startEngine);
-  engineOffBtn.addEventListener('click', stopEngine);
-  
-  engineClearBtn.onclick = () => {
-    engineLogEl.innerHTML = '';
-    panelLog('Log cleared');
-  };
-
-  resetBtn.addEventListener('click', () => {
+  // Reset game
+  function resetGame() {
     game = new Chess();
+    window.game = game; // Update global reference
     board.position('start');
     updateStatus();
     panelLog('Game reset to starting position');
     
+    // Clear last move highlights
+    lastMoveSquares.forEach(sq=>{
+      const el = document.querySelector('.square-'+sq);
+      if(el) el.classList.remove('cb-last-move');
+    });
+    lastMoveSquares = [];
+    
     if (engineEnabled && !game.game_over() && !isHumanTurn()) {
       setTimeout(askEngineToMove, 500);
     }
-  });
+    
+    // Update master board
+    window.emitFenToMaster();
+  }
 
-  undoBtn.addEventListener('click', () => {
-    const moves = game.history();
-    if (moves.length > 0) {
+  // Undo move
+  function undoMove() {
+    if (!game || game.history().length === 0) {
+      panelLog('No moves to undo', 'warn');
+      return;
+    }
+    
+    // Undo last move
+    game.undo();
+    
+    // If engine vs human and we just undid engine's move, also undo human's move
+    if (engineEnabled && engineColor !== 'both' && game.history().length > 0) {
       game.undo();
-      if (moves.length > 1 && engineColor !== 'both') {
-        game.undo(); // Undo both player and engine move
-      }
-      board.position(game.fen());
-      updateStatus();
-      panelLog('Undid last move');
     }
-  });
-
-  flipBtn.addEventListener('click', () => {
-    boardFlipped = !boardFlipped;
-    board.orientation(boardFlipped ? 'black' : 'white');
-    panelLog('Board flipped to ' + (boardFlipped ? 'black' : 'white') + ' view');
-  });
-
-  engineColorSelect.addEventListener('change', () => {
-    engineColor = engineColorSelect.value;
-    panelLog(`Engine side: ${engineColor}`);
     
-    if (engineEnabled && !game.game_over() && !isHumanTurn()) {
-      setTimeout(askEngineToMove, 300);
-    }
-  });
+    board.position(game.fen());
+    updateStatus();
+    panelLog('Undid last move');
+    
+    // Clear last move highlights
+    lastMoveSquares.forEach(sq=>{
+      const el = document.querySelector('.square-'+sq);
+      if(el) el.classList.remove('cb-last-move');
+    });
+    lastMoveSquares = [];
+    
+    // Update master board
+    window.emitFenToMaster();
+  }
 
-  engineLevelSelect.addEventListener('change', () => {
-    engineLevel = Number(engineLevelSelect.value);
-    if (engineEnabled) {
-      panelLog(`Engine skill level set to: ${engineLevel}`);
-    }
-  });
+  // Board size controls (from student2.html)
+  function setBoardSize(px){ 
+    if(!px || isNaN(px)) return; 
+    const clamped = Math.max(360, Math.min(1400, Number(px))); 
+    boardWrapper.style.maxWidth = clamped + 'px'; 
+    boardSizeRange.value = clamped; 
+    boardSizeLabel.textContent = clamped + 'px'; 
+    try{ 
+      if(board && typeof board.resize === 'function'){ 
+        board.resize(); 
+      } 
+    }catch(e){} 
+  }
 
-  // Initialize everything when page loads
+  // Event listeners
   $(document).ready(function() {
-    initBoard();
-    panelLog('Ready! Click "Start Engine" to play against Stockfish.');
+    // Initialize board
+    createBoard();
+    updateStatus();
+    panelLog('Chess board initialized. Click "Start Engine" to play vs Stockfish.');
     
-    // Add some sample log entries
-    panelLog('Welcome to Student3 - Chess with Stockfish');
-    panelLog('Select engine side and skill level, then click Start Engine');
+    // Set initial board size
+    const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 760;
+    setBoardSize(initial);
+    
+    // Engine controls
+    engineOnBtn.addEventListener('click', startEngine);
+    engineOffBtn.addEventListener('click', stopEngine);
+    
+    engineClearBtn.addEventListener('click', () => {
+      engineLogEl.innerHTML = '';
+      panelLog('Log cleared');
+    });
+
+    // Game controls
+    resetBtn.addEventListener('click', resetGame);
+    undoBtn.addEventListener('click', undoMove);
+    flipBtn.addEventListener('click', () => { 
+      if(board) board.flip(); 
+    });
+    
+    // Engine settings
+    engineColorSelect.addEventListener('change', () => {
+      engineColor = engineColorSelect.value;
+      panelLog(`Engine side: ${engineColor}`);
+      
+      if (engineEnabled && !game.game_over() && !isHumanTurn()) {
+        setTimeout(askEngineToMove, 300);
+      }
+    });
+
+    engineLevelSelect.addEventListener('change', () => {
+      engineLevel = Number(engineLevelSelect.value);
+      if (engineEnabled) {
+        panelLog(`Engine skill level set to: ${engineLevel}`);
+      }
+    });
+
+    // Board size range
+    boardSizeRange.addEventListener('input', (e) => setBoardSize(e.target.value));
+    
+    // Handle moves from master (same as student2.html)
+    window.onBoardMove = function(payload){
+      try{
+        if(!payload) return;
+        if(typeof payload === 'string'){
+          if(!window.game) window.game = new Chess();
+          if(typeof window.game.load === 'function'){ window.game.load(payload); }
+          if(board) board.position(window.game.fen());
+          updateStatus();
+          return;
+        }
+        if(!window.game) window.game = new Chess();
+        if(payload.move && payload.move.from && payload.move.to){
+          const mvObj = { from: payload.move.from, to: payload.move.to };
+          if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
+          const applied = window.game.move(mvObj);
+          if(applied === null){
+            if(payload.fen && typeof window.game.load === 'function'){
+              window.game.load(payload.fen);
+            }
+          } else {
+            setPersistentLastMove(payload.move.from, payload.move.to);
+          }
+        } else if(payload.fen){
+          if(typeof window.game.load === 'function') window.game.load(payload.fen);
+        }
+        if(board) board.position(window.game.fen());
+        updateStatus();
+      }catch(e){ console.warn('onBoardMove failed', e); }
+    };
   });
 
+})();
+</script>
+
+<!-- FIREBASE - IDENTICAL TO student2.html -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+<script>
+(function(){
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+    authDomain: "iq4u-chess-classroom.firebaseapp.com",
+    databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "iq4u-chess-classroom",
+    storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+    messagingSenderId: "833620718306",
+    appId: "1:833620718306:web:b599bb6936fe0da4bb"
+  };
+  try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
+
+  (function(){
+    const db = firebase.database();
+    const onlineRef = db.ref('online');
+    const gamesRef = db.ref('games');
+
+    let myId = sessionStorage.getItem('iq4u_clientId') ||
+      ('c_'+Math.random().toString(36).slice(2,10));
+    sessionStorage.setItem('iq4u_clientId', myId);
+
+    let myEmail = '';
+    let currentGameId = null;
+    let presenceTimer = null;
+    let isSpectated = false;
+
+    function goOnline(email){
+      myEmail = email || ('anon-'+myId);
+      const node = onlineRef.child(myId);
+      node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP });
+      if(presenceTimer) clearInterval(presenceTimer);
+      presenceTimer = setInterval(
+        ()=>node.update({ ts: firebase.database.ServerValue.TIMESTAMP }),
+        25000
+      );
+    }
+
+    function goOffline(){
+      if(presenceTimer) clearInterval(presenceTimer);
+      onlineRef.child(myId).remove().catch(()=>{});
+      isSpectated = false;
+    }
+
+    /* =========================================================
+       SPECTATE INVITE HANDLER (IDENTICAL TO student2.html)
+       ========================================================= */
+    db.ref('spectateInvites/'+myId).on('child_added', snap=>{
+      const invite = snap.val();
+      if(!invite) return;
+
+      const fromEmail = invite.fromEmail || invite.fromId || 'Master';
+      const accept = confirm(fromEmail + ' wants to spectate your board. Accept?');
+
+      // Get current FEN - using window.game which is now globally available
+      const currentFen = window.game ? window.game.fen() : 
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+      // Send response - IDENTICAL TO student2.html
+      if(invite.fromId){
+        const respPath = `spectateResponses/${invite.fromId}/${myId}`;
+        
+        db.ref(respPath).set({
+          studentId: myId,
+          studentEmail: myEmail || null,
+          accepted: accept,
+          boardId: invite.boardId || null,
+          fen: accept ? currentFen : null,
+          ts: firebase.database.ServerValue.TIMESTAMP
+        }).catch(err=>{
+          console.warn('[STUDENT3] spectate response failed', err);
+        });
+      }
+
+      // If accepted, set flag
+      if (accept) {
+        isSpectated = true;
+      }
+
+      snap.ref.remove().catch(()=>{});
+    });
+
+    /* =========================================================
+       FIREBASE MULTIPLAYER OBJECT (IDENTICAL TO student2.html)
+       ========================================================= */
+    window.firebaseMultiplayer = {
+      emitMove: function(arg){
+        if(!currentGameId) return;
+        db.ref('moves/'+currentGameId).push({
+          payload: arg,
+          by: myId,
+          ts: firebase.database.ServerValue.TIMESTAMP
+        });
+      },
+      emitFen: function(arg){
+        // Write to moves/<myId> path - exactly like student2.html
+        db.ref('moves/'+myId).push({
+          payload: arg,
+          by: myId,
+          ts: firebase.database.ServerValue.TIMESTAMP
+        });
+      },
+      getMyId: ()=>myId,
+      getMyEmail: ()=>myEmail,
+      goOffline: goOffline
+    };
+
+    // Auto-join if username exists in localStorage
+    setTimeout(() => {
+      const saved = localStorage.getItem('username') || localStorage.getItem('email') || '';
+      if(saved){
+        goOnline(saved);
+      }
+    }, 500);
+
+  })();
 })();
 </script>
 
