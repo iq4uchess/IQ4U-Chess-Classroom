@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U Academy — Student Puzzle</title>
+  <title>IQ4U Academy - Play Online</title>
+  <link rel="icon" type="image/png" href="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/favicon-16x16.png" />
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
@@ -34,6 +35,9 @@
     .multiplayer-row select { padding:8px 10px; border-radius:6px; border:1px solid #e6eefc; flex:1; min-width:200px; }
     .status-area { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; margin-top:8px; }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
+    .online-indicator { width:12px; height:12px; border-radius:50%; background:#22c55e; border:2px solid #fff; box-shadow:0 0 0 2px #22c55e40; animation:pulse 2s ease-in-out infinite; }
+    .online-indicator.offline { background:#ef4444; box-shadow:0 0 0 2px #ef444440; }
+    @keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.6; } }
     .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
     .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
     .promote-modal .row{ display:flex; gap:8px; align-items:center; justify-content:center; }
@@ -47,12 +51,18 @@
       #board-wrapper{ max-width:100%; }
       #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
       .resizer .range{ width:140px; }
+      #boardSizeRange { min: 240; max: 600; }
       button { padding:10px 14px; font-size:15px; }
       .controls { flex-wrap:wrap; gap:12px; }
-      .multiplayer-row input[type="text"], .multiplayer-row select { width:160px; }
-      .fen-strip input { width:250px; }
+      .multiplayer-row input[type="text"], .multiplayer-row select { width:200px; }
+      .fen-strip input { width:200px; }
       .header h1 { font-size:24px; }
       .header h1 img { width:32px; height:32px; }
+      .color-picker-group label { font-size:12px; }
+      .color-picker-section { gap:8px; }
+    }
+    @media (min-width:901px){
+      #boardSizeRange { value: 580; }
     }
   </style>
 </head>
@@ -71,7 +81,8 @@
   <div class="header">
     <h1>
       <img src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/apple-touch-icon.png" alt="IQ4U Logo" />
-      IQ4U Academy
+      IQ4U Academy - Play Online
+      <div id="onlineIndicator" class="online-indicator offline" title="Connection status"></div>
     </h1>
   </div>
 
@@ -99,14 +110,6 @@
     </div>
 
     <div class="panel" style="padding:10px;">
-      <div class="fen-strip">
-        <input id="fenInput" type="text" placeholder="Paste FEN here to load position" />
-        <button id="loadFenBtn">Load FEN</button>
-        <button id="resetBoardBtn">Reset</button>
-      </div>
-    </div>
-
-    <div class="panel">
       <div class="multiplayer-section">
         <div class="multiplayer-row">
           <input id="emailInputBottom" type="text" placeholder="Enter your username" />
@@ -122,6 +125,28 @@
           <div id="multiplayStatus" class="muted">Not connected</div>
           <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
         </div>
+      </div>
+    </div>
+
+    <div class="panel" style="padding:10px;">
+      <div class="fen-strip">
+        <input id="fenInput" type="text" placeholder="Paste FEN here to load position" />
+        <button id="loadFenBtn">Load FEN</button>
+        <button id="resetBoardBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="panel" style="padding:10px;">
+      <div class="color-picker-section">
+        <div class="color-picker-group">
+          <label for="lightSquareColor">Light Squares:</label>
+          <input type="color" id="lightSquareColor" value="#f0d9b5" />
+        </div>
+        <div class="color-picker-group">
+          <label for="darkSquareColor">Dark Squares:</label>
+          <input type="color" id="darkSquareColor" value="#b58863" />
+        </div>
+        <button id="resetColorsBtn">Reset Colors</button>
       </div>
     </div>
   </div>
@@ -161,6 +186,10 @@
     const loadFenBtn = document.getElementById('loadFenBtn');
     const resetBoardBtn = document.getElementById('resetBoardBtn');
 
+    const lightSquareColor = document.getElementById('lightSquareColor');
+    const darkSquareColor = document.getElementById('darkSquareColor');
+    const resetColorsBtn = document.getElementById('resetColorsBtn');
+
     const movesList = document.getElementById('movesList');
 
     const emailInputBottom = document.getElementById('emailInputBottom');
@@ -169,6 +198,7 @@
     const challengeBtnBottom = document.getElementById('challengeBtnBottom');
     const multiplayStatus = document.getElementById('multiplayStatus');
     const pairedBubble = document.getElementById('pairedBubble');
+    const onlineIndicator = document.getElementById('onlineIndicator');
 
     let board = null, game = null, currentTheme = FALLBACK_THEME;
     let isSpectator = false, myColor = null, isPaired = false, pairedGameId = null;
@@ -363,14 +393,22 @@
 
       try{
         const saved = (emailInputBottom && emailInputBottom.value) ? emailInputBottom.value.trim() : (localStorage.getItem('username') || localStorage.getItem('email') || '');
-        if(saved){
-          setTimeout(()=>{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.autoJoin) window.firebaseMultiplayer.autoJoin(saved); }, 200);
+        const savedOnline = localStorage.getItem('iq4u_online_email');
+        if(savedOnline || saved){
+          const nameToUse = savedOnline || saved;
+          if(emailInputBottom) emailInputBottom.value = nameToUse;
+          setTimeout(()=>{ 
+            if(window.firebaseMultiplayer && window.firebaseMultiplayer.autoJoin) {
+              window.firebaseMultiplayer.autoJoin(nameToUse);
+            }
+          }, 200);
         }
       }catch(e){}
 
-      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 570;
+      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 580;
       setBoardSize(initial);
       setMsg('Ready', 700);
+      loadSavedColors();
 
       drawOverlay.addEventListener('contextmenu', e => e.preventDefault());
       document.getElementById('board').addEventListener('contextmenu', e => e.preventDefault());
@@ -410,7 +448,6 @@
       }catch(e){}
       isPaired = false; myColor = null; pairedGameId = null; isSpectator = false;
       pairedBubble.style.display='none';
-      multiplayStatus.textContent = 'Not connected';
       createBoard(currentTheme);
     });
 
@@ -451,13 +488,51 @@
       }catch(e){}
     });
 
+    function updateBoardColors(){
+      const lightColor = lightSquareColor.value;
+      const darkColor = darkSquareColor.value;
+      const whiteSquares = document.querySelectorAll('.white-1e1d7');
+      const blackSquares = document.querySelectorAll('.black-3c85d');
+      whiteSquares.forEach(sq => sq.style.backgroundColor = lightColor);
+      blackSquares.forEach(sq => sq.style.backgroundColor = darkColor);
+      try{ localStorage.setItem('iq4u_light_square', lightColor); localStorage.setItem('iq4u_dark_square', darkColor); }catch(e){}
+    }
+
+    lightSquareColor.addEventListener('input', updateBoardColors);
+    darkSquareColor.addEventListener('input', updateBoardColors);
+
+    resetColorsBtn.addEventListener('click', ()=>{
+      lightSquareColor.value = '#f0d9b5';
+      darkSquareColor.value = '#b58863';
+      updateBoardColors();
+      setMsg('Colors reset',900);
+    });
+
+    function loadSavedColors(){
+      try{
+        const savedLight = localStorage.getItem('iq4u_light_square');
+        const savedDark = localStorage.getItem('iq4u_dark_square');
+        if(savedLight) lightSquareColor.value = savedLight;
+        if(savedDark) darkSquareColor.value = savedDark;
+        setTimeout(updateBoardColors, 100);
+      }catch(e){}
+    }
+
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
     
     function setBoardSize(px){ 
       if(!px || isNaN(px)) return; 
-      const clamped = Math.max(240, Math.min(1200, Number(px))); 
+      const isMobile = window.innerWidth <= 900;
+      const min = 240;
+      const max = isMobile ? 600 : 1200;
+      const defaultSize = isMobile ? 270 : 580;
+      let targetSize = Number(px);
+      if(targetSize < min || targetSize > max) targetSize = defaultSize;
+      const clamped = Math.max(min, Math.min(max, targetSize)); 
       boardWrapper.style.maxWidth = clamped + 'px'; 
       boardSizeRange.value = clamped; 
+      boardSizeRange.min = min;
+      boardSizeRange.max = max;
       boardSizeLabel.textContent = clamped + 'px'; 
       try{ 
         if(board && typeof board.resize === 'function'){ 
@@ -467,8 +542,24 @@
         } 
       }catch(e){ 
         createBoard(currentTheme); 
-      } 
+      }
+      setTimeout(()=>{
+        updateBoardColors();
+      }, 50);
     }
+
+    window.addEventListener('resize', ()=>{
+      const isMobile = window.innerWidth <= 900;
+      const currentSize = parseInt(boardSizeRange.value);
+      if(isMobile && currentSize > 600){
+        setBoardSize(270);
+      } else if(!isMobile && currentSize < 240){
+        setBoardSize(580);
+      } else {
+        boardSizeRange.min = 240;
+        boardSizeRange.max = isMobile ? 600 : 1200;
+      }
+    });
   })();
   </script>
 
@@ -500,22 +591,51 @@
       let myEmail = '';
       let currentGameId = null;
       let presenceTimer = null;
+      let isOnline = false;
+
+      function updateOnlineIndicator(online){
+        if(onlineIndicator){
+          if(online){
+            onlineIndicator.classList.remove('offline');
+            onlineIndicator.title = 'Online';
+          } else {
+            onlineIndicator.classList.add('offline');
+            onlineIndicator.title = 'Offline';
+          }
+        }
+      }
 
       function goOnline(email){
         myEmail = email || ('anon-'+myId);
         const node = onlineRef.child(myId);
         node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
-          .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
-          .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
+          .then(()=>{ 
+            document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail;
+            isOnline = true;
+            updateOnlineIndicator(true);
+            try{ localStorage.setItem('iq4u_online_email', myEmail); }catch(e){}
+          })
+          .catch(()=>{ 
+            document.getElementById('multiplayStatus').textContent = 'Presence write error';
+            updateOnlineIndicator(false);
+          });
 
         if(presenceTimer) clearInterval(presenceTimer);
-        presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
+        presenceTimer = setInterval(()=> {
+          node.update({ ts: firebase.database.ServerValue.TIMESTAMP })
+            .catch(()=>{ isOnline = false; updateOnlineIndicator(false); });
+        }, 25000);
+
+        node.onDisconnect().remove();
       }
 
       function goOffline(){ 
         if(presenceTimer) clearInterval(presenceTimer); 
         onlineRef.child(myId).remove().catch(()=>{}); 
-        document.getElementById('multiplayStatus').textContent = 'Not connected'; 
+        document.getElementById('multiplayStatus').textContent = 'Not connected';
+        isOnline = false;
+        updateOnlineIndicator(false);
+        try{ localStorage.removeItem('iq4u_online_email'); }catch(e){}
       }
 
       onlineRef.on('value', snap=>{
@@ -702,6 +822,17 @@
         goOnline(email);
       });
 
+      window.addEventListener('online', ()=>{ 
+        const savedEmail = localStorage.getItem('iq4u_online_email');
+        if(savedEmail && !isOnline) goOnline(savedEmail); 
+      });
+      
+      window.addEventListener('offline', ()=>{ 
+        isOnline = false; 
+        updateOnlineIndicator(false);
+        document.getElementById('multiplayStatus').textContent = 'Connection lost';
+      });
+
       window.firebaseMultiplayer = {
         emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
         emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
@@ -719,7 +850,11 @@
         sendChallengeTo(target);
       });
 
-      window.addEventListener('beforeunload', ()=>{});
+      window.addEventListener('beforeunload', ()=>{
+        if(isOnline && myEmail){
+          try{ localStorage.setItem('iq4u_online_email', myEmail); }catch(e){}
+        }
+      });
     })();
 
   })();
