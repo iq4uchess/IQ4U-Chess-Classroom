@@ -39,6 +39,22 @@
     .stats { margin-top:10px; display:flex; gap:16px; align-items:center; justify-content:flex-end; font-weight:600; color:#111; }
     .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
     .puzzle-meta { margin-left:8px; font-weight:600; color:#222; }
+    /* Added for rating inputs */
+    .rating-input {
+      width: 80px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #e6eefc;
+      font-size: 13px;
+      font-family: inherit;
+      background: #fff;
+      text-align: center;
+    }
+    .rating-input:focus {
+      outline: none;
+      border-color: #0f172a;
+      box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1);
+    }
   </style>
 </head>
 
@@ -85,22 +101,10 @@
         <select id="tacticSelect"><option>Loading tactics…</option></select>
 
         <label class="small">Min rating:</label>
-        <select id="ratingMin">
-          <option>0</option>
-          <option>600</option>
-          <option selected>800</option>
-          <option>1000</option>
-          <option>1200</option>
-        </select>
+        <input id="ratingMin" type="number" min="0" max="3000" step="100" value="800" class="rating-input">
 
         <label class="small">Max rating:</label>
-        <select id="ratingMax">
-          <option selected>99999</option>
-          <option>1000</option>
-          <option>1200</option>
-          <option>1400</option>
-          <option>1600</option>
-        </select>
+        <input id="ratingMax" type="number" min="0" max="99999" step="100" value="99999" class="rating-input">
 
         <button id="loadPuzzleBtn">Load (first)</button>
         <button id="randomPuzzleBtn">Random</button>
