@@ -988,35 +988,41 @@
         const invite = snap.val();
         if(!invite) return;
         
-        const accept = confirm(`${invite.fromEmail || 'A player'} invited you to spectate their game. Accept?`);
+        const accept = confirm(`${invite.fromEmail || 'A player'} invited you to spectate your board. Accept?`);
         
         if(accept){
+          // Get current board FEN to send to master
+          const currentFen = (window.game && typeof window.game.fen === 'function') 
+            ? window.game.fen() 
+            : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+          
           // Accept the invitation
-          currentGameId = invite.gameId;
-          watchMoves(currentGameId);
           document.getElementById('pairedBubble').style.display='inline-block';
-          document.getElementById('multiplayStatus').textContent = 'Spectating game';
+          document.getElementById('multiplayStatus').textContent = 'Master is spectating';
           
-          // Notify master of acceptance
-          db.ref('spectateAccepted/'+invite.fromId).push({
+          // Send acceptance response with current FEN to master
+          db.ref('spectateResponses/'+invite.fromId).push({
             studentId: myId,
+            fromId: myId,
             studentEmail: myEmail,
-            gameId: invite.gameId,
+            boardId: invite.boardId || null,
+            accepted: true,
+            fen: currentFen,
             ts: firebase.database.ServerValue.TIMESTAMP
-          }).catch(()=>{});
+          }).then(()=>{
+            console.log('Sent spectate acceptance with FEN to master:', currentFen);
+          }).catch((err)=>{
+            console.error('Failed to send spectate acceptance:', err);
+          });
           
-          // Load the current position if provided
-          if(invite.fen){
-            try{
-              if(window.game) window.game.load(invite.fen);
-              if(window.board) window.board.position(invite.fen);
-            }catch(e){ console.warn('Failed to load spectate position', e); }
-          }
         } else {
           // Decline the invitation
-          db.ref('spectateDeclined/'+invite.fromId).push({
+          db.ref('spectateResponses/'+invite.fromId).push({
             studentId: myId,
+            fromId: myId,
             studentEmail: myEmail,
+            boardId: invite.boardId || null,
+            accepted: false,
             ts: firebase.database.ServerValue.TIMESTAMP
           }).catch(()=>{});
         }
