@@ -7,229 +7,1076 @@
   <title>IQ4U — Student Puzzle (student2)</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
-
   <style>
     html,body{ overscroll-behavior-y: contain; height:100%; }
-    body{
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-      margin:16px;
-      background:#f6f7fb;
-      color:#111;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:980px; width:100%; box-sizing:border-box; }
+    .small{ font-size:13px; color:#555; }
+    .muted{ color:#666; font-size:13px; }
+    .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
+    #board-wrapper{ width:100%; max-width:760px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; padding:16px; }
+    #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:88vh; min-width:520px; min-height:520px; box-shadow: 0 6px 18px rgba(2,6,23,0.04); border-radius:8px; padding:6px; }
+    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
+    .resizer .range{ width:320px; }
+    .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
+    textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
+    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:180px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
+    .notation .move.current { background:#0f172a; color:#fff; }
+    .tactic-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .solution-controls { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    .solution-controls .small { margin-left:6px; margin-right:2px; }
+    @media (max-width:900px){
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
+      .resizer .range{ width:200px; }
     }
-    button{
-      padding:8px 12px;
-      border:none;
-      background:#0f172a;
-      color:#fff;
-      border-radius:8px;
-      cursor:pointer;
-    }
-    .panel{
-      background:#fff;
-      padding:12px;
-      border-radius:10px;
-      box-shadow:0 6px 18px rgba(2,6,23,.04);
-      max-width:980px;
-      width:100%;
-      box-sizing:border-box;
-    }
-    .controls{
-      display:flex;
-      gap:8px;
-      align-items:center;
-    }
-    #board-wrapper{
-      width:100%;
-      max-width:760px;
-      margin:12px auto;
-      position:relative;
-    }
-    #board{
-      width:100%;
-      aspect-ratio:1/1;
-      background:#fff;
-    }
-    .notation{
-      margin-top:12px;
-      padding:8px;
-      border-radius:6px;
-      border:1px solid #eef2ff;
-      background:#fbfdff;
-      min-height:44px;
-      max-height:180px;
-      overflow:auto;
-      font-family:monospace;
-      font-size:13px;
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-    }
-    .cb-last-move{
-      outline:3px solid rgba(255,200,0,.95);
-      outline-offset:-3px;
-    }
-    .logout-btn{ background:#dc2626; }
+    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
+    .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
+    .logout-btn { background:#dc2626; }
+    .stats { margin-top:10px; display:flex; gap:16px; align-items:center; justify-content:flex-end; font-weight:600; color:#111; }
+    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
+    .puzzle-meta { margin-left:8px; font-weight:600; color:#222; }
   </style>
 </head>
-
 <body>
 
-<!-- ACCESS CHECK -->
-<script>
-(function(){
-  const role = localStorage.getItem('role');
-  if(role !== 'student2'){
-    location.href = 'index.html';
-  }
-})();
-</script>
+  <!-- ACCESS CHECK: strict for student2 only -->
+  <script>
+    (function(){
+      const allowedRoles = ['student2'];
+      const role = localStorage.getItem('role');
+      if(!role || allowedRoles.indexOf(role) === -1){
+        try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
+      }
+    })();
+  </script>
 
-<div class="panel">
-  <div class="controls">
-    <button id="undoBtn">Undo</button>
-    <button id="flipBtn">Flip</button>
-    <button id="resignBtn" style="background:#8b0f0f;">Resign</button>
-    <button id="logoutBtn" class="logout-btn" style="margin-left:auto;">Logout</button>
+  <div class="panel">
+    <div class="controls" aria-hidden="false">
+      <button id="undoBtn">Undo</button>
+      <button id="flipBtn">Flip</button>
+      <button id="resignBtn" title="Resign / Reset" style="background:#8b0f0f;">Resign</button>
+      <button id="logoutBtn" class="logout-btn" style="margin-left:auto;">Logout</button>
+    </div>
+
+    <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
+      <input id="boardSizeRange" name="board-size" class="range" type="range" min="360" max="1400" step="10" value="760" aria-label="Board size">
+      <small id="boardSizeLabel">760px</small>
+    </div>
+
+    <div id="board-wrapper" style="margin-top:12px;">
+      <div id="board" aria-label="Chessboard container"></div>
+      <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+    </div>
+
+    <div id="msg" class="info" aria-live="polite">Ready</div>
+
+    <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
   </div>
 
-  <div id="board-wrapper">
-    <div id="board"></div>
+  <!-- Puzzle controls -->
+  <div class="panel" style="margin-top:18px;">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div class="tactic-row" aria-label="Puzzle controls">
+        <label class="small">Tactic:</label>
+        <select id="tacticSelect"><option>Loading tactics…</option></select>
+
+        <label class="small">Min rating:</label>
+        <select id="ratingMin"><option>0</option><option>600</option><option selected>800</option><option>1000</option><option>1200</option></select>
+
+        <label class="small">Max rating:</label>
+        <select id="ratingMax"><option selected>99999</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option></select>
+
+        <button id="loadPuzzleBtn">Load (first)</button>
+        <button id="randomPuzzleBtn">Random</button>
+      </div>
+
+      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <button id="prevPuzzleBtn">Previous</button>
+        <button id="nextPuzzleBtn">Next</button>
+        <div class="puzzle-meta" id="currentPuzzleId">No puzzle</div>
+      </div>
+    </div>
+
+    <div class="solution-controls" id="solutionControls" style="margin-top:12px;">
+      <label><input type="checkbox" id="autoOpponent" checked /> <span class="small">Auto opponent moves</span></label>
+      <button id="showSolutionBtn">Show Solution</button>
+      <button id="resetSolutionBtn">Reset Solution</button>
+      <label class="small">Speed:</label>
+      <select id="solutionSpeed"><option value="1200">1.2s</option><option value="800">0.8s</option><option value="500" selected>0.5s</option><option value="250">0.25s</option></select>
+      <div id="solutionStatus" class="muted small" style="margin-left:auto;">No solution loaded</div>
+    </div>
+
+    <div class="stats" id="statsBar">
+      <div>Correct: <span id="statCorrect">0</span></div>
+      <div>Incorrect: <span id="statIncorrect">0</span></div>
+      <div>Total attempts: <span id="statAttempts">0</span></div>
+      <div>Puzzles: <span id="statPuzzles">0</span></div>
+      <div>Avg rating: <span id="statAvgRating">0</span></div>
+    </div>
   </div>
 
-  <div id="msg">Ready</div>
-  <div id="movesList" class="notation">No moves yet.</div>
-</div>
+  <div class="panel multiplayer-panel" style="margin-top:18px;" id="multiplayerPanel">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label for="emailInputBottom" class="small">Your username:</label>
+      <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
+      <button id="joinBtnBottom">Join Online</button>
+    </div>
 
-<div class="panel" style="margin-top:12px;">
-  <label>Your username:</label>
-  <input id="emailInputBottom" />
-  <button id="joinBtnBottom">Join Online</button>
-  <span id="multiplayStatus">Not connected</span>
-</div>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
+      <div id="multiplayStatus" class="muted">Not connected</div>
+      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
+    </div>
+  </div>
 
-<script>
-/* ================= CHESS CORE ================= */
+  <div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
+    <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
+    <div class="row">
+      <button data-piece="q">Q</button>
+      <button data-piece="r">R</button>
+      <button data-piece="b">B</button>
+      <button data-piece="n">N</button>
+    </div>
+  </div>
 
-let board, game;
+  <!-- libs -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
-function initBoard(){
-  game = new Chess();
-  window.game = game; // ★ REQUIRED FOR SPECTATE
-  board = Chessboard('board',{
-    draggable:true,
-    position:'start',
-    onDrop:onDrop,
-    onSnapEnd:()=>board.position(game.fen())
-  });
-}
+  <script>
+  (function(){
+    // Config
+    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+    const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
 
-function refreshNotation(){
-  const el=document.getElementById('movesList');
-  const h=game.history();
-  if(!h.length){
-    el.textContent='No moves yet.';
-    return;
-  }
-  el.innerHTML='';
-  for(let i=0;i<h.length;i+=2){
-    el.innerHTML+=`<div>${Math.floor(i/2)+1}. ${h[i]} ${h[i+1]||''}</div>`;
-  }
-}
+    // DOM
+    const boardEl = document.getElementById('board');
+    const boardWrapper = document.getElementById('board-wrapper');
+    const drawOverlay = document.getElementById('draw-overlay');
+    const boardSizeRange = document.getElementById('boardSizeRange');
+    const boardSizeLabel = document.getElementById('boardSizeLabel');
+    const msgEl = document.getElementById('msg');
+    const movesList = document.getElementById('movesList');
 
-function onDrop(from,to){
-  const mv=game.move({from,to,promotion:'q'});
-  if(!mv) return 'snapback';
-  board.position(game.fen());
-  refreshNotation();
-  emitSpectateFen(); // ★ LIVE STREAM
-}
+    const tacticSelect = document.getElementById('tacticSelect');
+    const ratingMin = document.getElementById('ratingMin');
+    const ratingMax = document.getElementById('ratingMax');
+    const loadPuzzleBtn = document.getElementById('loadPuzzleBtn');
+    const randomPuzzleBtn = document.getElementById('randomPuzzleBtn');
+    const prevPuzzleBtn = document.getElementById('prevPuzzleBtn');
+    const nextPuzzleBtn = document.getElementById('nextPuzzleBtn');
+    const currentPuzzleIdEl = document.getElementById('currentPuzzleId');
 
-initBoard();
-</script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    const autoOpponent = document.getElementById('autoOpponent');
+    const showSolutionBtn = document.getElementById('showSolutionBtn');
+    const resetSolutionBtn = document.getElementById('resetSolutionBtn');
+    const solutionSpeed = document.getElementById('solutionSpeed');
+    const solutionStatus = document.getElementById('solutionStatus');
 
-<script>
-firebase.initializeApp({
-  apiKey:"AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
-  authDomain:"iq4u-chess-classroom.firebaseapp.com",
-  databaseURL:"https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app"
-});
+    const statCorrectEl = document.getElementById('statCorrect');
+    const statIncorrectEl = document.getElementById('statIncorrect');
+    const statAttemptsEl = document.getElementById('statAttempts');
+    const statPuzzlesEl = document.getElementById('statPuzzles');
+    const statAvgRatingEl = document.getElementById('statAvgRating');
 
-const db=firebase.database();
-let myId=sessionStorage.getItem('iq4u_clientId')||('c_'+Math.random().toString(36).slice(2));
-sessionStorage.setItem('iq4u_clientId',myId);
-let myEmail='';
+    const undoBtn = document.getElementById('undoBtn');
+    const flipBtn = document.getElementById('flipBtn');
+    const resignBtn = document.getElementById('resignBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
 
-function emitSpectateFen(){
-  db.ref('spectateFen/'+myId).set(game.fen());
-}
+    const emailInputBottom = document.getElementById('emailInputBottom');
+    const joinBtnBottom = document.getElementById('joinBtnBottom');
+    const multiplayStatus = document.getElementById('multiplayStatus');
+    const pairedBubble = document.getElementById('pairedBubble');
 
-function goOnline(email){
-  myEmail=email;
-  db.ref('online/'+myId).set({
-    email, role:'student',
-    ts:firebase.database.ServerValue.TIMESTAMP
-  });
-  setInterval(()=>db.ref('online/'+myId).update({
-    ts:firebase.database.ServerValue.TIMESTAMP
-  }),25000);
-  document.getElementById('multiplayStatus').textContent='Connected as '+email;
-}
+    // State
+    let board = null;
+    let game = null;
+    let currentTheme = null;
+    let currentCandidateList = [];
+    let currentCandidateIndex = -1;
 
-document.getElementById('joinBtnBottom').onclick=()=>{
-  const e=document.getElementById('emailInputBottom').value.trim();
-  if(e) goOnline(e);
-};
-/* ======== SPECTATE INVITES ======== */
-db.ref('spectateInvites/'+myId).on('child_added',snap=>{
-  const inv=snap.val();
-  if(!inv) return;
+    // Solution state
+    let solutionMoves = [];
+    let solutionMoveTypes = [];
+    let solutionIndex = 0;
+    let initialFen = null;
+    let solutionTimer = null;
+    let initialSideToMove = null;
+    let solutionDisplayed = false; // NEW: track if solution is being displayed
 
-  const ok=confirm((inv.fromEmail||'Master')+' wants to spectate. Accept?');
+    // Stats
+    let statCorrect = 0;
+    let statIncorrect = 0;
+    let statAttempts = 0;
+    let statPuzzles = 0;
+    let statRatingSum = 0;
 
-  if(inv.fromId){
-    db.ref(`spectateResponses/${inv.fromId}/${myId}`).set({
-      studentId:myId,
-      studentEmail:myEmail,
-      accepted:ok,
-      boardId:inv.boardId||null,
-      fen:ok?game.fen():null,
-      ts:firebase.database.ServerValue.TIMESTAMP
+    // Helpers
+    function setMsg(t,ms=0){ if(msgEl) msgEl.textContent = t||''; if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms); }
+    function pieceTheme(piece){ return PIECES_BASE + piece + '.svg'; }
+    function ensureChessLoaded(){ return new Promise(resolve=>{ if(typeof Chess !== 'undefined') return resolve(); const start = Date.now(); (function check(){ if(typeof Chess !== 'undefined') return resolve(); if(Date.now()-start>3000) return resolve(); setTimeout(check,50); })(); }); }
+
+    // Create board preserving original behavior
+    function createBoard(){
+      if(board && typeof board.destroy==='function'){ try{ board.destroy(); }catch(e){} }
+      if(!game) game = new Chess();
+      board = Chessboard('board', {
+        draggable: true,
+        position: game ? game.fen() : 'start',
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: pieceTheme
+      });
+      try{ board.position(game.fen()); }catch(e){}
+      updateOverlaySize();
+    }
+    function onSnapEnd(){ if(board && game) board.position(game.fen()); }
+
+    // promotion modal
+    const promoteModal = document.getElementById('promoteModal');
+    let pendingPromo = null;
+    function showPromotionDialog(){ promoteModal.style.display='block'; }
+    function hidePromotionDialog(){ promoteModal.style.display='none'; }
+    promoteModal.addEventListener('click', function(e){
+      if(e.target && e.target.dataset && e.target.dataset.piece){
+        const p = e.target.dataset.piece;
+        if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(p);
+        pendingPromo = null;
+        hidePromotionDialog();
+      }
     });
-    if(ok) emitSpectateFen(); // ★ INITIAL + LIVE
-  }
-  snap.ref.remove();
-});
 
-/* ======== CONTROLS ======== */
-undoBtn.onclick=()=>{
-  if(game.undo()){
-    board.position(game.fen());
-    refreshNotation();
-    emitSpectateFen();
-  }
-};
-resignBtn.onclick=()=>{
-  game.reset();
-  board.position('start');
-  refreshNotation();
-  emitSpectateFen();
-};
-flipBtn.onclick=()=>board.flip();
-logoutBtn.onclick=()=>{
-  db.ref('online/'+myId).remove();
-  localStorage.clear();
-  location.href='index.html';
-};
-</script>
+    // persistent last-move highlight
+    let lastMoveSquares = [];
+    function setPersistentLastMove(src, tgt){
+      lastMoveSquares.forEach(sq => {
+        const el = document.querySelector('.square-' + sq);
+        if(el) el.classList.remove('cb-last-move');
+      });
+      lastMoveSquares = [];
+      ['square-' + src, 'square-' + tgt].forEach(cls => {
+        const el = document.querySelector('.' + cls);
+        if(el) el.classList.add('cb-last-move');
+        lastMoveSquares.push(cls.replace('square-',''));
+      });
+    }
 
+    // notation refresh - UPDATED to support solution display mode
+    function refreshNotation(highlightIndex=-1){
+      try{
+        if(!movesList) return;
+        
+        // NEW: If solution is being displayed, show solutionMoves in SAN format
+        if(solutionDisplayed && solutionMoves && solutionMoves.length > 0){
+          const sanMoves = convertToSAN(solutionMoves, solutionMoveTypes);
+          displayMovesInNotation(sanMoves, highlightIndex);
+          return;
+        }
+        
+        // Otherwise use game history
+        const hist = game && typeof game.history === 'function' ? game.history() : [];
+        const arr = hist.slice();
+        if(arr.length===0){ movesList.innerHTML='No moves yet.'; return; }
+        displayMovesInNotation(arr, highlightIndex);
+      }catch(e){ console.warn(e); }
+    }
+
+    // NEW: Helper to display moves in the notation strip
+    function displayMovesInNotation(movesArray, highlightIndex=-1){
+      if(!movesList) return;
+      if(!movesArray || movesArray.length === 0){
+        movesList.innerHTML = 'No moves yet.';
+        return;
+      }
+      
+      movesList.innerHTML = '';
+      for(let i=0; i<movesArray.length; i+=2){
+        const no = Math.floor(i/2)+1;
+        const w = movesArray[i]||'';
+        const b = movesArray[i+1]||'';
+        const div = document.createElement('div');
+        div.className = 'move';
+        const wspan = document.createElement('span'); 
+        wspan.textContent = w; 
+        wspan.dataset.idx = i;
+        if(i===highlightIndex) wspan.classList.add('current');
+        const bspan = document.createElement('span'); 
+        bspan.textContent = b; 
+        bspan.dataset.idx = i+1;
+        if((i+1)===highlightIndex) bspan.classList.add('current');
+        div.innerHTML = `<strong>${no}.</strong>&nbsp;`;
+        div.appendChild(wspan);
+        if(b){ 
+          div.appendChild(document.createTextNode('\u00A0')); 
+          div.appendChild(bspan); 
+        }
+        movesList.appendChild(div);
+      }
+      if(highlightIndex>=0){
+        const sel = movesList.querySelector(`[data-idx="${highlightIndex}"]`);
+        if(sel) sel.scrollIntoView({behavior:'smooth', block:'nearest', inline:'nearest'});
+      }
+    }
+
+    // NEW: Convert solution moves to SAN format for display
+    function convertToSAN(tokens, types){
+      if(!tokens || !types || tokens.length !== types.length) return [];
+      if(!initialFen) return tokens; // fallback
+      
+      const sanArray = [];
+      try{
+        const tempGame = new Chess(initialFen);
+        for(let i=0; i<tokens.length; i++){
+          const token = tokens[i];
+          const type = types[i];
+          
+          if(type === 'san'){
+            // Already SAN, just add it
+            sanArray.push(token);
+            tempGame.move(token, {sloppy: true});
+          } else {
+            // Convert coordinate to SAN
+            const m = token.trim();
+            const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+            if(promMatch){
+              const from = promMatch[1], to = promMatch[2];
+              const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+              const mv = tempGame.move({ from, to, promotion });
+              if(mv){
+                sanArray.push(mv.san);
+              } else {
+                sanArray.push(token); // fallback
+              }
+            } else {
+              sanArray.push(token); // fallback
+            }
+          }
+        }
+      }catch(e){
+        console.warn('convertToSAN error', e);
+        return tokens; // fallback to original
+      }
+      return sanArray;
+    }
+
+    // apply SAN or coordinate move on real game and update UI
+    function applyMoveTokenOnReal(token, type){
+      try{
+        if(!game) return null;
+        if(type === 'san'){
+          const mv = game.move(token, { sloppy:true });
+          if(mv === null) return null;
+          if(board) board.position(game.fen());
+          setPersistentLastMove(mv.from, mv.to);
+          refreshNotation(solutionIndex-1);
+          return mv;
+        } else {
+          const m = token.trim();
+          const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+          if(!promMatch) return null;
+          const from = promMatch[1], to = promMatch[2];
+          const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+          const mv = game.move({ from, to, promotion });
+          if(mv === null) return null;
+          if(board) board.position(game.fen());
+          setPersistentLastMove(mv.from, mv.to);
+          refreshNotation(solutionIndex-1);
+          return mv;
+        }
+      }catch(e){ console.warn('applyMoveTokenOnReal error', e); return null; }
+    }
+
+    // compare student's actual move to expected token using a fenBefore snapshot
+    function expectedMatchesActual_givenFen(expectedToken, expectedType, fenBefore, actualMove){
+      try{
+        const temp = new Chess(fenBefore);
+        let applied = null;
+        if(expectedType === 'san'){
+          applied = temp.move(expectedToken, { sloppy:true });
+        } else {
+          const m = expectedToken.trim();
+          const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+          if(!promMatch) return false;
+          const from = promMatch[1], to = promMatch[2];
+          const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+          applied = temp.move({ from, to, promotion });
+        }
+        if(!applied) return false;
+        return (applied.from === actualMove.from && applied.to === actualMove.to && ((applied.promotion||null) === (actualMove.promotion||null)));
+      }catch(e){ console.warn('expectedMatchesActual_givenFen error', e); return false; }
+    }
+
+    function sanitizeSanToken(s){ if(!s) return ''; return s.toString().replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\d+\.+/g,'').replace(/[+#?!]*$/g,'').replace(/\s+/g,'').trim(); }
+
+    function clearSolutionTimer(){ if(solutionTimer){ clearTimeout(solutionTimer); solutionTimer = null; } }
+
+    function autoPlayOpponentNext(){
+      clearSolutionTimer();
+      if(!solutionMoves || solutionMoves.length===0) return;
+      if(!autoOpponent.checked) { solutionStatus.textContent = 'Auto opponent disabled'; return; }
+
+      const delay = parseInt(solutionSpeed.value,10) || 500;
+      function step(){
+        if(solutionIndex >= solutionMoves.length){
+          onSolutionFinished();
+          return;
+        }
+        const isOpponentMove = (solutionIndex % 2 === 0);
+        if(!isOpponentMove){
+          solutionStatus.textContent = 'Your turn';
+          return;
+        }
+        const token = solutionMoves[solutionIndex];
+        const type = solutionMoveTypes[solutionIndex];
+        const applied = applyMoveTokenOnReal(token, type);
+        if(!applied){
+          console.error('Auto-opponent failed to apply token:', token, 'type:', type, 'at solutionIndex:', solutionIndex, 'candidateIndex:', currentCandidateIndex, 'fenBefore:', game.fen());
+          solutionStatus.textContent = 'Failed to apply opponent move: ' + token;
+          return;
+        }
+        solutionIndex++;
+        solutionStatus.textContent = `Opponent played (${solutionIndex}/${solutionMoves.length})`;
+        if(solutionIndex < solutionMoves.length && (solutionIndex % 2 === 0)){
+          solutionTimer = setTimeout(step, delay);
+        } else {
+          if(solutionIndex >= solutionMoves.length) onSolutionFinished(); else solutionStatus.textContent = 'Your turn';
+        }
+      }
+      solutionTimer = setTimeout(step, 120);
+    }
+
+    function onSolutionFinished(){
+      try{
+        clearSolutionTimer();
+        console.info('Solution finished for candidateIndex=', currentCandidateIndex);
+
+        if(Array.isArray(currentCandidateList) && currentCandidateIndex >= 0 && currentCandidateIndex < currentCandidateList.length - 1){
+          const nextIndex = currentCandidateIndex + 1;
+          solutionStatus.textContent = 'Loading next puzzle...';
+          try{
+            loadPuzzleByCandidateIndex(nextIndex);
+            console.info('Loading next puzzle index=', nextIndex);
+          }catch(loadErr){
+            console.error('Failed to load next puzzle (first try):', loadErr);
+            setTimeout(()=>{
+              try{
+                loadPuzzleByCandidateIndex(nextIndex);
+                console.info('Retry: loaded next puzzle index=', nextIndex);
+              }catch(retryErr){
+                console.error('Retry also failed to load next puzzle:', retryErr);
+                solutionStatus.textContent = 'Next puzzle failed to load';
+              }
+            }, 300);
+          }
+          return;
+        }
+
+        solutionStatus.textContent = 'Solution complete (no more puzzles)';
+        console.info('No subsequent puzzle to load (candidateIndex at end).');
+      }catch(e){
+        console.error('onSolutionFinished error', e);
+        solutionStatus.textContent = 'Solution finished (error)';
+      }
+    }
+
+    async function onDrop(source, target){
+      if(!game) return 'snapback';
+
+      const legal = game.moves({ verbose:true }) || [];
+      const candidatePromo = legal.find(m => m.from === source && m.to === target && m.promotion);
+      let chosenPromo = null;
+      if(candidatePromo){
+        chosenPromo = await new Promise(resolve => { pendingPromo = { from:source, to:target, resolve }; showPromotionDialog(); });
+        pendingPromo = null;
+        if(!chosenPromo) chosenPromo = 'q';
+      }
+
+      const fenBefore = game.fen();
+
+      const moveObj = { from: source, to: target };
+      if(chosenPromo) moveObj.promotion = chosenPromo;
+
+      const mv = game.move(moveObj);
+      if(mv === null){ setMsg('Illegal move',900); return 'snapback'; }
+
+      if(board) board.position(game.fen());
+      setPersistentLastMove(mv.from, mv.to);
+      
+      // NEW: Clear solution display mode when student makes a move
+      solutionDisplayed = false;
+      refreshNotation(solutionIndex);
+
+      if(solutionMoves && solutionMoves.length > 0 && solutionIndex < solutionMoves.length){
+        const expectedIndex = solutionIndex;
+        const expectedToken = solutionMoves[expectedIndex];
+        const expectedType = solutionMoveTypes[expectedIndex];
+        const expectedIsStudentMove = (expectedIndex % 2 === 1);
+        if(expectedIsStudentMove){
+          statAttempts++;
+          const matches = expectedMatchesActual_givenFen(expectedToken, expectedType, fenBefore, mv);
+          if(matches){
+            statCorrect++;
+            updateStatsDisplay();
+            solutionIndex++;
+            solutionStatus.textContent = 'Correct';
+            if(solutionIndex < solutionMoves.length && solutionIndex % 2 === 0 && autoOpponent.checked){
+              setTimeout(()=> autoPlayOpponentNext(), parseInt(solutionSpeed.value,10) || 500);
+            } else if(solutionIndex >= solutionMoves.length){
+              onSolutionFinished();
+            } else {
+              solutionStatus.textContent = 'Your turn';
+            }
+          } else {
+            statIncorrect++;
+            updateStatsDisplay();
+            setMsg('Incorrect — try again', 1200);
+            const undone = game.undo();
+            if(board) board.position(game.fen());
+          }
+        }
+      }
+
+      try{
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){
+          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
+        }
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+          window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
+        }
+      }catch(e){ console.warn('emit error', e); }
+
+      return;
+    }
+
+    // CSV parsing helpers
+    function normalizeHeaderCell(h){ return (h||'').toString().trim().toLowerCase().replace(/\s+/g,''); }
+    function parseCsvText(csvText){
+      csvText = csvText.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+      const lines = csvText.split('\n');
+      let headerLineIdx = 0;
+      while(headerLineIdx < lines.length && lines[headerLineIdx].trim() === '') headerLineIdx++;
+      if(headerLineIdx >= lines.length) return [];
+      const headerRaw = lines[headerLineIdx];
+      const parseLineToCols = (line) => {
+        const out = [];
+        let cur = '', inQ=false;
+        for(let i=0;i<line.length;i++){
+          const ch = line[i];
+          if(ch === '"'){
+            if(inQ && line[i+1] === '"'){ cur += '"'; i++; continue; }
+            inQ = !inQ; continue;
+          }
+          if(ch === ',' && !inQ){ out.push(cur); cur=''; continue; }
+          cur += ch;
+        }
+        out.push(cur);
+        return out;
+      };
+      const headerCols = parseLineToCols(headerRaw).map(normalizeHeaderCell);
+      const rows = [];
+      for(let i = headerLineIdx + 1; i < lines.length; i++){
+        const line = lines[i];
+        if(line.trim() === '') continue;
+        const vals = parseLineToCols(line);
+        while(vals.length < headerCols.length) vals.push('');
+        const obj = {};
+        for(let j=0;j<headerCols.length;j++){
+          obj[headerCols[j]] = (vals[j] !== undefined) ? vals[j].trim() : '';
+        }
+        obj._rowNum = i+1;
+        rows.push(obj);
+      }
+      return rows;
+    }
+
+    async function fetchJsonQuiet(url){
+      try{ const r = await fetch(url, {cache:'no-cache'}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }catch(e){ console.warn('fetchJsonQuiet', url, e); return null; }
+    }
+    async function loadListAndPopulate(){
+      try{
+        const files = await fetchJsonQuiet(LIST_URL);
+        if(!files || !Array.isArray(files) || files.length === 0){
+          tacticSelect.innerHTML = '<option>No list</option>';
+          console.warn('puzzle list empty or not an array', files);
+          return;
+        }
+        const manifest = { entries: [], tactics: {} };
+        files.forEach(fn => {
+          const key = fn.replace(/\.csv$/i, '').toLowerCase();
+          const fileUrl = '/IQ4U-Chess-Classroom/assets/puzzle/' + fn;
+          manifest.entries.push({ filename: fn, fileUrl, tactic: key });
+          manifest.tactics[key] = manifest.tactics[key] || [];
+          manifest.tactics[key].push({ filename: fn, fileUrl });
+        });
+
+        tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
+        Object.keys(manifest.tactics).sort().forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t + ' (' + manifest.tactics[t].length + ')';
+          tacticSelect.appendChild(opt);
+        });
+        window._clientManifest = manifest;
+      }catch(e){
+        tacticSelect.innerHTML = '<option>Error loading list</option>';
+        console.error('loadListAndPopulate failed', e);
+      }
+    }
+
+    async function buildCandidatesForTactic(tacticName){
+      solutionStatus.textContent = 'Scanning…';
+      currentCandidateList = [];
+      currentCandidateIndex = -1;
+      if(!window._clientManifest || !window._clientManifest.tactics || !window._clientManifest.tactics[tacticName]){ solutionStatus.textContent='None'; return; }
+      const files = window._clientManifest.tactics[tacticName];
+      const minR = parseInt(ratingMin.value,10)||0;
+      const maxR = parseInt(ratingMax.value,10)||99999;
+      let total=0;
+      const maxGlobal = 400;
+      for(const fi of files){
+        if(total>=maxGlobal) break;
+        try{
+          const resp = await fetch(fi.fileUrl, { cache:'no-cache' });
+          if(!resp.ok){ console.warn('CSV fetch failed', fi.fileUrl, resp.status); continue; }
+          const text = await resp.text();
+          const rows = parseCsvText(text);
+          for(const r of rows){
+            if(total>=maxGlobal) break;
+            const ratingRaw = (r['rating'] || '').toString().replace(/[^0-9]/g,'');
+            const rating = parseInt(ratingRaw,10) || 0;
+            if(rating < minR || rating > maxR) continue;
+            currentCandidateList.push({ row: r, meta:{ file: fi.filename, fileUrl: fi.fileUrl }});
+            total++;
+          }
+        }catch(err){
+          console.warn('error reading file', fi.fileUrl, err);
+        }
+      }
+      solutionStatus.textContent = `${currentCandidateList.length} puzzles found`;
+      if(currentCandidateList.length>0){ currentCandidateIndex = 0; currentPuzzleIdEl.textContent = getCandidateDesc(currentCandidateIndex); }
+      else currentPuzzleIdEl.textContent = 'No puzzle';
+    }
+
+    function getCandidateDesc(idx){
+      const c = currentCandidateList[idx];
+      if(!c) return 'No puzzle';
+      const r = c.row;
+      return (r['puzzleid'] || c.meta.file + ' #' + (c.meta.rowNum||'?'));
+    }
+
+    function extractMovesFromRow(row){
+      if(!row) return { tokens:[], types:[] };
+      const tryGet = (names) => { for(const n of names) if(row[n] && row[n].toString().trim()) return row[n].toString().trim(); return ''; };
+      const sanField = tryGet(['san','san.','sanmoves','san_moves','san_tokens','san']);
+      const movesField = tryGet(['moves','move','mv','moves_tokens']);
+      const pgnField = tryGet(['pgn','game','text']);
+
+      if(sanField){
+        let s = sanField;
+        s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\r?\n/g,' ').replace(/\(.*?\)/g,' ');
+        s = s.replace(/1-0|0-1|1\/2-1\/2|\*/g,'');
+        s = s.replace(/\d+\.+/g,' ');
+        s = s.replace(/\s+/g,' ').trim();
+        const toks = s.split(' ').filter(t=>t && t.length>0).map(t => sanitizeSanToken(t)).filter(Boolean);
+        return { tokens: toks, types: toks.map(()=> 'san') };
+      }
+
+      if(pgnField){
+        let s = pgnField;
+        s = s.replace(/\[.*?\]\s*/g,'');
+        s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\(.*?\)/g,' ');
+        s = s.replace(/1-0|0-1|1\/2-1\/2|\*/g,'');
+        s = s.replace(/\d+\.+/g,' ');
+        s = s.replace(/\s+/g,' ').trim();
+        const toks = s.split(' ').filter(t=>t && t.length>0).map(t => sanitizeSanToken(t)).filter(Boolean);
+        return { tokens: toks, types: toks.map(()=> 'san') };
+      }
+
+      if(movesField){
+        let s = movesField.replace(/\r?\n/g,' ').replace(/\s+/g,' ').trim();
+        const toks = s.split(' ').filter(t => t && t.length>0);
+        const clean = toks.map(t => t.replace(/[;,.]+$/,'').trim()).filter(Boolean);
+        return { tokens: clean, types: clean.map(()=> 'coord') };
+      }
+
+      return { tokens:[], types:[] };
+    }
+
+    async function loadPuzzleByCandidateIndex(idx){
+      const cand = currentCandidateList[idx];
+      if(!cand){ solutionStatus.textContent='No puzzle'; return; }
+      currentCandidateIndex = idx;
+      currentPuzzleIdEl.textContent = getCandidateDesc(idx);
+      const raw = cand.row;
+      solutionStatus.textContent = 'Loading ' + (raw['puzzleid'] || cand.meta.file);
+
+      try{
+        const fenRawCandidate = (raw['fen'] || '').toString().trim();
+        if(!fenRawCandidate || fenRawCandidate.length === 0){
+          console.warn('No FEN present in row.fen for candidate', cand.meta ? cand.meta.file : null, 'row:', raw);
+          solutionStatus.textContent = 'No FEN in row';
+          return;
+        }
+
+        let fenSelected = fenRawCandidate.replace(/^"+|"+$/g,'').trim();
+
+        const parts = fenSelected.split(/\s+/);
+        if(parts.length < 6){
+          console.warn('FEN appears incomplete — appending defaults. Found parts:', parts.length, fenSelected);
+          fenSelected = fenSelected + ' w - - 0 1';
+        }
+
+        initialFen = fenSelected;
+
+        try{ if(typeof Chess !== 'undefined') game = new Chess(initialFen); else game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
+        if(!game) game = new Chess();
+        if(board) board.position(game.fen());
+        const parts2 = initialFen.split(/\s+/);
+        initialSideToMove = (parts2 && parts2[1]) ? parts2[1] : 'w';
+        const extracted = extractMovesFromRow(raw);
+        solutionMoves = extracted.tokens || [];
+        solutionMoveTypes = extracted.types || [];
+        solutionIndex = 0;
+        
+        // NEW: Reset solution display mode
+        solutionDisplayed = false;
+        
+        statPuzzles++;
+        const rating = parseInt((raw['rating']||'').replace(/[^0-9]/g,''),10) || 0;
+        statRatingSum += rating;
+        updateStatsDisplay();
+        refreshNotation(-1);
+        solutionStatus.textContent = `Loaded: ${(raw['puzzleid']||cand.meta.file)} (${solutionMoves.length} moves)`;
+        if(solutionMoves && solutionMoves.length>0 && solutionIndex % 2 === 0 && autoOpponent.checked){
+          setTimeout(()=> autoPlayOpponentNext(), 200);
+        }
+      }catch(e){
+        console.warn('load puzzle error', e);
+        solutionStatus.textContent = 'Load error';
+      }
+    }
+
+    function loadFirstCandidate(){ if(currentCandidateList.length===0){ solutionStatus.textContent='No puzzles'; return; } loadPuzzleByCandidateIndex(0); }
+    function loadRandomCandidate(){ if(currentCandidateList.length===0){ solutionStatus.textContent='No puzzles'; return; } const i = Math.floor(Math.random()*currentCandidateList.length); loadPuzzleByCandidateIndex(i); }
+    function loadNextCandidate(){ if(!currentCandidateList || currentCandidateList.length===0) return; if(currentCandidateIndex < currentCandidateList.length-1){ loadPuzzleByCandidateIndex(currentCandidateIndex+1); } else solutionStatus.textContent = 'Last puzzle'; }
+    function loadPrevCandidate(){ if(!currentCandidateList || currentCandidateList.length===0) return; if(currentCandidateIndex > 0){ loadPuzzleByCandidateIndex(currentCandidateIndex-1); } else solutionStatus.textContent = 'First puzzle'; }
+
+    function updateStatsDisplay(){
+      statCorrectEl.textContent = statCorrect;
+      statIncorrectEl.textContent = statIncorrect;
+      statAttemptsEl.textContent = statAttempts;
+      statPuzzlesEl.textContent = statPuzzles;
+      statAvgRatingEl.textContent = statPuzzles>0 ? Math.round(statRatingSum / statPuzzles) : 0;
+    }
+
+    tacticSelect.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    ratingMin.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    ratingMax.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    loadPuzzleBtn.addEventListener('click', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value).then(()=> loadFirstCandidate()); });
+    randomPuzzleBtn.addEventListener('click', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value).then(()=> loadRandomCandidate()); });
+    prevPuzzleBtn.addEventListener('click', ()=> loadPrevCandidate());
+    nextPuzzleBtn.addEventListener('click', ()=> loadNextCandidate());
+    
+    // NEW: Updated Show Solution button - only displays moves, doesn't play them
+    showSolutionBtn.addEventListener('click', ()=> {
+      if(!solutionMoves || solutionMoves.length === 0){
+        solutionStatus.textContent = 'No solution available';
+        return;
+      }
+      solutionDisplayed = true;
+      refreshNotation(-1);
+      solutionStatus.textContent = `Solution displayed (${solutionMoves.length} moves)`;
+    });
+    
+    resetSolutionBtn.addEventListener('click', ()=> resetToInitial());
+
+    function resetToInitial(){
+      if(!initialFen) return;
+      try{ game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
+      if(board) board.position(game.fen());
+      solutionIndex = 0;
+      solutionDisplayed = false;
+      clearSolutionTimer();
+      solutionStatus.textContent = 'Reset to initial';
+      refreshNotation(-1);
+      if(solutionMoves && solutionMoves.length>0 && solutionIndex %2 ===0 && autoOpponent.checked){
+        setTimeout(()=> autoPlayOpponentNext(), 200);
+      }
+    }
+
+    undoBtn.addEventListener('click', ()=>{ 
+      if(!game) return; 
+      const mv = game.undo(); 
+      if(mv){ 
+        if(board) board.position(game.fen()); 
+        solutionDisplayed = false;
+        refreshNotation(); 
+        setMsg('Undid move',900); 
+        try{ 
+          if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){ 
+            window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' }); 
+          } 
+        }catch(e){} 
+      } 
+    });
+    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
+    resignBtn.addEventListener('click', ()=>{
+      if(!game) return;
+      game.reset();
+      if(board) board.position('start');
+      solutionDisplayed = false;
+      refreshNotation();
+      setMsg('You resigned — game reset',1500);
+      try{ 
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
+          window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null }); 
+        }
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+          window.firebaseMultiplayer.emitFen({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKB1R w KQkq - 0 1', action: 'resign' });
+        }
+      }catch(e){}
+      solutionMoves = []; solutionIndex = 0; initialFen = null;
+      statAttempts = 0; statCorrect = 0; statIncorrect = 0; statPuzzles = 0; statRatingSum = 0;
+      updateStatsDisplay();
+    });
+    logoutBtn.addEventListener('click', ()=>{
+      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){} try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) window.firebaseMultiplayer.goOffline(); }catch(e){} window.location.href = 'index.html';
+    });
+
+    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
+    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(360, Math.min(1400, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } }catch(e){} setTimeout(updateOverlaySize,20); }
+    function updateOverlaySize(){ try{ const rect = boardEl.getBoundingClientRect(); drawOverlay.style.width = rect.width + 'px'; drawOverlay.style.height = rect.height + 'px'; }catch(e){} }
+
+    (async function boot(){
+      await ensureChessLoaded();
+      game = new Chess();
+      createBoard();
+      try{ const uname = localStorage.getItem('username') || localStorage.getItem('email') || ''; if(uname && emailInputBottom) emailInputBottom.value = uname; }catch(e){}
+      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 760;
+      setBoardSize(initial);
+      setMsg('Ready',700);
+      await loadListAndPopulate();
+    })();
+
+    window.onBoardMove = function(payload){
+      try{
+        if(!payload) return;
+        if(typeof payload === 'string'){
+          if(!game) game = new Chess();
+          if(typeof game.load === 'function'){ game.load(payload); }
+          if(board) board.position(game.fen());
+          solutionDisplayed = false;
+          refreshNotation();
+          return;
+        }
+        if(!game) game = new Chess();
+        if(payload.move && payload.move.from && payload.move.to){
+          const mvObj = { from: payload.move.from, to: payload.move.to };
+          if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
+          const applied = game.move(mvObj);
+          if(applied === null){
+            if(payload.fen && typeof game.load === 'function'){
+              game.load(payload.fen);
+            }
+          } else {
+            setPersistentLastMove(payload.move.from, payload.move.to);
+          }
+        } else if(payload.fen){
+          if(typeof game.load === 'function') game.load(payload.fen);
+        }
+        if(board) board.position(game.fen());
+        solutionDisplayed = false;
+        refreshNotation();
+      }catch(e){ console.warn('onBoardMove failed', e); }
+    };
+
+    window._studentPuzzle = {
+      getSolutionMoves: ()=> solutionMoves,
+      getSolutionIndex: ()=> solutionIndex,
+      getStats: ()=> ({correct:statCorrect, incorrect:statIncorrect, attempts:statAttempts, puzzles:statPuzzles, avgRating: statPuzzles?Math.round(statRatingSum/statPuzzles):0}),
+      getCurrentCandidateIndex: ()=> currentCandidateIndex
+    };
+
+  })();
+  </script>
+
+  <!-- FIREBASE -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script>
+  (function(){
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb6936fe0da4bb"
+    };
+    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
+    (function(){
+      const db = firebase.database();
+      const onlineRef = db.ref('online');
+      const gamesRef = db.ref('games');
+      let movesRef = null;
+
+      let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
+      sessionStorage.setItem('iq4u_clientId', myId);
+
+      let myEmail = '';
+      let currentGameId = null;
+      let presenceTimer = null;
+
+      function goOnline(email){
+        myEmail = email || ('anon-'+myId);
+        const node = onlineRef.child(myId);
+        node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
+          .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
+          .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
+        if(presenceTimer) clearInterval(presenceTimer);
+        presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
+      }
+      function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
+
+      let masterMovesRef = null;
+      function watchMasterMoves(){
+        if(masterMovesRef) return;
+        masterMovesRef = db.ref('moves/'+myId);
+        masterMovesRef.on('child_added', snap=>{
+          const m = snap.val();
+          if(!m) return;
+          if(!m.by || !m.by.startsWith('m_')) {
+            return;
+          }
+          if(m.payload){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
+          }
+        });
+      }
+      watchMasterMoves();
+
+      db.ref('notifications/'+myId).on('child_added', snap=>{
+        const n = snap.val();
+        if(!n) return;
+        if(n.type==='startGame' && n.gameId){
+          currentGameId = n.gameId;
+          watchMoves(currentGameId);
+          document.getElementById('pairedBubble').style.display='inline-block';
+          const color = (n.white===myId)?'white':((n.black===myId)?'black':null);
+          if(color) document.getElementById('multiplayStatus').textContent = 'Paired: You are ' + (color.charAt(0).toUpperCase()+color.slice(1));
+          if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: currentGameId, color: color, myId: myId });
+          try{ localStorage.setItem('iq4u_last_game', currentGameId); if(color) localStorage.setItem('iq4u_last_color', color); }catch(e){}
+        }
+        snap.ref.remove().catch(()=>{});
+      });
+
+      db.ref('challengeDeclined/'+myId).on('child_added', snap=>{
+        const d = snap.val();
+        if(!d) return;
+        document.getElementById('multiplayStatus').textContent = (d.email||'Player') + ' declined your challenge';
+        snap.ref.remove().catch(()=>{});
+      });
+
+      // Listen for spectate invitations
+      db.ref('spectateInvites/'+myId).on('child_added', snap=>{
+        const invite = snap.val();
+        if(!invite) return;
+        
+        const accept = confirm(`${invite.fromEmail || 'A player'} invited you to spectate your board. Accept?`);
+        
+        if(accept){
+          // Get current board FEN to send to master
+          const currentFen = (window.game && typeof window.game.fen === 'function') 
+            ? window.game.fen() 
+            : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+          
+          // Accept the invitation
+          document.getElementById('pairedBubble').style.display='inline-block';
+          document.getElementById('multiplayStatus').textContent = 'Master is spectating';
+          
+          // Send acceptance response with current FEN to master
+          db.ref('spectateResponses/'+invite.fromId).push({
+            studentId: myId,
+            fromId: myId,
+            studentEmail: myEmail,
+            boardId: invite.boardId || null,
+            accepted: true,
+            fen: currentFen,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          }).then(()=>{
+            console.log('Sent spectate acceptance with FEN to master:', currentFen);
+          }).catch((err)=>{
+            console.error('Failed to send spectate acceptance:', err);
+          });
+          
+        } else {
+          // Decline the invitation
+          db.ref('spectateResponses/'+invite.fromId).push({
+            studentId: myId,
+            fromId: myId,
+            studentEmail: myEmail,
+            boardId: invite.boardId || null,
+            accepted: false,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          }).catch(()=>{});
+        }
+        
+        // Remove the invite
+        snap.ref.remove().catch(()=>{});
+      });
+
+      function watchMoves(gameId){
+        if(!gameId) return;
+        movesRef = db.ref('moves/'+gameId);
+        movesRef.on('child_added', snap=>{
+          const m = snap.val();
+          if(!m) return;
+          if(m.by && m.by===myId) return;
+          if(m.payload){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
+          } else if(m.fen){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove({ fen: m.fen, move: m.move||null }); }catch(e){}
+          }
+          if(m.payload && m.payload.type === 'resign'){
+            try{
+              if(window.game) window.game.reset();
+              if(window.board) window.board.position('start');
+              if(document.getElementById('pairedBubble')) document.getElementById('pairedBubble').style.display='none';
+              if(document.getElementById('multiplayStatus')) document.getElementById('multiplayStatus').textContent = 'Opponent resigned / game ended';
+              try{ localStorage.removeItem('iq4u_last_game'); localStorage.removeItem('iq4u_last_color'); }catch(e){}
+            }catch(e){}
+          }
+        });
+      }
+
+      function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
+
+      document.getElementById('joinBtnBottom').addEventListener('click', function(){
+        const email = (document.getElementById('emailInputBottom').value||'').trim();
+        if(!email) return alert('Enter username to join online');
+        goOnline(email);
+      });
+
+      window.firebaseMultiplayer = {
+        emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
+        emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
+        startWatchingGame: function(gameId){ currentGameId = gameId; watchMoves(gameId); },
+        getMyId: () => myId,
+        getMyEmail: () => myEmail,
+        goOffline: goOffline,
+        autoJoin: function(name){ if(!name) return; try{ document.getElementById('emailInputBottom').value = name; goOnline(name); }catch(e){ goOnline(name); } },
+        getMyColor: () => null
+      };
+
+      window.addEventListener('beforeunload', ()=>{ });
+    })();
+  })();
+  </script>
 </body>
 </html>
-
