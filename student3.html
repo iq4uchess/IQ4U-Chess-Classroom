@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IQ4U — Student Puzzle (student3)</title>
 
-  <!-- Same CSS as student2.html -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     html,body{ overscroll-behavior-y: contain; height:100%; }
@@ -77,17 +76,17 @@
     <div>
       <label class="small">Skill Level:</label>
       <select id="engineLevel">
-        <option value="1">1 (Easy)</option>
+        <option value="1">1 (Easiest)</option>
         <option value="2">2</option>
         <option value="3">3</option>
         <option value="4">4</option>
-        <option value="5">5</option>
+        <option value="5">5 (Default)</option>
         <option value="6">6</option>
         <option value="7">7</option>
-        <option value="8" selected>8 (Hard)</option>
-        <option value="10">10 (Expert)</option>
-        <option value="15">15 (Master)</option>
-        <option value="20">20 (Max)</option>
+        <option value="8">8</option>
+        <option value="10">10</option>
+        <option value="15">15</option>
+        <option value="20">20 (Hardest)</option>
       </select>
     </div>
     
@@ -118,8 +117,8 @@ window.game = null;
   // Config
   const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
   
-  // Engine worker URL
-  const ENGINE_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
+  // Engine worker - use a different CDN that works
+  const ENGINE_WORKER_URL = 'https://unpkg.com/stockfish-js@14.1.1/stockfish.js';
 
   // DOM
   const boardEl = document.getElementById('board');
@@ -139,11 +138,12 @@ window.game = null;
 
   // State
   let board = null;
-  window.game = new Chess(); // EXPOSED GLOBALLY FOR SPECTATING
+  let game = new Chess(); // Local game instance
+  window.game = game; // EXPOSED GLOBALLY FOR SPECTATING
   let engine = null;
   let engineEnabled = false;
   let engineColor = 'black';
-  let engineLevel = 8;
+  let engineLevel = 5;
   let isThinking = false;
   let lastMoveSquares = [];
 
@@ -169,20 +169,19 @@ window.game = null;
     if(board && typeof board.destroy==='function'){ 
       try{ board.destroy(); }catch(e){} 
     }
-    if(!window.game) window.game = new Chess();
     board = Chessboard('board', {
       draggable: true,
-      position: window.game ? window.game.fen() : 'start',
+      position: game.fen(),
+      onDragStart: onDragStart,
       onDrop: onDrop,
       onSnapEnd: onSnapEnd,
       pieceTheme: pieceTheme,
       orientation: 'white'
     });
-    try{ board.position(window.game.fen()); }catch(e){}
   }
   
   function onSnapEnd(){ 
-    if(board && window.game) board.position(window.game.fen());
+    if(board) board.position(game.fen());
   }
 
   // Update game status
@@ -236,6 +235,32 @@ window.game = null;
     console.log(msg);
   }
 
+  // Drag start handler
+  function onDragStart(source, piece, position, orientation) {
+    // Don't allow dragging if game is over
+    if (game.game_over()) {
+      return false;
+    }
+    
+    // Don't allow dragging if engine is thinking
+    if (isThinking) {
+      return false;
+    }
+    
+    // Don't allow dragging if it's engine's turn
+    if (engineEnabled && !isHumanTurn()) {
+      return false;
+    }
+    
+    // Only allow dragging own pieces
+    if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+        (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+      return false;
+    }
+    
+    return true;
+  }
+
   // Check if it's human's turn
   function isHumanTurn() {
     if (!engineEnabled) return true;
@@ -251,37 +276,18 @@ window.game = null;
   }
 
   // Drop handler
-  async function onDrop(source, target) {
-    // Don't allow dragging if game is over
-    if (game.game_over()) {
-      panelLog('Game is over!', 'warn');
-      return 'snapback';
-    }
-    
-    // Don't allow dragging if engine is thinking
-    if (isThinking) {
-      panelLog('Engine is thinking...', 'warn');
-      return 'snapback';
-    }
-    
-    // Don't allow dragging if it's engine's turn
-    if (engineEnabled && !isHumanTurn()) {
-      panelLog('It\'s engine\'s turn!', 'warn');
-      return 'snapback';
-    }
-
+  function onDrop(source, target) {
     // Try the move
-    const legalMoves = game.moves({ verbose: true }) || [];
-    const candidatePromo = legalMoves.find(m => m.from === source && m.to === target && m.promotion);
-    let chosenPromo = null;
-    
-    if (candidatePromo) {
-      // Always promote to queen for simplicity
-      chosenPromo = 'q';
-    }
-
     const moveObj = { from: source, to: target };
-    if (chosenPromo) moveObj.promotion = chosenPromo;
+    
+    // Check for pawn promotion
+    const piece = game.get(source);
+    if (piece && piece.type === 'p') {
+      if ((piece.color === 'w' && target[1] === '8') || 
+          (piece.color === 'b' && target[1] === '1')) {
+        moveObj.promotion = 'q'; // Auto-promote to queen
+      }
+    }
 
     const mv = game.move(moveObj);
     if (mv === null) {
@@ -295,7 +301,7 @@ window.game = null;
     updateStatus();
     
     // Log the move
-    panelLog(`Human moved: ${source}-${target}${chosenPromo ? '=' + chosenPromo.toUpperCase() : ''}`, 'move');
+    panelLog(`${isHumanTurn() ? 'Human' : 'Engine'} moved: ${mv.san}`, 'move');
     
     // Update master board
     window.emitFenToMaster();
@@ -310,8 +316,8 @@ window.game = null;
 
   // Engine message handler
   function hookEngine(worker) {
-    worker.onmessage = e => {
-      const line = typeof e.data === 'string' ? e.data : '';
+    worker.onmessage = function(e) {
+      const line = e.data;
       
       if (line.startsWith('bestmove')) {
         panelLog('[engine] ' + line, 'engine');
@@ -321,13 +327,13 @@ window.game = null;
       } else if (line.startsWith('uciok')) {
         panelLog('[engine] UCI ready', 'engine');
         // Set engine options
-        engine.postMessage('setoption name Threads value 2');
-        engine.postMessage('setoption name Hash value 128');
+        worker.postMessage('setoption name Threads value 1');
+        worker.postMessage('setoption name Hash value 32');
       }
     };
     
-    worker.onerror = e => {
-      panelLog('Engine error: ' + e.message, 'error');
+    worker.onerror = function(e) {
+      panelLog('Engine worker error: ' + e.message, 'error');
     };
   }
 
@@ -369,7 +375,7 @@ window.game = null;
       isThinking = false;
       
       // Log the move
-      panelLog(`Engine moved: ${from}-${to}${promotion ? '=' + promotion.toUpperCase() : ''}`, 'engine');
+      panelLog(`Engine moved: ${move.san}`, 'engine');
       
       // Update master board
       window.emitFenToMaster();
@@ -404,7 +410,7 @@ window.game = null;
       engine.postMessage('setoption name Skill Level value ' + skillLevel);
       
       // Ask for move with time constraint
-      engine.postMessage('go movetime 1500');
+      engine.postMessage('go movetime 1000');
     }
   }
 
@@ -438,6 +444,26 @@ window.game = null;
       }
     } catch (error) {
       panelLog('Failed to start engine: ' + error.message, 'error');
+      panelLog('Trying alternative Stockfish URL...', 'warn');
+      
+      // Try alternative URL
+      try {
+        engine = new Worker('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/14.1.1/stockfish.js');
+        hookEngine(engine);
+        engine.postMessage('uci');
+        engine.postMessage('isready');
+        
+        engineEnabled = true;
+        engineOnBtn.style.display = 'none';
+        engineOffBtn.style.display = 'inline-block';
+        panelLog('Engine started with alternative URL');
+        
+        if (!game.game_over() && !isHumanTurn()) {
+          setTimeout(askEngineToMove, 500);
+        }
+      } catch (error2) {
+        panelLog('Both Stockfish URLs failed. Engine disabled.', 'error');
+      }
     }
   }
 
@@ -513,7 +539,7 @@ window.game = null;
     window.emitFenToMaster();
   }
 
-  // Board size controls (from student2.html)
+  // Board size controls
   function setBoardSize(px){ 
     if(!px || isNaN(px)) return; 
     const clamped = Math.max(360, Math.min(1400, Number(px))); 
@@ -579,28 +605,26 @@ window.game = null;
       try{
         if(!payload) return;
         if(typeof payload === 'string'){
-          if(!window.game) window.game = new Chess();
-          if(typeof window.game.load === 'function'){ window.game.load(payload); }
-          if(board) board.position(window.game.fen());
+          if(game.load) game.load(payload);
+          if(board) board.position(game.fen());
           updateStatus();
           return;
         }
-        if(!window.game) window.game = new Chess();
         if(payload.move && payload.move.from && payload.move.to){
           const mvObj = { from: payload.move.from, to: payload.move.to };
           if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
-          const applied = window.game.move(mvObj);
+          const applied = game.move(mvObj);
           if(applied === null){
-            if(payload.fen && typeof window.game.load === 'function'){
-              window.game.load(payload.fen);
+            if(payload.fen && game.load){
+              game.load(payload.fen);
             }
           } else {
             setPersistentLastMove(payload.move.from, payload.move.to);
           }
         } else if(payload.fen){
-          if(typeof window.game.load === 'function') window.game.load(payload.fen);
+          if(game.load) game.load(payload.fen);
         }
-        if(board) board.position(window.game.fen());
+        if(board) board.position(game.fen());
         updateStatus();
       }catch(e){ console.warn('onBoardMove failed', e); }
     };
@@ -628,16 +652,13 @@ window.game = null;
   (function(){
     const db = firebase.database();
     const onlineRef = db.ref('online');
-    const gamesRef = db.ref('games');
 
     let myId = sessionStorage.getItem('iq4u_clientId') ||
       ('c_'+Math.random().toString(36).slice(2,10));
     sessionStorage.setItem('iq4u_clientId', myId);
 
     let myEmail = '';
-    let currentGameId = null;
     let presenceTimer = null;
-    let isSpectated = false;
 
     function goOnline(email){
       myEmail = email || ('anon-'+myId);
@@ -653,7 +674,6 @@ window.game = null;
     function goOffline(){
       if(presenceTimer) clearInterval(presenceTimer);
       onlineRef.child(myId).remove().catch(()=>{});
-      isSpectated = false;
     }
 
     /* =========================================================
@@ -666,11 +686,11 @@ window.game = null;
       const fromEmail = invite.fromEmail || invite.fromId || 'Master';
       const accept = confirm(fromEmail + ' wants to spectate your board. Accept?');
 
-      // Get current FEN - using window.game which is now globally available
+      // Get current FEN
       const currentFen = window.game ? window.game.fen() : 
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-      // Send response - IDENTICAL TO student2.html
+      // Send response
       if(invite.fromId){
         const respPath = `spectateResponses/${invite.fromId}/${myId}`;
         
@@ -686,11 +706,6 @@ window.game = null;
         });
       }
 
-      // If accepted, set flag
-      if (accept) {
-        isSpectated = true;
-      }
-
       snap.ref.remove().catch(()=>{});
     });
 
@@ -698,16 +713,8 @@ window.game = null;
        FIREBASE MULTIPLAYER OBJECT (IDENTICAL TO student2.html)
        ========================================================= */
     window.firebaseMultiplayer = {
-      emitMove: function(arg){
-        if(!currentGameId) return;
-        db.ref('moves/'+currentGameId).push({
-          payload: arg,
-          by: myId,
-          ts: firebase.database.ServerValue.TIMESTAMP
-        });
-      },
       emitFen: function(arg){
-        // Write to moves/<myId> path - exactly like student2.html
+        // Write to moves/<myId> path
         db.ref('moves/'+myId).push({
           payload: arg,
           by: myId,
