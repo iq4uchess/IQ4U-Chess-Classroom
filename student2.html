@@ -245,19 +245,19 @@ window.game = null;
   let statPuzzles = 0;
   let statRatingSum = 0;
 
-  // FEN Emitter (for master spectating)
-  let fenEmitter = null;
-  
-  // Helper function to emit FEN to master
-  function emitFenToMaster() {
-    if (!window.game) return;
+  // FEN Emitter (for master spectating) - SIMPLE VERSION
+  window.emitFenToMaster = function() {
+    if (!window.game || !window.firebaseMultiplayer) return;
     try {
       const fen = window.game.fen();
-      if (fenEmitter) {
-        fenEmitter(fen);
+      // Use the same method as student1.html
+      if (window.firebaseMultiplayer.emitFen) {
+        window.firebaseMultiplayer.emitFen({ fen: fen });
       }
-    } catch(e) {}
-  }
+    } catch(e) {
+      console.warn('FEN emit failed:', e);
+    }
+  };
 
   // Helpers
   function setMsg(t,ms=0){
@@ -265,18 +265,7 @@ window.game = null;
     if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms);
   }
   function pieceTheme(piece){ return PIECES_BASE + piece + '.svg'; }
-  function ensureChessLoaded(){
-    return new Promise(resolve=>{
-      if(typeof Chess !== 'undefined') return resolve();
-      const start = Date.now();
-      (function check(){
-        if(typeof Chess !== 'undefined') return resolve();
-        if(Date.now()-start>3000) return resolve();
-        setTimeout(check,50);
-      })();
-    });
-  }
-
+  
   function createBoard(){
     if(board && typeof board.destroy==='function'){ try{ board.destroy(); }catch(e){} }
     if(!window.game) window.game = new Chess();
@@ -289,11 +278,10 @@ window.game = null;
     });
     try{ board.position(window.game.fen()); }catch(e){}
     updateOverlaySize();
-    emitFenToMaster(); // Emit initial FEN
   }
+  
   function onSnapEnd(){ 
     if(board && window.game) board.position(window.game.fen());
-    emitFenToMaster(); // Emit FEN after snap
   }
 
   /* ---- PROMOTION MODAL ---- */
@@ -384,7 +372,8 @@ window.game = null;
     setPersistentLastMove(mv.from,mv.to);
     solutionDisplayed=false;
     refreshNotation();
-    emitFenToMaster(); // Emit FEN after move
+    // Emit FEN to master
+    setTimeout(() => window.emitFenToMaster(), 10);
     return;
   }
 
@@ -407,19 +396,21 @@ window.game = null;
     if(window.game.undo()){
       board.position(window.game.fen()); 
       refreshNotation(); 
-      emitFenToMaster(); // Emit FEN after undo
+      window.emitFenToMaster();
     }
   };
+  
   flipBtn.onclick=()=>{ board.flip(); updateOverlaySize(); };
+  
   resignBtn.onclick=()=>{ 
     window.game.reset(); 
     board.position('start'); 
     refreshNotation(); 
-    emitFenToMaster(); // Emit FEN after reset
+    window.emitFenToMaster();
   };
+  
   logoutBtn.onclick=()=>{ 
     localStorage.clear(); 
-    // Notify master we're going offline
     if (window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) {
       window.firebaseMultiplayer.goOffline();
     }
@@ -502,7 +493,7 @@ window.game = null;
     statRatingSum += (currentPuzzle.rating || 0);
     updateStats();
     
-    emitFenToMaster(); // Emit FEN after puzzle load
+    window.emitFenToMaster();
   }
 
   function playNextSolutionMove() {
@@ -538,7 +529,7 @@ window.game = null;
       
       solutionIndex++;
       refreshNotation(solutionIndex - 1);
-      emitFenToMaster(); // Emit FEN after solution move
+      window.emitFenToMaster();
     } catch(e) {
       console.warn('Solution move failed:', e);
     }
@@ -604,7 +595,7 @@ window.game = null;
     solutionTimer = setInterval(playNextSolutionMove, speed);
     showSolutionBtn.textContent = 'Pause Solution';
     solutionStatus.textContent = 'Playing solution...';
-    emitFenToMaster(); // Emit FEN when solution starts
+    window.emitFenToMaster();
   });
 
   resetSolutionBtn.addEventListener('click', () => {
@@ -621,19 +612,16 @@ window.game = null;
       showSolutionBtn.textContent = 'Show Solution';
       solutionStatus.textContent = 'Solution reset';
       refreshNotation();
-      emitFenToMaster(); // Emit FEN when solution resets
+      window.emitFenToMaster();
     }
   });
 
   autoOpponent.addEventListener('change', () => {
-    // Auto-opponent logic would go here
-    // For now, just emit FEN when toggled
-    emitFenToMaster();
+    window.emitFenToMaster();
   });
 
   /* ---- BOOT ---- */
   (async function(){
-    await ensureChessLoaded();
     createBoard();
     refreshNotation();
     await loadPuzzlesList();
@@ -642,7 +630,7 @@ window.game = null;
 
 })();
 </script>
-<!-- FIREBASE -->
+<!-- FIREBASE - IDENTICAL TO student1.html -->
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 <script>
@@ -670,7 +658,6 @@ window.game = null;
     let myEmail = '';
     let currentGameId = null;
     let presenceTimer = null;
-    let spectateRef = null;
     let isSpectated = false;
 
     function goOnline(email){
@@ -689,12 +676,6 @@ window.game = null;
     function goOffline(){
       if(presenceTimer) clearInterval(presenceTimer);
       onlineRef.child(myId).remove().catch(()=>{});
-      // Clean up spectate references
-      if (spectateRef) {
-        spectateRef.off();
-        spectateRef = null;
-      }
-      db.ref('spectateFen/' + myId).remove().catch(()=>{});
       document.getElementById('multiplayStatus').textContent = 'Not connected';
       isSpectated = false;
     }
@@ -706,7 +687,7 @@ window.game = null;
     });
 
     /* =========================================================
-       SPECTATE INVITE HANDLER (IDENTICAL TO student.html)
+       SPECTATE INVITE HANDLER (IDENTICAL TO student1.html)
        ========================================================= */
     db.ref('spectateInvites/'+myId).on('child_added', snap=>{
       const invite = snap.val();
@@ -715,11 +696,11 @@ window.game = null;
       const fromEmail = invite.fromEmail || invite.fromId || 'Master';
       const accept = confirm(fromEmail + ' wants to spectate your board. Accept?');
 
-      // Get current FEN
+      // Get current FEN - using window.game which is now globally available
       const currentFen = window.game ? window.game.fen() : 
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-      // Send response
+      // Send response - IDENTICAL TO student1.html
       if(invite.fromId){
         const respPath = `spectateResponses/${invite.fromId}/${myId}`;
         
@@ -735,29 +716,17 @@ window.game = null;
         });
       }
 
-      // If accepted, set up continuous FEN streaming
+      // If accepted, set flag
       if (accept) {
         isSpectated = true;
         document.getElementById('multiplayStatus').textContent = 'Master is spectating';
-        
-        // Set up FEN emitter function
-        window.fenEmitter = function(fen) {
-          if (!isSpectated) return;
-          db.ref('spectateFen/' + myId).set({
-            fen: fen,
-            ts: firebase.database.ServerValue.TIMESTAMP
-          }).catch(()=>{});
-        };
-        
-        // Emit initial FEN
-        window.fenEmitter(currentFen);
       }
 
       snap.ref.remove().catch(()=>{});
     });
 
     /* =========================================================
-       FIREBASE MULTIPLAYER OBJECT
+       FIREBASE MULTIPLAYER OBJECT (IDENTICAL TO student1.html)
        ========================================================= */
     window.firebaseMultiplayer = {
       emitMove: function(arg){
@@ -769,7 +738,7 @@ window.game = null;
         });
       },
       emitFen: function(arg){
-        // Use moves path for backward compatibility
+        // Write to moves/<myId> path - exactly like student1.html
         db.ref('moves/'+myId).push({
           payload: arg,
           by: myId,
@@ -778,17 +747,7 @@ window.game = null;
       },
       getMyId: ()=>myId,
       getMyEmail: ()=>myEmail,
-      goOffline: goOffline,
-      // Helper to manually emit FEN (for debugging)
-      emitCurrentFen: function() {
-        if (window.game && isSpectated) {
-          const fen = window.game.fen();
-          db.ref('spectateFen/' + myId).set({
-            fen: fen,
-            ts: firebase.database.ServerValue.TIMESTAMP
-          }).catch(()=>{});
-        }
-      }
+      goOffline: goOffline
     };
 
     // Auto-join if username exists
@@ -799,21 +758,6 @@ window.game = null;
         goOnline(saved);
       }
     }, 500);
-
-    // Clean up on page unload
-    window.addEventListener('beforeunload', () => {
-      // Only cleanup if explicitly logging out
-      // Keep online presence for refresh/navigation
-      if (!sessionStorage.getItem('loggingOut')) {
-        return;
-      }
-      goOffline();
-    });
-
-    // Set logging out flag when logout button is clicked
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      sessionStorage.setItem('loggingOut', 'true');
-    });
 
   })();
 })();
