@@ -4,62 +4,62 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Puzzle (student1)</title>
+  <title>IQ4U Academy — Student Puzzle</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
-    /* same styles as before (omitted here for brevity in this message) */
     html,body{ overscroll-behavior-y: contain; height:100%; }
-    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:0; padding:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
     button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
-    .container{ display:grid; grid-template-columns:420px 1fr; gap:18px; align-items:start; width:100%; justify-content:center; }
-    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:920px; width:100%; box-sizing:border-box; }
+    .header{ text-align:center; margin-bottom:20px; }
+    .header h1{ margin:0; font-size:28px; color:#0f172a; display:flex; align-items:center; justify-content:center; gap:12px; }
+    .header h1 img{ width:40px; height:40px; border-radius:8px; }
+    .container{ display:flex; flex-direction:column; gap:18px; align-items:center; width:100%; max-width:920px; }
+    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); width:100%; box-sizing:border-box; }
     .small{ font-size:13px; color:#555; }
     .muted{ color:#666; font-size:13px; }
     .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
-    .board-top{ grid-column: 1 / -1; display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; }
-    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; flex-wrap:wrap; }
     #board-wrapper{ width:100%; max-width:570px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; }
     #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
     #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:80vh; }
     .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
     .resizer .range{ width:260px; }
     .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
-    textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
     .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
-    @media (max-width:900px){
-      .container{ grid-template-columns:1fr; padding:0 12px; gap:12px; }
-      #board-wrapper{ max-width:100%; }
-      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
-      .resizer .range{ width:140px; }
-      button { padding:10px 14px; font-size:15px; }
-      .controls { flex-wrap:wrap; gap:12px; }
-    }
-    .multiplayer-panel { margin-top: 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:920px; }
-    .multiplayer-panel input[type="text"] { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
-    .multiplayer-panel select { padding:6px 8px; border-radius:6px; border:1px solid #e6eefc; }
+    .multiplayer-section { display:flex; flex-direction:column; gap:12px; width:100%; }
+    .multiplayer-row { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; }
+    .multiplayer-row input[type="text"] { padding:8px 10px; border-radius:6px; border:1px solid #e6eefc; flex:1; min-width:200px; }
+    .multiplayer-row select { padding:8px 10px; border-radius:6px; border:1px solid #e6eefc; flex:1; min-width:200px; }
+    .status-area { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; margin-top:8px; }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
     .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
     .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
     .promote-modal .row{ display:flex; gap:8px; align-items:center; justify-content:center; }
     .promote-modal button{ min-width:44px; min-height:44px; font-weight:700; }
-    .readonly-note{ color:#444; font-size:13px; margin-left:8px; }
     .logout-btn { background:#dc2626; }
     #draw-overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:30; }
     .arrow-line { stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
     .arrow-head { fill: currentColor; }
     .square-highlight { position:absolute; border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,0.06); background: rgba(220,20,60,0.12); width:44px; height:44px; display:block; z-index:25; border:3px solid rgba(220,20,60,0.25); }
+    @media (max-width:900px){
+      #board-wrapper{ max-width:100%; }
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:420px; }
+      .resizer .range{ width:140px; }
+      button { padding:10px 14px; font-size:15px; }
+      .controls { flex-wrap:wrap; gap:12px; }
+      .multiplayer-row input[type="text"], .multiplayer-row select { width:160px; }
+      .fen-strip input { width:250px; }
+      .header h1 { font-size:24px; }
+      .header h1 img { width:32px; height:32px; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- ACCESS CHECK: allow any student role so testing/redirects won't bounce legitimate students -->
   <script>
     (function(){
-      // Accept student1..student4 so tests / redirects don't bounce users unexpectedly.
-      // If you want strict per-page enforcement, replace this with ['student1'] for this file
-      // and add similar strict checks to other student pages.
       const allowedRoles = ['student1','student2','student3','student4'];
       const role = localStorage.getItem('role');
       if(!role || allowedRoles.indexOf(role) === -1){
@@ -68,78 +68,65 @@
     })();
   </script>
 
-  <div class="board-top">
-    <div class="controls" aria-hidden="false">
+  <div class="header">
+    <h1>
+      <img src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/apple-touch-icon.png" alt="IQ4U Logo" />
+      IQ4U Academy
+    </h1>
+  </div>
+
+  <div class="container">
+    <div class="controls">
       <button id="undoBtn">Undo</button>
       <button id="flipBtn">Flip</button>
       <button id="resignBtn" title="Resign / Reset" style="background:#8b0f0f;">Resign</button>
       <button id="logoutBtn" class="logout-btn">Logout</button>
     </div>
 
-    <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
-      <input id="boardSizeRange" name="board-size" class="range" type="range" min="240" max="1200" step="10" value="570" aria-label="Board size">
+    <div class="resizer" style="margin-top:6px;">
+      <input id="boardSizeRange" class="range" type="range" min="240" max="1200" step="10" value="570">
       <small id="boardSizeLabel">570px</small>
     </div>
 
-    <div class="panel" style="width:100%; max-width:920px;">
+    <div class="panel">
       <div id="board-wrapper">
-        <div id="board" aria-label="Chessboard container"></div>
-        <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+        <div id="board"></div>
+        <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
 
-      <div class="info" id="msg" aria-live="polite"></div>
-
-      <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
+      <div class="info" id="msg"></div>
+      <div id="movesList" class="notation">No moves yet.</div>
     </div>
-  </div>
 
-  <div class="container" style="margin-top:18px;">
-    <div style="display:flex; flex-direction:column; gap:12px;">
-      <div class="panel">
-        <div style="display:flex; flex-direction:column; align-items:center;">
-          <strong>FEN Input (paste FEN here)</strong>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <button id="loadFenBtn">Load FEN</button>
-          </div>
+    <div class="panel" style="padding:10px;">
+      <div class="fen-strip">
+        <input id="fenInput" type="text" placeholder="Paste FEN here to load position" />
+        <button id="loadFenBtn">Load FEN</button>
+        <button id="resetBoardBtn">Reset</button>
+      </div>
+    </div>
 
-          <div style="margin-top:8px; width:100%; display:flex; justify-content:center;">
-            <textarea id="pgnInput" name="fen-input" placeholder="Paste FEN here to load a position. Example FEN:
-r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
-          </div>
+    <div class="panel">
+      <div class="multiplayer-section">
+        <div class="multiplayer-row">
+          <input id="emailInputBottom" type="text" placeholder="Enter your username" />
+          <button id="joinBtnBottom">Join Online</button>
+        </div>
 
-          <div style="display:flex; gap:8px; margin-top:8px; justify-content:center;">
-            <button id="clearPgn">Clear</button>
-            <button id="resetBtnLeft" title="Reset board">Reset</button>
-          </div>
+        <div class="multiplayer-row">
+          <select id="onlinePlayersBottom"></select>
+          <button id="challengeBtnBottom">Challenge Player</button>
+        </div>
+
+        <div class="status-area">
+          <div id="multiplayStatus" class="muted">Not connected</div>
+          <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
         </div>
       </div>
     </div>
-
-    <div></div>
   </div>
 
-  <div class="panel multiplayer-panel" style="margin-top:18px; max-width:920px;" id="multiplayerPanel">
-    <div style="display:flex; gap:8px; align-items:center;">
-      <label for="emailInputBottom" class="small">Your username:</label>
-      <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
-      <label class="small"><input id="spectatorToggle" name="spectator" type="checkbox" /> Spectator</label>
-      <button id="joinBtnBottom">Join Online</button>
-    </div>
-
-    <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
-      <label class="small" for="onlinePlayersBottom">Online Players:</label>
-      <select id="onlinePlayersBottom" name="online-players"></select>
-      <button id="challengeBtnBottom">Challenge Player</button>
-      <span class="readonly-note" id="readonlyNote" style="display:none;">Read-only mode</span>
-    </div>
-
-    <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
-      <div id="multiplayStatus" class="muted">Not connected</div>
-      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
-    </div>
-  </div>
-
-  <div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
+  <div class="promote-modal" id="promoteModal">
     <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
     <div class="row">
       <button data-piece="q">Q</button>
@@ -149,7 +136,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     </div>
   </div>
 
-  <!-- libs -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 
@@ -159,7 +145,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-    // DOM
     const boardWrapper = document.getElementById('board-wrapper');
     const drawOverlay = document.getElementById('draw-overlay');
     const boardSizeRange = document.getElementById('boardSizeRange');
@@ -167,37 +152,28 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     const msgEl = document.getElementById('msg');
     const promoteModal = document.getElementById('promoteModal');
 
-    // controls
     const undoBtn = document.getElementById('undoBtn');
     const flipBtn = document.getElementById('flipBtn');
     const resignBtn = document.getElementById('resignBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // fen / input
-    const pgnInput = document.getElementById('pgnInput');
+    const fenInput = document.getElementById('fenInput');
     const loadFenBtn = document.getElementById('loadFenBtn');
-    const clearPgn = document.getElementById('clearPgn');
-    const resetBtnLeft = document.getElementById('resetBtnLeft');
+    const resetBoardBtn = document.getElementById('resetBoardBtn');
 
-    // notation
     const movesList = document.getElementById('movesList');
 
-    // multiplayer UI
     const emailInputBottom = document.getElementById('emailInputBottom');
     const joinBtnBottom = document.getElementById('joinBtnBottom');
-    const spectatorToggle = document.getElementById('spectatorToggle');
     const onlinePlayersBottom = document.getElementById('onlinePlayersBottom');
     const challengeBtnBottom = document.getElementById('challengeBtnBottom');
     const multiplayStatus = document.getElementById('multiplayStatus');
     const pairedBubble = document.getElementById('pairedBubble');
-    const readonlyNote = document.getElementById('readonlyNote');
 
-    // state
     let board = null, game = null, currentTheme = FALLBACK_THEME;
     let isSpectator = false, myColor = null, isPaired = false, pairedGameId = null;
     let pendingPromo = null;
 
-    // drawing state (unchanged)
     let drawing = false;
     let drawPointerId = null;
     let drawStart = null;
@@ -207,7 +183,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     let selectedSquareHighlights = {};
     let lastMoveSquares = [];
 
-    // left-click detection
     let leftClickStart = null;
 
     function setMsg(t, ms=0){
@@ -251,12 +226,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
       try{ if(board && typeof board.position === 'function') board.position(game.fen()); }catch(e){ console.warn('board.position error', e); }
       refreshNotation();
-      setTimeout(updateOverlaySize, 30);
     }
 
     function onSnapEnd(){ if(board) board.position(game.fen()); }
 
-    // promotion dialog
     function showPromotionDialog(){ promoteModal.style.display='block'; }
     function hidePromotionDialog(){ promoteModal.style.display='none'; }
     promoteModal.addEventListener('click', function(e){
@@ -267,7 +240,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }
     });
 
-    // onDrop (with promotion)
     async function onDrop(source, target){
       if(!game) return 'snapback';
       if(isSpectator){ setMsg('Spectator — cannot move',1000); return 'snapback'; }
@@ -301,9 +273,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
 
       try{ 
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
-          if(window.firebaseMultiplayer.getMyId) {
-            // if in a real paired game we still keep previous semantics
-          }
           window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } }); 
         }
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
@@ -313,7 +282,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       return;
     }
 
-    // notation refresh
     function refreshNotation(){
       try{
         if(!movesList) return;
@@ -335,7 +303,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ console.warn('refreshNotation error', e); }
     }
 
-    // inbound move handler
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
@@ -370,7 +337,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ console.warn('onBoardMove failed', e); }
     };
 
-    // persistent last-move highlight
     function setPersistentLastMove(src, tgt){
       lastMoveSquares.forEach(sq => {
         const el = document.querySelector('.square-' + sq);
@@ -384,11 +350,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       });
     }
 
-    // helpers for overlay and drawing are unchanged (kept as original)
-    // ... (functions getBoardInner, getSquareCenters, squareAtClientXY, createSvgLine, createSvgArrowHead, finalizeArrow, updateOverlaySize etc.)
-    // pointer wiring is unchanged
-
-    // boot
     async function boot(){
       await ensureChessLoaded();
       currentTheme = await chooseTheme();
@@ -400,11 +361,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(uname && emailInputBottom) emailInputBottom.value = uname;
       }catch(e){}
 
-      // Auto-join online if username exists in input or localStorage
       try{
         const saved = (emailInputBottom && emailInputBottom.value) ? emailInputBottom.value.trim() : (localStorage.getItem('username') || localStorage.getItem('email') || '');
         if(saved){
-          // call goOnline automatically so student remains online until logout
           setTimeout(()=>{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.autoJoin) window.firebaseMultiplayer.autoJoin(saved); }, 200);
         }
       }catch(e){}
@@ -418,7 +377,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     }
     boot();
 
-    // UI handlers (undo/flip/resign/logout)
     undoBtn.addEventListener('click', ()=>{ 
       if(!game) return; 
       const mv = game.undo(); 
@@ -426,7 +384,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(board) board.position(game.fen()); 
         refreshNotation(); 
         setMsg('Undid move',900);
-        // Emit FEN update after undo
         try{ 
           if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
             window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' });
@@ -434,7 +391,9 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         }catch(e){}
       } 
     });
-    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
+
+    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); });
+
     resignBtn.addEventListener('click', ()=>{
       if(!game) return;
       game.reset();
@@ -452,7 +411,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       isPaired = false; myColor = null; pairedGameId = null; isSpectator = false;
       pairedBubble.style.display='none';
       multiplayStatus.textContent = 'Not connected';
-      readonlyNote.style.display = 'none';
       createBoard(currentTheme);
     });
 
@@ -463,8 +421,8 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     });
 
     loadFenBtn.addEventListener('click', ()=>{
-      const txt = pgnInput.value.trim();
-      if(!txt){ setMsg('Paste a FEN string to load',1200); return; }
+      const txt = fenInput.value.trim();
+      if(!txt){ setMsg('Enter a FEN string to load',1200); return; }
       try{
         if(!game) game = new Chess();
         const ok = game.load(txt);
@@ -472,8 +430,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(board) board.position(game.fen());
         refreshNotation();
         setMsg('FEN loaded',1100);
-        setTimeout(updateOverlaySize, 30);
-        // Emit the loaded FEN
         try{ 
           if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
             window.firebaseMultiplayer.emitFen({ fen: game.fen(), action: 'loadFen' });
@@ -482,16 +438,12 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       }catch(e){ setMsg('Invalid FEN',1400); console.warn(e); }
     });
 
-    clearPgn.addEventListener('click', ()=>{ pgnInput.value=''; setMsg('Cleared',900); });
-
-    resetBtnLeft.addEventListener('click', ()=>{ 
+    resetBoardBtn.addEventListener('click', ()=>{ 
       if(!game) game = new Chess(); 
       else game.reset(); 
       if(board) board.position(game.fen()); 
       refreshNotation(); 
       setMsg('Reset to start',900); 
-      setTimeout(updateOverlaySize, 30); 
-      // Emit reset FEN
       try{ 
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
           window.firebaseMultiplayer.emitFen({ fen: game.fen(), action: 'reset' });
@@ -500,13 +452,26 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
     });
 
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
-    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(240, Math.min(1200, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } else { createBoard(currentTheme); } }catch(e){ createBoard(currentTheme); } setTimeout(updateOverlaySize,20); }
-
-    // firebase code unchanged except spectate handling improvements below
+    
+    function setBoardSize(px){ 
+      if(!px || isNaN(px)) return; 
+      const clamped = Math.max(240, Math.min(1200, Number(px))); 
+      boardWrapper.style.maxWidth = clamped + 'px'; 
+      boardSizeRange.value = clamped; 
+      boardSizeLabel.textContent = clamped + 'px'; 
+      try{ 
+        if(board && typeof board.resize === 'function'){ 
+          board.resize(); 
+        } else { 
+          createBoard(currentTheme); 
+        } 
+      }catch(e){ 
+        createBoard(currentTheme); 
+      } 
+    }
   })();
   </script>
 
-  <!-- FIREBASE (modified presence & spectate-response handling) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script>
@@ -520,7 +485,7 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
-    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){ /* ignore if already initialized */ }
+    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
 
     (function(){
       const db = firebase.database();
@@ -529,7 +494,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       const gamesRef = db.ref('games');
       let movesRef = null;
 
-      // consistent sessionStorage key
       let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
       sessionStorage.setItem('iq4u_clientId', myId);
 
@@ -537,22 +501,23 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
       let currentGameId = null;
       let presenceTimer = null;
 
-      // goOnline: writes role="student" and keeps record until explicit logout
       function goOnline(email){
         myEmail = email || ('anon-'+myId);
         const node = onlineRef.child(myId);
-        // write role explicitly so master can detect user type
         node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
           .then(()=>{ document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail; })
           .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Presence write error'; });
 
-        // NOTE: we intentionally DO NOT call onDisconnect().remove() so the student remains listed until explicit logout.
         if(presenceTimer) clearInterval(presenceTimer);
         presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
       }
-      function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
 
-      // populate online list
+      function goOffline(){ 
+        if(presenceTimer) clearInterval(presenceTimer); 
+        onlineRef.child(myId).remove().catch(()=>{}); 
+        document.getElementById('multiplayStatus').textContent = 'Not connected'; 
+      }
+
       onlineRef.on('value', snap=>{
         const v = snap.val()||{};
         const onlinePlayersBottom = document.getElementById('onlinePlayersBottom');
@@ -579,11 +544,20 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         } else document.getElementById('challengeBtnBottom').disabled=false;
       });
 
-      function sendChallengeTo(targetId){ if(!targetId) return; const ch = challengesRef.child(targetId).push(); ch.set({ fromId: myId, fromEmail: myEmail, ts: firebase.database.ServerValue.TIMESTAMP }).then(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge sent'; setTimeout(()=> ch.remove().catch(()=>{}), 60_000); }).catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge failed'; }); }
+      function sendChallengeTo(targetId){ 
+        if(!targetId) return; 
+        const ch = challengesRef.child(targetId).push(); 
+        ch.set({ fromId: myId, fromEmail: myEmail, ts: firebase.database.ServerValue.TIMESTAMP })
+          .then(()=>{ 
+            document.getElementById('multiplayStatus').textContent = 'Challenge sent'; 
+            setTimeout(()=> ch.remove().catch(()=>{}), 60_000); 
+          })
+          .catch(()=>{ document.getElementById('multiplayStatus').textContent = 'Challenge failed'; }); 
+      }
 
-      // handle incoming challenge (unchanged)
       challengesRef.child(myId).on('child_added', snap=>{
-        const data = snap.val(); const key = snap.key;
+        const data = snap.val(); 
+        const key = snap.key;
         if(!data) return;
         const fromEmail = data.fromEmail||data.fromId;
         const accept = confirm(fromEmail + ' challenges you. Accept?');
@@ -609,7 +583,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         }
       });
 
-      // Watch for master's moves (master will write to moves/{myId})
       let masterMovesRef = null;
       function watchMasterMoves(){
         if(masterMovesRef) return;
@@ -617,19 +590,16 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         masterMovesRef.on('child_added', snap=>{
           const m = snap.val();
           if(!m) return;
-          // Only process moves from master (by field contains 'm_' prefix for master ID)
           if(!m.by || !m.by.startsWith('m_')) {
-            return; // Skip if not from master
+            return;
           }
           if(m.payload){
             try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
           }
         });
       }
-      // Start watching master moves immediately when online
       watchMasterMoves();
 
-      // notifications
       db.ref('notifications/'+myId).on('child_added', snap=>{
         const n = snap.val();
         if(!n) return;
@@ -652,12 +622,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         snap.ref.remove().catch(()=>{});
       });
 
-      // ---- Spectate invites (listen + deterministic response) ----
       let isSpectatedByMaster = false;
       const spectateInvitePath = 'spectateInvites/'+myId;
       console.log(`[STUDENT] Setting up spectate invite listener on ${spectateInvitePath}, myId=${myId}`);
 
-      // fetch existing invites once (race-safe)
       db.ref(spectateInvitePath).once('value', snap => {
         if(snap.exists()){
           snap.forEach(child => {
@@ -668,7 +636,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         console.error(`[STUDENT] fetch invites error:`, err);
       });
 
-      // attach child_added for future invites
       db.ref(spectateInvitePath).on('child_added', snap => {
         processInvite(snap);
       }, err => { console.error('[STUDENT] invite child_added error', err); });
@@ -682,7 +649,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         if(accept){
           isSpectatedByMaster = true;
           document.getElementById('multiplayStatus').textContent = 'Master is spectating';
-          // respond on deterministic path spectateResponses/<masterId>/<myId>
           if(inv.fromId){
             const respPath = `spectateResponses/${inv.fromId}/${myId}`;
             const respRef = db.ref(respPath);
@@ -697,7 +663,6 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
             respRef.set(payload).then(()=>{ console.log('[STUDENT] wrote decline response', respPath, payload); }).catch(()=>{});
           }
         }
-        // remove invite after handling
         try{ snap.ref.remove().catch(()=>{}); }catch(e){}
       }
 
@@ -725,17 +690,18 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         });
       }
 
-      function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
+      function emitMoveForGame(gameId, payload){ 
+        if(!gameId || !payload) return; 
+        const node = db.ref('moves/'+gameId).push(); 
+        node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); 
+      }
 
-      // Join button — reads username input and goes online
       document.getElementById('joinBtnBottom').addEventListener('click', function(){
         const email = (document.getElementById('emailInputBottom').value||'').trim();
         if(!email) return alert('Enter username to join online');
-        const asSpect = document.getElementById('spectatorToggle').checked;
         goOnline(email);
       });
 
-      // expose helper for auto-join from boot
       window.firebaseMultiplayer = {
         emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
         emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
@@ -753,12 +719,10 @@ r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"></textarea>
         sendChallengeTo(target);
       });
 
-      window.addEventListener('beforeunload', ()=>{ /* do not auto-remove presence on unload per request */ });
-    })();  /* end inner IIFE */
+      window.addEventListener('beforeunload', ()=>{});
+    })();
 
-  })(); /* end outer IIFE */
+  })();
   </script>
 </body>
 </html>
-
-
