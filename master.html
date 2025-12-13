@@ -3,57 +3,913 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>Master Dashboard - IQ 4U Academy</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IQ4U — Student Puzzle (student2)</title>
+
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
-    :root{ --card-gap:12px; --card-bg:#fff; --card-border:#ddd; --control-height:44px; font-family:Arial,Helvetica,sans-serif; color:#222;}
-    html,body{ height:100%; margin:0; background:#f5f7fb; }
-    .container{ margin:16px auto; max-width:1200px; padding-bottom:28px; }
-    h1{ margin:0 0 12px 0; font-size:20px; }
-    .boards-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--card-gap); }
-    .board-card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px; min-height:260px; box-shadow:0 1px 3px rgba(20,30,40,0.05); }
-    .top-strip{ display:flex; align-items:center; justify-content:flex-start; gap:8px; height:var(--control-height); }
-    .student-label{ font-weight:600; text-align:center; display:flex; align-items:center; gap:8px; justify-content:center; }
-    .controls{ display:flex; gap:8px; align-items:center; width:100%; }
-    .controls select, .controls button, .controls input[type=range]{ height:32px; padding:4px 8px; border-radius:6px; border:1px solid #ccc; background:#fff; }
-    .board-inner{ width:100%; display:flex; justify-content:center; }
-    .board-holder{ box-sizing:border-box; border-radius:6px; overflow:hidden; background:#fff; }
-    .debug{ font-family:monospace; font-size:12px; background:#fbfcfd; border:1px solid #eef2f6; padding:6px; border-radius:6px; max-height:80px; overflow:auto; display:none; } /* kept hidden */
-    .notif-area{ display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; width:100%; }
-    .notifications { flex: 1 1 260px; min-width:160px; max-width:460px; background:#fff; border:1px solid #eef2f6; padding:8px; border-radius:6px; font-size:13px; color:#333; box-sizing:border-box; max-height:88px; overflow:auto; }
-    .notation { flex:1 1 200px; min-width:160px; max-width:999px; background:#fbfdff; border:1px solid #eef2ff; padding:8px; border-radius:6px; font-family:monospace; font-size:13px; white-space:normal; display:flex; flex-wrap:wrap; gap:8px; align-items:center; box-sizing:border-box; min-height:44px; }
-    .notation .move { padding:4px 8px; border-radius:6px; background:transparent; }
-    .footer-actions{ display:flex; justify-content:flex-end; margin-top:18px; gap:8px; }
-    .btn-logout{ background:#ef4444; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
-    .multiplayer-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; }
-    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } }
-    .status-small { font-size:12px; color:#666; min-width:150px; }
-    .notif-item { font-size:12px; padding:4px 6px; border-radius:4px; background:#f7f9fc; margin-bottom:6px; }
+    html,body{ overscroll-behavior-y: contain; height:100%; }
+    body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:16px; background:#f6f7fb; color:#111; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; align-items:center; }
+    button{ padding:8px 12px; border:none; background:#0f172a; color:#fff; border-radius:8px; cursor:pointer; }
+    .panel{ background:#fff; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.04); margin:0 auto; max-width:980px; width:100%; box-sizing:border-box; }
+    .small{ font-size:13px; color:#555; }
+    .muted{ color:#666; font-size:13px; }
+    .info{ margin-top:8px; font-size:13px; color:#444; text-align:center; }
+    .controls{ display:flex; gap:8px; justify-content:center; align-items:center; width:100%; }
+    #board-wrapper{ width:100%; max-width:760px; display:flex; align-items:center; justify-content:center; transition: max-width 180ms ease; margin:0 auto; position:relative; padding:16px; }
+    #board-wrapper, #board { touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -ms-touch-action: none; }
+    #board{ width:100%; aspect-ratio: 1 / 1; border:1px solid #e6eefc; box-sizing:border-box; background:#fff; max-height:88vh; min-width:520px; min-height:520px; box-shadow: 0 6px 18px rgba(2,6,23,0.04); border-radius:8px; padding:6px; }
+    .resizer{ display:flex; gap:10px; align-items:center; background:transparent; justify-content:center; width:100%; }
+    .resizer .range{ width:320px; }
+    .resizer small{ color:#444; display:block; min-width:48px; text-align:center; font-size:13px; }
+    textarea{ width:100%; max-width:720px; min-height:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc; font-family:monospace; display:block; margin:0 auto; box-sizing:border-box; }
+    .notation { margin-top:12px; padding:8px; border-radius:6px; border:1px solid #eef2ff; background:#fbfdff; min-height:44px; max-height:180px; overflow:auto; font-family:monospace; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .notation .move { white-space:normal; display:inline-block; padding:4px 8px; border-radius:6px; background:transparent; }
+    .notation .move.current { background:#0f172a; color:#fff; }
+    .tactic-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .solution-controls { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    .solution-controls .small { margin-left:6px; margin-right:2px; }
+    @media (max-width:900px){
+      #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
+      .resizer .range{ width:200px; }
+    }
+    .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
+    .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
+    .logout-btn { background:#dc2626; }
+    .stats { margin-top:10px; display:flex; gap:16px; align-items:center; justify-content:flex-end; font-weight:600; color:#111; }
+    .cb-last-move { outline: 3px solid rgba(255,200,0,0.95); outline-offset: -3px; box-shadow: inset 0 0 0 2px rgba(255,200,0,0.25); }
+    .puzzle-meta { margin-left:8px; font-weight:600; color:#222; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Master Dashboard - IQ 4U Academy</h1>
 
-    <div class="boards-grid" id="boardsGrid"></div>
+  <!-- ACCESS CHECK: strict for student2 only -->
+  <script>
+    (function(){
+      const allowedRoles = ['student2'];
+      const role = localStorage.getItem('role');
+      if(!role || allowedRoles.indexOf(role) === -1){
+        try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
+      }
+    })();
+  </script>
 
-    <div class="footer-actions">
-      <button id="globalLogout" class="btn-logout">Logout</button>
+  <div class="panel">
+    <div class="controls" aria-hidden="false">
+      <button id="undoBtn">Undo</button>
+      <button id="flipBtn">Flip</button>
+      <button id="resignBtn" title="Resign / Reset" style="background:#8b0f0f;">Resign</button>
+      <button id="logoutBtn" class="logout-btn" style="margin-left:auto;">Logout</button>
+    </div>
+
+    <div class="resizer" aria-label="Board resizer controls" style="margin-top:6px;">
+      <input id="boardSizeRange" name="board-size" class="range" type="range" min="360" max="1400" step="10" value="760" aria-label="Board size">
+      <small id="boardSizeLabel">760px</small>
+    </div>
+
+    <div id="board-wrapper" style="margin-top:12px;">
+      <div id="board" aria-label="Chessboard container"></div>
+      <svg id="draw-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+    </div>
+
+    <div id="msg" class="info" aria-live="polite">Ready</div>
+
+    <div id="movesList" class="notation" aria-live="polite" role="status">No moves yet.</div>
+  </div>
+
+  <!-- Puzzle controls -->
+  <div class="panel" style="margin-top:18px;">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div class="tactic-row" aria-label="Puzzle controls">
+        <label class="small">Tactic:</label>
+        <select id="tacticSelect"><option>Loading tactics…</option></select>
+
+        <label class="small">Min rating:</label>
+        <select id="ratingMin"><option>0</option><option>600</option><option selected>800</option><option>1000</option><option>1200</option></select>
+
+        <label class="small">Max rating:</label>
+        <select id="ratingMax"><option selected>99999</option><option>1000</option><option>1200</option><option>1400</option><option>1600</option></select>
+
+        <button id="loadPuzzleBtn">Load (first)</button>
+        <button id="randomPuzzleBtn">Random</button>
+      </div>
+
+      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <button id="prevPuzzleBtn">Previous</button>
+        <button id="nextPuzzleBtn">Next</button>
+        <div class="puzzle-meta" id="currentPuzzleId">No puzzle</div>
+      </div>
+    </div>
+
+    <div class="solution-controls" id="solutionControls" style="margin-top:12px;">
+      <label><input type="checkbox" id="autoOpponent" checked /> <span class="small">Auto opponent moves</span></label>
+      <button id="showSolutionBtn">Show Solution</button>
+      <button id="resetSolutionBtn">Reset Solution</button>
+      <label class="small">Speed:</label>
+      <select id="solutionSpeed"><option value="1200">1.2s</option><option value="800">0.8s</option><option value="500" selected>0.5s</option><option value="250">0.25s</option></select>
+      <div id="solutionStatus" class="muted small" style="margin-left:auto;">No solution loaded</div>
+    </div>
+
+    <div class="stats" id="statsBar">
+      <div>Correct: <span id="statCorrect">0</span></div>
+      <div>Incorrect: <span id="statIncorrect">0</span></div>
+      <div>Total attempts: <span id="statAttempts">0</span></div>
+      <div>Puzzles: <span id="statPuzzles">0</span></div>
+      <div>Avg rating: <span id="statAvgRating">0</span></div>
     </div>
   </div>
 
-  <!-- jQuery (required by chessboard.js) -->
+  <div class="panel multiplayer-panel" style="margin-top:18px;" id="multiplayerPanel">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label for="emailInputBottom" class="small">Your username:</label>
+      <input id="emailInputBottom" name="username" type="text" placeholder="your username (e.g. student1)" />
+      <button id="joinBtnBottom">Join Online</button>
+    </div>
+
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center; margin-top:10px;">
+      <div id="multiplayStatus" class="muted">Not connected</div>
+      <div id="pairedBubble" class="status-bubble" style="display:none;">Paired</div>
+    </div>
+  </div>
+
+  <div class="promote-modal" id="promoteModal" role="dialog" aria-modal="true">
+    <div style="font-weight:700; text-align:center; margin-bottom:8px;">Choose promotion</div>
+    <div class="row">
+      <button data-piece="q">Q</button>
+      <button data-piece="r">R</button>
+      <button data-piece="b">B</button>
+      <button data-piece="n">N</button>
+    </div>
+  </div>
+
+  <!-- libs -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <!-- chessboard.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
-  <!-- Firebase compat -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
   <script>
-  (async function(){
+  (function(){
+    // Config
+    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+    const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
+
+    // DOM
+    const boardEl = document.getElementById('board');
+    const boardWrapper = document.getElementById('board-wrapper');
+    const drawOverlay = document.getElementById('draw-overlay');
+    const boardSizeRange = document.getElementById('boardSizeRange');
+    const boardSizeLabel = document.getElementById('boardSizeLabel');
+    const msgEl = document.getElementById('msg');
+    const movesList = document.getElementById('movesList');
+
+    const tacticSelect = document.getElementById('tacticSelect');
+    const ratingMin = document.getElementById('ratingMin');
+    const ratingMax = document.getElementById('ratingMax');
+    const loadPuzzleBtn = document.getElementById('loadPuzzleBtn');
+    const randomPuzzleBtn = document.getElementById('randomPuzzleBtn');
+    const prevPuzzleBtn = document.getElementById('prevPuzzleBtn');
+    const nextPuzzleBtn = document.getElementById('nextPuzzleBtn');
+    const currentPuzzleIdEl = document.getElementById('currentPuzzleId');
+
+    const autoOpponent = document.getElementById('autoOpponent');
+    const showSolutionBtn = document.getElementById('showSolutionBtn');
+    const resetSolutionBtn = document.getElementById('resetSolutionBtn');
+    const solutionSpeed = document.getElementById('solutionSpeed');
+    const solutionStatus = document.getElementById('solutionStatus');
+
+    const statCorrectEl = document.getElementById('statCorrect');
+    const statIncorrectEl = document.getElementById('statIncorrect');
+    const statAttemptsEl = document.getElementById('statAttempts');
+    const statPuzzlesEl = document.getElementById('statPuzzles');
+    const statAvgRatingEl = document.getElementById('statAvgRating');
+
+    const undoBtn = document.getElementById('undoBtn');
+    const flipBtn = document.getElementById('flipBtn');
+    const resignBtn = document.getElementById('resignBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    const emailInputBottom = document.getElementById('emailInputBottom');
+    const joinBtnBottom = document.getElementById('joinBtnBottom');
+    const multiplayStatus = document.getElementById('multiplayStatus');
+    const pairedBubble = document.getElementById('pairedBubble');
+
+    // State
+    let board = null;
+    let game = null;
+    let currentTheme = null;
+    let currentCandidateList = [];
+    let currentCandidateIndex = -1;
+
+    // Solution state
+    let solutionMoves = [];
+    let solutionMoveTypes = [];
+    let solutionIndex = 0;
+    let initialFen = null;
+    let solutionTimer = null;
+    let initialSideToMove = null;
+    let solutionDisplayed = false; // NEW: track if solution is being displayed
+
+    // Stats
+    let statCorrect = 0;
+    let statIncorrect = 0;
+    let statAttempts = 0;
+    let statPuzzles = 0;
+    let statRatingSum = 0;
+
+    // Helpers
+    function setMsg(t,ms=0){ if(msgEl) msgEl.textContent = t||''; if(ms>0) setTimeout(()=>{ if(msgEl && msgEl.textContent===t) msgEl.textContent=''; }, ms); }
+    function pieceTheme(piece){ return PIECES_BASE + piece + '.svg'; }
+    function ensureChessLoaded(){ return new Promise(resolve=>{ if(typeof Chess !== 'undefined') return resolve(); const start = Date.now(); (function check(){ if(typeof Chess !== 'undefined') return resolve(); if(Date.now()-start>3000) return resolve(); setTimeout(check,50); })(); }); }
+
+    // Create board preserving original behavior
+    function createBoard(){
+      if(board && typeof board.destroy==='function'){ try{ board.destroy(); }catch(e){} }
+      if(!game) game = new Chess();
+      board = Chessboard('board', {
+        draggable: true,
+        position: game ? game.fen() : 'start',
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: pieceTheme
+      });
+      try{ board.position(game.fen()); }catch(e){}
+      updateOverlaySize();
+    }
+    function onSnapEnd(){ if(board && game) board.position(game.fen()); }
+
+    // promotion modal
+    const promoteModal = document.getElementById('promoteModal');
+    let pendingPromo = null;
+    function showPromotionDialog(){ promoteModal.style.display='block'; }
+    function hidePromotionDialog(){ promoteModal.style.display='none'; }
+    promoteModal.addEventListener('click', function(e){
+      if(e.target && e.target.dataset && e.target.dataset.piece){
+        const p = e.target.dataset.piece;
+        if(pendingPromo && pendingPromo.resolve) pendingPromo.resolve(p);
+        pendingPromo = null;
+        hidePromotionDialog();
+      }
+    });
+
+    // persistent last-move highlight
+    let lastMoveSquares = [];
+    function setPersistentLastMove(src, tgt){
+      lastMoveSquares.forEach(sq => {
+        const el = document.querySelector('.square-' + sq);
+        if(el) el.classList.remove('cb-last-move');
+      });
+      lastMoveSquares = [];
+      ['square-' + src, 'square-' + tgt].forEach(cls => {
+        const el = document.querySelector('.' + cls);
+        if(el) el.classList.add('cb-last-move');
+        lastMoveSquares.push(cls.replace('square-',''));
+      });
+    }
+
+    // notation refresh - UPDATED to support solution display mode
+    function refreshNotation(highlightIndex=-1){
+      try{
+        if(!movesList) return;
+        
+        // NEW: If solution is being displayed, show solutionMoves in SAN format
+        if(solutionDisplayed && solutionMoves && solutionMoves.length > 0){
+          const sanMoves = convertToSAN(solutionMoves, solutionMoveTypes);
+          displayMovesInNotation(sanMoves, highlightIndex);
+          return;
+        }
+        
+        // Otherwise use game history
+        const hist = game && typeof game.history === 'function' ? game.history() : [];
+        const arr = hist.slice();
+        if(arr.length===0){ movesList.innerHTML='No moves yet.'; return; }
+        displayMovesInNotation(arr, highlightIndex);
+      }catch(e){ console.warn(e); }
+    }
+
+    // NEW: Helper to display moves in the notation strip
+    function displayMovesInNotation(movesArray, highlightIndex=-1){
+      if(!movesList) return;
+      if(!movesArray || movesArray.length === 0){
+        movesList.innerHTML = 'No moves yet.';
+        return;
+      }
+      
+      movesList.innerHTML = '';
+      for(let i=0; i<movesArray.length; i+=2){
+        const no = Math.floor(i/2)+1;
+        const w = movesArray[i]||'';
+        const b = movesArray[i+1]||'';
+        const div = document.createElement('div');
+        div.className = 'move';
+        const wspan = document.createElement('span'); 
+        wspan.textContent = w; 
+        wspan.dataset.idx = i;
+        if(i===highlightIndex) wspan.classList.add('current');
+        const bspan = document.createElement('span'); 
+        bspan.textContent = b; 
+        bspan.dataset.idx = i+1;
+        if((i+1)===highlightIndex) bspan.classList.add('current');
+        div.innerHTML = `<strong>${no}.</strong>&nbsp;`;
+        div.appendChild(wspan);
+        if(b){ 
+          div.appendChild(document.createTextNode('\u00A0')); 
+          div.appendChild(bspan); 
+        }
+        movesList.appendChild(div);
+      }
+      if(highlightIndex>=0){
+        const sel = movesList.querySelector(`[data-idx="${highlightIndex}"]`);
+        if(sel) sel.scrollIntoView({behavior:'smooth', block:'nearest', inline:'nearest'});
+      }
+    }
+
+    // NEW: Convert solution moves to SAN format for display
+    function convertToSAN(tokens, types){
+      if(!tokens || !types || tokens.length !== types.length) return [];
+      if(!initialFen) return tokens; // fallback
+      
+      const sanArray = [];
+      try{
+        const tempGame = new Chess(initialFen);
+        for(let i=0; i<tokens.length; i++){
+          const token = tokens[i];
+          const type = types[i];
+          
+          if(type === 'san'){
+            // Already SAN, just add it
+            sanArray.push(token);
+            tempGame.move(token, {sloppy: true});
+          } else {
+            // Convert coordinate to SAN
+            const m = token.trim();
+            const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+            if(promMatch){
+              const from = promMatch[1], to = promMatch[2];
+              const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+              const mv = tempGame.move({ from, to, promotion });
+              if(mv){
+                sanArray.push(mv.san);
+              } else {
+                sanArray.push(token); // fallback
+              }
+            } else {
+              sanArray.push(token); // fallback
+            }
+          }
+        }
+      }catch(e){
+        console.warn('convertToSAN error', e);
+        return tokens; // fallback to original
+      }
+      return sanArray;
+    }
+
+    // apply SAN or coordinate move on real game and update UI
+    function applyMoveTokenOnReal(token, type){
+      try{
+        if(!game) return null;
+        if(type === 'san'){
+          const mv = game.move(token, { sloppy:true });
+          if(mv === null) return null;
+          if(board) board.position(game.fen());
+          setPersistentLastMove(mv.from, mv.to);
+          refreshNotation(solutionIndex-1);
+          return mv;
+        } else {
+          const m = token.trim();
+          const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+          if(!promMatch) return null;
+          const from = promMatch[1], to = promMatch[2];
+          const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+          const mv = game.move({ from, to, promotion });
+          if(mv === null) return null;
+          if(board) board.position(game.fen());
+          setPersistentLastMove(mv.from, mv.to);
+          refreshNotation(solutionIndex-1);
+          return mv;
+        }
+      }catch(e){ console.warn('applyMoveTokenOnReal error', e); return null; }
+    }
+
+    // compare student's actual move to expected token using a fenBefore snapshot
+    function expectedMatchesActual_givenFen(expectedToken, expectedType, fenBefore, actualMove){
+      try{
+        const temp = new Chess(fenBefore);
+        let applied = null;
+        if(expectedType === 'san'){
+          applied = temp.move(expectedToken, { sloppy:true });
+        } else {
+          const m = expectedToken.trim();
+          const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+          if(!promMatch) return false;
+          const from = promMatch[1], to = promMatch[2];
+          const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+          applied = temp.move({ from, to, promotion });
+        }
+        if(!applied) return false;
+        return (applied.from === actualMove.from && applied.to === actualMove.to && ((applied.promotion||null) === (actualMove.promotion||null)));
+      }catch(e){ console.warn('expectedMatchesActual_givenFen error', e); return false; }
+    }
+
+    function sanitizeSanToken(s){ if(!s) return ''; return s.toString().replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\d+\.+/g,'').replace(/[+#?!]*$/g,'').replace(/\s+/g,'').trim(); }
+
+    function clearSolutionTimer(){ if(solutionTimer){ clearTimeout(solutionTimer); solutionTimer = null; } }
+
+    function autoPlayOpponentNext(){
+      clearSolutionTimer();
+      if(!solutionMoves || solutionMoves.length===0) return;
+      if(!autoOpponent.checked) { solutionStatus.textContent = 'Auto opponent disabled'; return; }
+
+      const delay = parseInt(solutionSpeed.value,10) || 500;
+      function step(){
+        if(solutionIndex >= solutionMoves.length){
+          onSolutionFinished();
+          return;
+        }
+        const isOpponentMove = (solutionIndex % 2 === 0);
+        if(!isOpponentMove){
+          solutionStatus.textContent = 'Your turn';
+          return;
+        }
+        const token = solutionMoves[solutionIndex];
+        const type = solutionMoveTypes[solutionIndex];
+        const applied = applyMoveTokenOnReal(token, type);
+        if(!applied){
+          console.error('Auto-opponent failed to apply token:', token, 'type:', type, 'at solutionIndex:', solutionIndex, 'candidateIndex:', currentCandidateIndex, 'fenBefore:', game.fen());
+          solutionStatus.textContent = 'Failed to apply opponent move: ' + token;
+          return;
+        }
+        solutionIndex++;
+        solutionStatus.textContent = `Opponent played (${solutionIndex}/${solutionMoves.length})`;
+        if(solutionIndex < solutionMoves.length && (solutionIndex % 2 === 0)){
+          solutionTimer = setTimeout(step, delay);
+        } else {
+          if(solutionIndex >= solutionMoves.length) onSolutionFinished(); else solutionStatus.textContent = 'Your turn';
+        }
+      }
+      solutionTimer = setTimeout(step, 120);
+    }
+
+    function onSolutionFinished(){
+      try{
+        clearSolutionTimer();
+        console.info('Solution finished for candidateIndex=', currentCandidateIndex);
+
+        if(Array.isArray(currentCandidateList) && currentCandidateIndex >= 0 && currentCandidateIndex < currentCandidateList.length - 1){
+          const nextIndex = currentCandidateIndex + 1;
+          solutionStatus.textContent = 'Loading next puzzle...';
+          try{
+            loadPuzzleByCandidateIndex(nextIndex);
+            console.info('Loading next puzzle index=', nextIndex);
+          }catch(loadErr){
+            console.error('Failed to load next puzzle (first try):', loadErr);
+            setTimeout(()=>{
+              try{
+                loadPuzzleByCandidateIndex(nextIndex);
+                console.info('Retry: loaded next puzzle index=', nextIndex);
+              }catch(retryErr){
+                console.error('Retry also failed to load next puzzle:', retryErr);
+                solutionStatus.textContent = 'Next puzzle failed to load';
+              }
+            }, 300);
+          }
+          return;
+        }
+
+        solutionStatus.textContent = 'Solution complete (no more puzzles)';
+        console.info('No subsequent puzzle to load (candidateIndex at end).');
+      }catch(e){
+        console.error('onSolutionFinished error', e);
+        solutionStatus.textContent = 'Solution finished (error)';
+      }
+    }
+
+    async function onDrop(source, target){
+      if(!game) return 'snapback';
+
+      const legal = game.moves({ verbose:true }) || [];
+      const candidatePromo = legal.find(m => m.from === source && m.to === target && m.promotion);
+      let chosenPromo = null;
+      if(candidatePromo){
+        chosenPromo = await new Promise(resolve => { pendingPromo = { from:source, to:target, resolve }; showPromotionDialog(); });
+        pendingPromo = null;
+        if(!chosenPromo) chosenPromo = 'q';
+      }
+
+      const fenBefore = game.fen();
+
+      const moveObj = { from: source, to: target };
+      if(chosenPromo) moveObj.promotion = chosenPromo;
+
+      const mv = game.move(moveObj);
+      if(mv === null){ setMsg('Illegal move',900); return 'snapback'; }
+
+      if(board) board.position(game.fen());
+      setPersistentLastMove(mv.from, mv.to);
+      
+      // NEW: Clear solution display mode when student makes a move
+      solutionDisplayed = false;
+      refreshNotation(solutionIndex);
+
+      if(solutionMoves && solutionMoves.length > 0 && solutionIndex < solutionMoves.length){
+        const expectedIndex = solutionIndex;
+        const expectedToken = solutionMoves[expectedIndex];
+        const expectedType = solutionMoveTypes[expectedIndex];
+        const expectedIsStudentMove = (expectedIndex % 2 === 1);
+        if(expectedIsStudentMove){
+          statAttempts++;
+          const matches = expectedMatchesActual_givenFen(expectedToken, expectedType, fenBefore, mv);
+          if(matches){
+            statCorrect++;
+            updateStatsDisplay();
+            solutionIndex++;
+            solutionStatus.textContent = 'Correct';
+            if(solutionIndex < solutionMoves.length && solutionIndex % 2 === 0 && autoOpponent.checked){
+              setTimeout(()=> autoPlayOpponentNext(), parseInt(solutionSpeed.value,10) || 500);
+            } else if(solutionIndex >= solutionMoves.length){
+              onSolutionFinished();
+            } else {
+              solutionStatus.textContent = 'Your turn';
+            }
+          } else {
+            statIncorrect++;
+            updateStatsDisplay();
+            setMsg('Incorrect — try again', 1200);
+            const undone = game.undo();
+            if(board) board.position(game.fen());
+          }
+        }
+      }
+
+      try{
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){
+          window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
+        }
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+          window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
+        }
+      }catch(e){ console.warn('emit error', e); }
+
+      return;
+    }
+
+    // CSV parsing helpers
+    function normalizeHeaderCell(h){ return (h||'').toString().trim().toLowerCase().replace(/\s+/g,''); }
+    function parseCsvText(csvText){
+      csvText = csvText.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+      const lines = csvText.split('\n');
+      let headerLineIdx = 0;
+      while(headerLineIdx < lines.length && lines[headerLineIdx].trim() === '') headerLineIdx++;
+      if(headerLineIdx >= lines.length) return [];
+      const headerRaw = lines[headerLineIdx];
+      const parseLineToCols = (line) => {
+        const out = [];
+        let cur = '', inQ=false;
+        for(let i=0;i<line.length;i++){
+          const ch = line[i];
+          if(ch === '"'){
+            if(inQ && line[i+1] === '"'){ cur += '"'; i++; continue; }
+            inQ = !inQ; continue;
+          }
+          if(ch === ',' && !inQ){ out.push(cur); cur=''; continue; }
+          cur += ch;
+        }
+        out.push(cur);
+        return out;
+      };
+      const headerCols = parseLineToCols(headerRaw).map(normalizeHeaderCell);
+      const rows = [];
+      for(let i = headerLineIdx + 1; i < lines.length; i++){
+        const line = lines[i];
+        if(line.trim() === '') continue;
+        const vals = parseLineToCols(line);
+        while(vals.length < headerCols.length) vals.push('');
+        const obj = {};
+        for(let j=0;j<headerCols.length;j++){
+          obj[headerCols[j]] = (vals[j] !== undefined) ? vals[j].trim() : '';
+        }
+        obj._rowNum = i+1;
+        rows.push(obj);
+      }
+      return rows;
+    }
+
+    async function fetchJsonQuiet(url){
+      try{ const r = await fetch(url, {cache:'no-cache'}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }catch(e){ console.warn('fetchJsonQuiet', url, e); return null; }
+    }
+    async function loadListAndPopulate(){
+      try{
+        const files = await fetchJsonQuiet(LIST_URL);
+        if(!files || !Array.isArray(files) || files.length === 0){
+          tacticSelect.innerHTML = '<option>No list</option>';
+          console.warn('puzzle list empty or not an array', files);
+          return;
+        }
+        const manifest = { entries: [], tactics: {} };
+        files.forEach(fn => {
+          const key = fn.replace(/\.csv$/i, '').toLowerCase();
+          const fileUrl = '/IQ4U-Chess-Classroom/assets/puzzle/' + fn;
+          manifest.entries.push({ filename: fn, fileUrl, tactic: key });
+          manifest.tactics[key] = manifest.tactics[key] || [];
+          manifest.tactics[key].push({ filename: fn, fileUrl });
+        });
+
+        tacticSelect.innerHTML = '<option value="">— Select tactic —</option>';
+        Object.keys(manifest.tactics).sort().forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t + ' (' + manifest.tactics[t].length + ')';
+          tacticSelect.appendChild(opt);
+        });
+        window._clientManifest = manifest;
+      }catch(e){
+        tacticSelect.innerHTML = '<option>Error loading list</option>';
+        console.error('loadListAndPopulate failed', e);
+      }
+    }
+
+    async function buildCandidatesForTactic(tacticName){
+      solutionStatus.textContent = 'Scanning…';
+      currentCandidateList = [];
+      currentCandidateIndex = -1;
+      if(!window._clientManifest || !window._clientManifest.tactics || !window._clientManifest.tactics[tacticName]){ solutionStatus.textContent='None'; return; }
+      const files = window._clientManifest.tactics[tacticName];
+      const minR = parseInt(ratingMin.value,10)||0;
+      const maxR = parseInt(ratingMax.value,10)||99999;
+      let total=0;
+      const maxGlobal = 400;
+      for(const fi of files){
+        if(total>=maxGlobal) break;
+        try{
+          const resp = await fetch(fi.fileUrl, { cache:'no-cache' });
+          if(!resp.ok){ console.warn('CSV fetch failed', fi.fileUrl, resp.status); continue; }
+          const text = await resp.text();
+          const rows = parseCsvText(text);
+          for(const r of rows){
+            if(total>=maxGlobal) break;
+            const ratingRaw = (r['rating'] || '').toString().replace(/[^0-9]/g,'');
+            const rating = parseInt(ratingRaw,10) || 0;
+            if(rating < minR || rating > maxR) continue;
+            currentCandidateList.push({ row: r, meta:{ file: fi.filename, fileUrl: fi.fileUrl }});
+            total++;
+          }
+        }catch(err){
+          console.warn('error reading file', fi.fileUrl, err);
+        }
+      }
+      solutionStatus.textContent = `${currentCandidateList.length} puzzles found`;
+      if(currentCandidateList.length>0){ currentCandidateIndex = 0; currentPuzzleIdEl.textContent = getCandidateDesc(currentCandidateIndex); }
+      else currentPuzzleIdEl.textContent = 'No puzzle';
+    }
+
+    function getCandidateDesc(idx){
+      const c = currentCandidateList[idx];
+      if(!c) return 'No puzzle';
+      const r = c.row;
+      return (r['puzzleid'] || c.meta.file + ' #' + (c.meta.rowNum||'?'));
+    }
+
+    function extractMovesFromRow(row){
+      if(!row) return { tokens:[], types:[] };
+      const tryGet = (names) => { for(const n of names) if(row[n] && row[n].toString().trim()) return row[n].toString().trim(); return ''; };
+      const sanField = tryGet(['san','san.','sanmoves','san_moves','san_tokens','san']);
+      const movesField = tryGet(['moves','move','mv','moves_tokens']);
+      const pgnField = tryGet(['pgn','game','text']);
+
+      if(sanField){
+        let s = sanField;
+        s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\r?\n/g,' ').replace(/\(.*?\)/g,' ');
+        s = s.replace(/1-0|0-1|1\/2-1\/2|\*/g,'');
+        s = s.replace(/\d+\.+/g,' ');
+        s = s.replace(/\s+/g,' ').trim();
+        const toks = s.split(' ').filter(t=>t && t.length>0).map(t => sanitizeSanToken(t)).filter(Boolean);
+        return { tokens: toks, types: toks.map(()=> 'san') };
+      }
+
+      if(pgnField){
+        let s = pgnField;
+        s = s.replace(/\[.*?\]\s*/g,'');
+        s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\(.*?\)/g,' ');
+        s = s.replace(/1-0|0-1|1\/2-1\/2|\*/g,'');
+        s = s.replace(/\d+\.+/g,' ');
+        s = s.replace(/\s+/g,' ').trim();
+        const toks = s.split(' ').filter(t=>t && t.length>0).map(t => sanitizeSanToken(t)).filter(Boolean);
+        return { tokens: toks, types: toks.map(()=> 'san') };
+      }
+
+      if(movesField){
+        let s = movesField.replace(/\r?\n/g,' ').replace(/\s+/g,' ').trim();
+        const toks = s.split(' ').filter(t => t && t.length>0);
+        const clean = toks.map(t => t.replace(/[;,.]+$/,'').trim()).filter(Boolean);
+        return { tokens: clean, types: clean.map(()=> 'coord') };
+      }
+
+      return { tokens:[], types:[] };
+    }
+
+    async function loadPuzzleByCandidateIndex(idx){
+      const cand = currentCandidateList[idx];
+      if(!cand){ solutionStatus.textContent='No puzzle'; return; }
+      currentCandidateIndex = idx;
+      currentPuzzleIdEl.textContent = getCandidateDesc(idx);
+      const raw = cand.row;
+      solutionStatus.textContent = 'Loading ' + (raw['puzzleid'] || cand.meta.file);
+
+      try{
+        const fenRawCandidate = (raw['fen'] || '').toString().trim();
+        if(!fenRawCandidate || fenRawCandidate.length === 0){
+          console.warn('No FEN present in row.fen for candidate', cand.meta ? cand.meta.file : null, 'row:', raw);
+          solutionStatus.textContent = 'No FEN in row';
+          return;
+        }
+
+        let fenSelected = fenRawCandidate.replace(/^"+|"+$/g,'').trim();
+
+        const parts = fenSelected.split(/\s+/);
+        if(parts.length < 6){
+          console.warn('FEN appears incomplete — appending defaults. Found parts:', parts.length, fenSelected);
+          fenSelected = fenSelected + ' w - - 0 1';
+        }
+
+        initialFen = fenSelected;
+
+        try{ if(typeof Chess !== 'undefined') game = new Chess(initialFen); else game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
+        if(!game) game = new Chess();
+        if(board) board.position(game.fen());
+        const parts2 = initialFen.split(/\s+/);
+        initialSideToMove = (parts2 && parts2[1]) ? parts2[1] : 'w';
+        const extracted = extractMovesFromRow(raw);
+        solutionMoves = extracted.tokens || [];
+        solutionMoveTypes = extracted.types || [];
+        solutionIndex = 0;
+        
+        // NEW: Reset solution display mode
+        solutionDisplayed = false;
+        
+        statPuzzles++;
+        const rating = parseInt((raw['rating']||'').replace(/[^0-9]/g,''),10) || 0;
+        statRatingSum += rating;
+        updateStatsDisplay();
+        refreshNotation(-1);
+        solutionStatus.textContent = `Loaded: ${(raw['puzzleid']||cand.meta.file)} (${solutionMoves.length} moves)`;
+        if(solutionMoves && solutionMoves.length>0 && solutionIndex % 2 === 0 && autoOpponent.checked){
+          setTimeout(()=> autoPlayOpponentNext(), 200);
+        }
+      }catch(e){
+        console.warn('load puzzle error', e);
+        solutionStatus.textContent = 'Load error';
+      }
+    }
+
+    function loadFirstCandidate(){ if(currentCandidateList.length===0){ solutionStatus.textContent='No puzzles'; return; } loadPuzzleByCandidateIndex(0); }
+    function loadRandomCandidate(){ if(currentCandidateList.length===0){ solutionStatus.textContent='No puzzles'; return; } const i = Math.floor(Math.random()*currentCandidateList.length); loadPuzzleByCandidateIndex(i); }
+    function loadNextCandidate(){ if(!currentCandidateList || currentCandidateList.length===0) return; if(currentCandidateIndex < currentCandidateList.length-1){ loadPuzzleByCandidateIndex(currentCandidateIndex+1); } else solutionStatus.textContent = 'Last puzzle'; }
+    function loadPrevCandidate(){ if(!currentCandidateList || currentCandidateList.length===0) return; if(currentCandidateIndex > 0){ loadPuzzleByCandidateIndex(currentCandidateIndex-1); } else solutionStatus.textContent = 'First puzzle'; }
+
+    function updateStatsDisplay(){
+      statCorrectEl.textContent = statCorrect;
+      statIncorrectEl.textContent = statIncorrect;
+      statAttemptsEl.textContent = statAttempts;
+      statPuzzlesEl.textContent = statPuzzles;
+      statAvgRatingEl.textContent = statPuzzles>0 ? Math.round(statRatingSum / statPuzzles) : 0;
+    }
+
+    tacticSelect.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    ratingMin.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    ratingMax.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
+    loadPuzzleBtn.addEventListener('click', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value).then(()=> loadFirstCandidate()); });
+    randomPuzzleBtn.addEventListener('click', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value).then(()=> loadRandomCandidate()); });
+    prevPuzzleBtn.addEventListener('click', ()=> loadPrevCandidate());
+    nextPuzzleBtn.addEventListener('click', ()=> loadNextCandidate());
+    
+    // NEW: Updated Show Solution button - only displays moves, doesn't play them
+    showSolutionBtn.addEventListener('click', ()=> {
+      if(!solutionMoves || solutionMoves.length === 0){
+        solutionStatus.textContent = 'No solution available';
+        return;
+      }
+      solutionDisplayed = true;
+      refreshNotation(-1);
+      solutionStatus.textContent = `Solution displayed (${solutionMoves.length} moves)`;
+    });
+    
+    resetSolutionBtn.addEventListener('click', ()=> resetToInitial());
+
+    function resetToInitial(){
+      if(!initialFen) return;
+      try{ game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
+      if(board) board.position(game.fen());
+      solutionIndex = 0;
+      solutionDisplayed = false;
+      clearSolutionTimer();
+      solutionStatus.textContent = 'Reset to initial';
+      refreshNotation(-1);
+      if(solutionMoves && solutionMoves.length>0 && solutionIndex %2 ===0 && autoOpponent.checked){
+        setTimeout(()=> autoPlayOpponentNext(), 200);
+      }
+    }
+
+    undoBtn.addEventListener('click', ()=>{ 
+      if(!game) return; 
+      const mv = game.undo(); 
+      if(mv){ 
+        if(board) board.position(game.fen()); 
+        solutionDisplayed = false;
+        refreshNotation(); 
+        setMsg('Undid move',900); 
+        try{ 
+          if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){ 
+            window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' }); 
+          } 
+        }catch(e){} 
+      } 
+    });
+    flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
+    resignBtn.addEventListener('click', ()=>{
+      if(!game) return;
+      game.reset();
+      if(board) board.position('start');
+      solutionDisplayed = false;
+      refreshNotation();
+      setMsg('You resigned — game reset',1500);
+      try{ 
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){ 
+          window.firebaseMultiplayer.emitMove({ type:'resign', by: window.firebaseMultiplayer.getMyId ? window.firebaseMultiplayer.getMyId() : null }); 
+        }
+        if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){
+          window.firebaseMultiplayer.emitFen({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKB1R w KQkq - 0 1', action: 'resign' });
+        }
+      }catch(e){}
+      solutionMoves = []; solutionIndex = 0; initialFen = null;
+      statAttempts = 0; statCorrect = 0; statIncorrect = 0; statPuzzles = 0; statRatingSum = 0;
+      updateStatsDisplay();
+    });
+    logoutBtn.addEventListener('click', ()=>{
+      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){} try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) window.firebaseMultiplayer.goOffline(); }catch(e){} window.location.href = 'index.html';
+    });
+
+    boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
+    function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(360, Math.min(1400, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } }catch(e){} setTimeout(updateOverlaySize,20); }
+    function updateOverlaySize(){ try{ const rect = boardEl.getBoundingClientRect(); drawOverlay.style.width = rect.width + 'px'; drawOverlay.style.height = rect.height + 'px'; }catch(e){} }
+
+    (async function boot(){
+      await ensureChessLoaded();
+      game = new Chess();
+      createBoard();
+      try{ const uname = localStorage.getItem('username') || localStorage.getItem('email') || ''; if(uname && emailInputBottom) emailInputBottom.value = uname; }catch(e){}
+      const initial = parseInt(getComputedStyle(boardWrapper).maxWidth,10) || boardWrapper.clientWidth || 760;
+      setBoardSize(initial);
+      setMsg('Ready',700);
+      await loadListAndPopulate();
+    })();
+
+    window.onBoardMove = function(payload){
+      try{
+        if(!payload) return;
+        if(typeof payload === 'string'){
+          if(!game) game = new Chess();
+          if(typeof game.load === 'function'){ game.load(payload); }
+          if(board) board.position(game.fen());
+          solutionDisplayed = false;
+          refreshNotation();
+          return;
+        }
+        if(!game) game = new Chess();
+        if(payload.move && payload.move.from && payload.move.to){
+          const mvObj = { from: payload.move.from, to: payload.move.to };
+          if(payload.move.promotion) mvObj.promotion = payload.move.promotion;
+          const applied = game.move(mvObj);
+          if(applied === null){
+            if(payload.fen && typeof game.load === 'function'){
+              game.load(payload.fen);
+            }
+          } else {
+            setPersistentLastMove(payload.move.from, payload.move.to);
+          }
+        } else if(payload.fen){
+          if(typeof game.load === 'function') game.load(payload.fen);
+        }
+        if(board) board.position(game.fen());
+        solutionDisplayed = false;
+        refreshNotation();
+      }catch(e){ console.warn('onBoardMove failed', e); }
+    };
+
+    window._studentPuzzle = {
+      getSolutionMoves: ()=> solutionMoves,
+      getSolutionIndex: ()=> solutionIndex,
+      getStats: ()=> ({correct:statCorrect, incorrect:statIncorrect, attempts:statAttempts, puzzles:statPuzzles, avgRating: statPuzzles?Math.round(statRatingSum/statPuzzles):0}),
+      getCurrentCandidateIndex: ()=> currentCandidateIndex
+    };
+
+  })();
+  </script>
+
+  <!-- FIREBASE -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script>
+  (function(){
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
@@ -61,568 +917,181 @@
       projectId: "iq4u-chess-classroom",
       storageBucket: "iq4uchess-classroom.firebasedestorage.app",
       messagingSenderId: "833620718306",
-      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
+      appId: "1:833620718306:web:b599bb6936fe0da4bb"
     };
     try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
+    (function(){
+      const db = firebase.database();
+      const onlineRef = db.ref('online');
+      const gamesRef = db.ref('games');
+      let movesRef = null;
 
-    const db = firebase.database();
-    const onlineRef = db.ref('online');
-    const gamesRef = db.ref('games');
+      let myId = sessionStorage.getItem('iq4u_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
+      sessionStorage.setItem('iq4u_clientId', myId);
 
-    // MASTER identity will be derived from Firebase Auth when present
-    let MASTER_ID = null;
-    let MASTER_NAME = localStorage.getItem('username') || localStorage.getItem('email') || 'master';
+      let myEmail = '';
+      let currentGameId = null;
+      let presenceTimer = null;
 
-    const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
-    const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
-
-    const STUDENTS = [
-      { id: 'student1', name: 'Student 1' },
-      { id: 'student2', name: 'Student 2' },
-      { id: 'student3', name: 'Student 3' },
-      { id: 'student4', name: 'Student 4' }
-    ];
-    const STUDENT_IDS = STUDENTS.map(s => s.id.toLowerCase());
-    const STUDENT_NAMES = STUDENTS.map(s => s.name.toLowerCase());
-
-    const onlineMap = {};   // clientId => {email, role, ts}
-    const boardsState = {}; // per-board state
-
-    // track last online count to avoid duplicate "Players online" messages
-    let lastOnlineCount = null;
-
-    // ---------- ensure chess.js ----------
-    const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
-    async function ensureChess(){
-      if(typeof Chess !== 'undefined') return;
-      try{
-        const mod = await import(CHESS_URL + '?t=' + Date.now());
-        window.Chess = mod.default || mod.Chess || mod;
-      }catch(e){}
-      if(typeof Chess !== 'undefined') return;
-      await new Promise(resolve=>{
-        const s = document.createElement('script');
-        s.src = CHESS_URL + '?t=' + Date.now();
-        s.async = true;
-        s.onload = ()=> setTimeout(resolve, 10);
-        s.onerror = ()=> resolve();
-        document.head.appendChild(s);
-      });
-    }
-
-    async function pickPieceTheme(){
-      const test = CUSTOM_PIECE_THEME.replace('{piece}','wP');
-      try{ const r = await fetch(test, { method:'HEAD', cache:'no-store' }); return r.ok ? CUSTOM_PIECE_THEME : FALLBACK_THEME; }catch(e){ return FALLBACK_THEME; }
-    }
-
-    // ---------- build UI ----------
-    const grid = document.getElementById('boardsGrid');
-    const theme = await pickPieceTheme();
-    for(let i=0;i<STUDENTS.length;i++){
-      const s = STUDENTS[i];
-      const card = createCard(s, theme, i);
-      grid.appendChild(card);
-    }
-
-    await ensureChess();
-    for(const s of STUDENTS) initEngineAndBoard(s.id);
-
-    // ---------- functions (unchanged UI helpers) ----------
-    function createCard(student, pieceTheme, index){
-      const card = document.createElement('div'); card.className = 'board-card'; card.dataset.studentId = student.id;
-
-      const label = document.createElement('div'); label.className = 'student-label';
-      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="path-holder" style="margin-left:8px;font-size:11px;color:#666"></span>`;
-      card.appendChild(label);
-
-      const top = document.createElement('div'); top.className = 'top-strip';
-      top.innerHTML = `<div class="controls"><span class="label-small" style="margin-right:6px;">Size</span>
-        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
-        <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
-      </div>`;
-      card.appendChild(top);
-
-      const boardInnerWrap = document.createElement('div'); boardInnerWrap.className = 'board-inner';
-      const boardHolder = document.createElement('div'); boardHolder.className = 'board-holder';
-      const boardDiv = document.createElement('div'); boardDiv.id = 'board_' + student.id;
-      boardHolder.appendChild(boardDiv); boardInnerWrap.appendChild(boardHolder); card.appendChild(boardInnerWrap);
-
-      const notifArea = document.createElement('div'); notifArea.className = 'notif-area';
-      notifArea.innerHTML = `
-        <div class="notifications" id="notif_${student.id}"></div>
-        <div class="notation" id="notation_${student.id}">No moves.</div>
-      `;
-      card.appendChild(notifArea);
-
-      const debug = document.createElement('div'); debug.className = 'debug'; debug.id = 'debug_' + student.id; debug.textContent = 'ready'; card.appendChild(debug);
-
-      const multiplayPanel = document.createElement('div');
-      multiplayPanel.className = 'multiplayer-panel';
-      multiplayPanel.innerHTML = `
-        <select id="master-students-${student.id}" name="master-students" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; min-width:180px;"><option value="">Select student</option></select>
-        <button id="master-spectate-${student.id}" name="master-spectate-btn" style="padding:8px 12px; border-radius:6px; background:#0f172a; color:#fff; border:none; cursor:pointer;">Spectate</button>
-        <span id="master-status-${student.id}" class="status-small">ready</span>
-      `;
-      card.appendChild(multiplayPanel);
-
-      const defaultSize = (index < 2) ? 570 : 360;
-      boardsState[student.id] = {
-        size: defaultSize,
-        flip: false,
-        watchedClientId: null,
-        listeners: {},
-        boardObj: null,
-        game: null,
-        pieceTheme,
-        gameMoveListeners: {},
-        moveRecords: {},
-        processedMoveKeys: new Set(),
-        lastNotif: null
-      };
-
-      const sizeSlider = top.querySelector('.size-slider');
-      sizeSlider.value = defaultSize;
-      sizeSlider.addEventListener('input', e => {
-        const px = Number(e.target.value);
-        boardsState[student.id].size = px;
-        setBoardSize(student.id, px);
-      });
-      top.querySelector('.flip-btn').addEventListener('click', () => {
-        const st = boardsState[student.id];
-        st.flip = !st.flip;
-        if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
-      });
-
-      const masterStudentsSelect = multiplayPanel.querySelector(`#master-students-${student.id}`);
-      const masterSpectateBtn = multiplayPanel.querySelector(`#master-spectate-${student.id}`);
-      const masterStatus = multiplayPanel.querySelector(`#master-status-${student.id}`);
-
-      masterSpectateBtn.addEventListener('click', () => {
-        const selectedStudent = masterStudentsSelect.value;
-        if(!selectedStudent){ alert('Select a student'); return; }
-        if(!MASTER_ID){ alert('Sign-in required for master to send invites'); return; }
-        sendSpectateInvite(student.id, selectedStudent);
-        masterStatus.textContent = `Invite sent to ${selectedStudent}`;
-        addNotification(student.id, `Invite sent to ${selectedStudent}`);
-      });
-
-      return card;
-    }
-
-    function initEngineAndBoard(studentId){
-      const st = boardsState[studentId];
-      if(!st) return;
-      try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : null; }catch(e){ st.game = null; console.warn('Chess engine init failed', e); }
-      try{
-        st.boardObj = Chessboard('board_' + studentId, {
-          draggable: false,
-          position: st.game && typeof st.game.fen === 'function' ? st.game.fen() : 'start',
-          pieceTheme: st.pieceTheme
-        });
-      }catch(e){ console.error('Chessboard init failed', e); }
-      setBoardSize(studentId, st.size);
-    }
-
-    function setBoardSize(boardId, px){
-      const st = boardsState[boardId];
-      if(!st) return;
-      const div = document.getElementById('board_' + boardId);
-      if(!div) return;
-      const holder = div.parentElement;
-      if(holder){ holder.style.width = px + 'px'; holder.style.height = px + 'px'; }
-      try{ if(st.boardObj && typeof st.boardObj.resize === 'function') st.boardObj.resize(); }catch(e){}
-    }
-
-    // ---------- select population (only true online students) ----------
-    function isLikelyStudentEntry(email){
-      if(!email) return false;
-      const e = String(email).toLowerCase().trim();
-      return STUDENT_IDS.includes(e) || STUDENT_NAMES.includes(e) || STUDENT_NAMES.some(n => e.indexOf(n) !== -1) || STUDENT_IDS.some(id => e.indexOf(id) !== -1);
-    }
-
-    function populateSelectForBoard(boardId){
-      const sel = document.querySelector(`#master-students-${boardId}`);
-      if(!sel) return;
-      const prev = sel.value;
-      sel.innerHTML = '';
-      const title = document.createElement('option'); title.value=''; title.textContent='Select student'; sel.appendChild(title);
-
-      const now = Date.now();
-      const ONLINE_WINDOW_MS = 45_000;
-      const onlineIds = Object.keys(onlineMap || {}).filter(id => {
-        const entry = onlineMap[id] || {};
-        if(!entry.ts || Number(entry.ts) < (now - ONLINE_WINDOW_MS)) return false;
-        return (entry.role && String(entry.role).toLowerCase() === 'student') || isLikelyStudentEntry(entry.email);
-      });
-
-      if(onlineIds.length === 0){
-        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online students'; sel.appendChild(none); return;
+      function goOnline(email){
+        myEmail = email || ('anon-'+myId);
+        const node = onlineRef.child(myId);
+        console.log('Student going online:', myId, myEmail);
+        node.set({ email: myEmail, role: 'student', ts: firebase.database.ServerValue.TIMESTAMP })
+          .then(()=>{ 
+            document.getElementById('multiplayStatus').textContent = 'Connected as ' + myEmail;
+            console.log('Student presence published successfully');
+          })
+          .catch((err)=>{ 
+            document.getElementById('multiplayStatus').textContent = 'Presence write error';
+            console.error('Presence write error:', err);
+          });
+        if(presenceTimer) clearInterval(presenceTimer);
+        presenceTimer = setInterval(()=> node.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
       }
-      onlineIds.forEach(id => {
-        const e = onlineMap[id];
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = `${e && e.email ? e.email : id} (${id.slice(0,6)})`;
-        sel.appendChild(opt);
-      });
-      if(prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value = prev;
-    }
+      function goOffline(){ if(presenceTimer) clearInterval(presenceTimer); onlineRef.child(myId).remove().catch(()=>{}); document.getElementById('multiplayStatus').textContent = 'Not connected'; }
 
-    function updateMasterStudentsList(boardId){ populateSelectForBoard(boardId); }
-
-    function refreshBadge(boardId){
-      const st = boardsState[boardId];
-      const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId);
-      if(!card) return;
-      const badgeHolder = card.querySelector('.badge-holder');
-      const pathHolder = card.querySelector('.path-holder');
-      badgeHolder.innerHTML = '';
-      pathHolder.textContent = st.watchedClientId ? `moves/${st.watchedClientId}` : '';
-      if(!st.watchedClientId) return;
-      const span = document.createElement('span');
-      span.className = onlineMap[st.watchedClientId] ? 'online-badge' : 'offline-badge';
-      span.textContent = onlineMap[st.watchedClientId] ? 'online' : 'offline';
-      badgeHolder.appendChild(span);
-    }
-
-    // ---------- notifications ----------
-    function addNotification(boardId, msg){
-      const el = document.getElementById('notif_' + boardId);
-      if(!el) return;
-      const st = boardsState[boardId];
-      if(st && st.lastNotif === msg) return;
-      st.lastNotif = msg;
-      const item = document.createElement('div');
-      item.className = 'notif-item';
-      item.textContent = `${new Date().toLocaleTimeString()} — ${msg}`;
-      el.insertBefore(item, el.firstChild);
-      while(el.children.length > 10) el.removeChild(el.lastChild);
-      setTimeout(() => {
-        try{
-          if(item && item.parentElement) item.parentElement.removeChild(item);
-          if(st && st.lastNotif === msg) st.lastNotif = null;
-        }catch(e){}
-      }, 10000);
-    }
-
-    // ---------- spectate invite flow ----------
-    function sendSpectateInvite(boardId, clientId){
-      if(!clientId) return;
-      if(!MASTER_ID) return addNotification(boardId, 'Sign in required to send invite');
-      try{
-        const inviteRef = db.ref(`spectateInvites/${clientId}/${MASTER_ID}`);
-        const payload = { type:'spectate', fromId:MASTER_ID, fromEmail:MASTER_NAME, boardId:boardId||null, ts: firebase.database.ServerValue.TIMESTAMP };
-        inviteRef.set(payload).then(()=> addNotification(boardId, `Invite sent to ${clientId}`)).catch(err=> addNotification(boardId, `Invite send failed: ${err && err.message}`));
-        setTimeout(()=> inviteRef.remove().catch(()=>{}), 60000);
-      }catch(e){ addNotification(boardId, 'Invite send error'); }
-    }
-
-    // Listen for responses (spectateResponses/<MASTER_ID>) -> show accepted/declined notifications and start watching when accepted
-    function listenForSpectateResponsesForMaster(masterUid){
-      if(!masterUid) return;
-      const respRef = db.ref(`spectateResponses/${masterUid}`);
-      respRef.on('child_added', snap => {
-        const resp = snap.val();
-        if(!resp) return;
-        const studentId = resp.studentId || resp.fromId || snap.key;
-        const accepted = !!resp.accepted;
-        const boardId = resp.boardId || null;
-        const targetBoard = boardId || findBoardForStudentId(studentId) || STUDENTS[0].id;
-        if(accepted){
-          addNotification(targetBoard, `Invite accepted by ${studentId}`);
-          boardsState[targetBoard].watchedClientId = studentId;
-          refreshBadge(targetBoard);
-          const sel = document.querySelector(`#master-students-${targetBoard}`);
-          if(sel && !Array.from(sel.options).some(o => o.value === studentId)){
-            const opt = document.createElement('option');
-            opt.value = studentId;
-            opt.textContent = `${onlineMap[studentId] ? onlineMap[studentId].email : studentId} (${studentId.slice(0,6)})`;
-            sel.appendChild(opt);
+      let masterMovesRef = null;
+      function watchMasterMoves(){
+        if(masterMovesRef) return;
+        masterMovesRef = db.ref('moves/'+myId);
+        masterMovesRef.on('child_added', snap=>{
+          const m = snap.val();
+          if(!m) return;
+          if(!m.by || !m.by.startsWith('m_')) {
+            return;
           }
-          if(sel) sel.value = studentId;
-          // clear previous moveRecords for this board
-          boardsState[targetBoard].moveRecords = {};
-          boardsState[targetBoard].processedMoveKeys = new Set();
-          startWatching(targetBoard, studentId);
-        } else {
-          addNotification(targetBoard, `Invite declined by ${studentId}`);
+          if(m.payload){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
+          }
+        });
+      }
+      watchMasterMoves();
+
+      db.ref('notifications/'+myId).on('child_added', snap=>{
+        const n = snap.val();
+        if(!n) return;
+        if(n.type==='startGame' && n.gameId){
+          currentGameId = n.gameId;
+          watchMoves(currentGameId);
+          document.getElementById('pairedBubble').style.display='inline-block';
+          const color = (n.white===myId)?'white':((n.black===myId)?'black':null);
+          if(color) document.getElementById('multiplayStatus').textContent = 'Paired: You are ' + (color.charAt(0).toUpperCase()+color.slice(1));
+          if(window._onFirebaseGameStart) window._onFirebaseGameStart({ gameId: currentGameId, color: color, myId: myId });
+          try{ localStorage.setItem('iq4u_last_game', currentGameId); if(color) localStorage.setItem('iq4u_last_color', color); }catch(e){}
         }
         snap.ref.remove().catch(()=>{});
       });
-      function findBoardForStudentId(id){ for(const s of STUDENTS) if(s.id === id) return s.id; return null; }
-    }
 
-    // ---------- watching & replay (same logic as previously) ----------
-    const CANDIDATE_PATHS = ['','game','move','moves'];
-    function startWatching(boardId, clientId){
-      const st = boardsState[boardId];
-      if(!st) return;
-      stopWatching(boardId, {clearRecords:false});
-      st.watchedClientId = clientId;
-      refreshBadge(boardId);
-      addNotification(boardId, `Start watching ${clientId}`);
-      st.listeners = {};
-      CANDIDATE_PATHS.forEach(p => {
-        const path = p ? `games/${clientId}/${p}` : `games/${clientId}`;
-        const ref = db.ref(path);
-        const onValue = snap => { const v = snap.val(); if(!v) return; ingestPayload(boardId, snap.key || path, v); };
-        ref.on('value', onValue, err => addNotification(boardId, `Listener error @ ${path}: ${err && err.message}`));
-        const onChildAdded = snap => { const v = snap.val(); const key = snap.key || (path + '/' + Math.random().toString(36).slice(2,6)); ingestPayloadWithMeta(boardId, key, v); };
-        ref.on('child_added', onChildAdded, err=>{});
-        st.listeners[path] = { ref, handlers:{ value:onValue, child_added:onChildAdded } };
+      db.ref('challengeDeclined/'+myId).on('child_added', snap=>{
+        const d = snap.val();
+        if(!d) return;
+        document.getElementById('multiplayStatus').textContent = (d.email||'Player') + ' declined your challenge';
+        snap.ref.remove().catch(()=>{});
       });
 
-      try{
-        const movesPath = `moves/${clientId}`;
-        const movesRef = db.ref(movesPath);
-        const onMoveAdded = snap => { const key = snap.key; const v = snap.val(); ingestPayloadWithMeta(boardId, key, v); };
-        movesRef.on('child_added', onMoveAdded, err=>{});
-        st.listeners[movesPath] = { ref: movesRef, handlers:{ child_added:onMoveAdded } };
-      }catch(e){ addNotification(boardId, 'Moves listener failed'); }
-
-      attachGameMoveListenersForStudent(clientId, boardId);
-      const onGameChildAdded = snap => { const data = snap.val(); if(!data) return; const id = snap.key; const involved = (data.white === clientId)||(data.black === clientId); if(involved) attachMovesListenerForGame(id, boardId); };
-      gamesRef.on('child_added', onGameChildAdded);
-      st.listeners[`games_root_child_added_for_${clientId}`] = { ref: gamesRef, handlers:{ child_added:onGameChildAdded } };
-    }
-
-    function attachGameMoveListenersForStudent(clientId, boardId){
-      const st = boardsState[boardId];
-      try{
-        const attachIfNot = (gameId) => { if(!gameId) return; if(st.gameMoveListeners && st.gameMoveListeners[`moves/${gameId}`]) return; attachMovesListenerForGame(gameId, boardId); };
-        gamesRef.orderByChild('white').equalTo(clientId).once('value').then(snap => { snap.forEach(child => attachIfNot(child.key)); }).catch(()=>{});
-        gamesRef.orderByChild('black').equalTo(clientId).once('value').then(snap => { snap.forEach(child => attachIfNot(child.key)); }).catch(()=>{});
-      }catch(e){}
-    }
-
-    function attachMovesListenerForGame(gameId, boardId){
-      if(!gameId) return;
-      const st = boardsState[boardId];
-      if(!st) return;
-      const path = `moves/${gameId}`;
-      if(st.gameMoveListeners && st.gameMoveListeners[path]) return;
-      const ref = db.ref(path);
-      const onChildAdded = snap => { const key = snap.key; const v = snap.val(); ingestPayloadWithMeta(boardId, key, v); };
-      ref.on('child_added', onChildAdded, err=>{});
-      st.gameMoveListeners[path] = { ref, handlers:{ child_added:onChildAdded } };
-      addNotification(boardId, `Attached to game moves/${gameId}`);
-    }
-
-    function stopWatching(boardId, opts){
-      const st = boardsState[boardId];
-      if(!st) return;
-      opts = opts || {};
-      try{
-        Object.keys(st.listeners || {}).forEach(path => {
-          const L = st.listeners[path];
-          if(L && L.ref && L.handlers){
-            if(L.handlers.value) L.ref.off('value', L.handlers.value);
-            if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
-            if(L.handlers.child_changed) L.ref.off('child_changed', L.handlers.child_changed);
-          }
-        });
-      }catch(e){}
-      try{
-        Object.keys(st.gameMoveListeners || {}).forEach(path => {
-          const L = st.gameMoveListeners[path];
-          if(L && L.ref && L.handlers){
-            if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
-          }
-        });
-      }catch(e){}
-      st.listeners = {};
-      st.gameMoveListeners = {};
-      st.watchedClientId = null;
-      refreshBadge(boardId);
-      addNotification(boardId, 'Stopped watching');
-      clearNotation(boardId);
-      if(opts.clearRecords){
-        st.moveRecords = {};
-        st.processedMoveKeys = new Set();
-      }
-    }
-
-    // ---------- ingestion + replay ----------
-    function ingestPayloadWithMeta(boardId, key, value){
-      const payload = (value && value.payload) ? value.payload : value;
-      const ts = value && (value.ts || (value.payload && value.payload.ts)) ? (value.ts || (value.payload && value.payload.ts)) : Date.now();
-      const st = boardsState[boardId];
-      if(!st) return;
-      st.moveRecords[key] = { payload, ts: Number(ts) || Date.now() };
-      replayMoveRecords(boardId);
-    }
-
-    function ingestPayload(boardId, key, value){
-      if(!value) return;
-      const st = boardsState[boardId];
-      if(!st) return;
-      if(typeof value === 'object' && !Array.isArray(value)){
-        if(value.moves && typeof value.moves === 'object'){
-          Object.keys(value.moves).forEach(k => ingestPayloadWithMeta(boardId, k, value.moves[k]));
-          return;
+      // Listen for spectate invitations
+      db.ref('spectateInvites/'+myId).on('child_added', snap=>{
+        const invite = snap.val();
+        if(!invite) return;
+        
+        const accept = confirm(`${invite.fromEmail || 'A player'} invited you to spectate your board. Accept?`);
+        
+        if(accept){
+          // Get current board FEN to send to master
+          const currentFen = (window.game && typeof window.game.fen === 'function') 
+            ? window.game.fen() 
+            : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+          
+          console.log('Sending FEN to master:', currentFen);
+          
+          // Accept the invitation
+          document.getElementById('pairedBubble').style.display='inline-block';
+          document.getElementById('multiplayStatus').textContent = 'Master is spectating';
+          
+          // Send acceptance response with current FEN to master
+          db.ref('spectateResponses/'+invite.fromId).push({
+            studentId: myId,
+            fromId: myId,
+            studentEmail: myEmail,
+            boardId: invite.boardId || null,
+            accepted: true,
+            fen: currentFen,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          }).then(()=>{
+            console.log('Spectate acceptance sent successfully');
+            // Also send FEN via moves path for immediate sync
+            db.ref('moves/'+myId).push({
+              payload: { fen: currentFen },
+              by: myId,
+              ts: firebase.database.ServerValue.TIMESTAMP
+            }).catch(()=>{});
+          }).catch((err)=>{
+            console.error('Failed to send spectate acceptance:', err);
+          });
+          
+        } else {
+          // Decline the invitation
+          db.ref('spectateResponses/'+invite.fromId).push({
+            studentId: myId,
+            fromId: myId,
+            studentEmail: myEmail,
+            boardId: invite.boardId || null,
+            accepted: false,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          }).catch(()=>{});
         }
-        const syntheticKey = key || ('snap_'+Math.random().toString(36).slice(2,8));
-        ingestPayloadWithMeta(boardId, syntheticKey, value);
-      } else {
-        const syntheticKey = key || ('snap_'+Math.random().toString(36).slice(2,8));
-        ingestPayloadWithMeta(boardId, syntheticKey, { fen: value, ts: Date.now() });
-      }
-    }
-
-    function replayMoveRecords(boardId){
-      const st = boardsState[boardId];
-      if(!st) return;
-      try{
-        const entries = Object.keys(st.moveRecords).map(k => ({ key:k, ts: st.moveRecords[k].ts || 0, payload: st.moveRecords[k].payload }));
-        entries.sort((a,b) => (a.ts - b.ts) || (a.key < b.key ? -1 : (a.key > b.key ? 1 : 0)));
-        try{ st.game = (typeof Chess !== 'undefined') ? new Chess() : st.game; }catch(e){}
-        st.processedMoveKeys = new Set();
-        for(const e of entries){
-          const mv = e.payload && (e.payload.move || e.payload);
-          if(e.payload && e.payload.fen && (!mv || (typeof mv === 'object' && !mv.from && !mv.to))){
-            try{ if(st.game && typeof st.game.load === 'function') st.game.load(e.payload.fen); }catch(_){}
-            st.processedMoveKeys.add(e.key);
-            continue;
-          }
-          if(mv){
-            if(typeof mv === 'string'){
-              const s = mv.replace(/[^a-h1-8qnbrk]/ig,'');
-              if(s.length >= 4){
-                const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : undefined;
-                try{ st.game.move({ from, to, promotion: prom || undefined }); st.processedMoveKeys.add(e.key); }catch(_){}
-                continue;
-              }
-            } else if(typeof mv === 'object'){
-              const from = mv.from || mv.f || (mv.u && mv.u.slice && mv.u.slice(0,2));
-              const to = mv.to || mv.t || (mv.u && mv.u.slice && mv.u.slice(2,4));
-              const promotion = mv.promotion || mv.prom || null;
-              if(from && to && typeof st.game.move === 'function'){
-                try{ const applied = st.game.move({ from, to, promotion: promotion || undefined }); if(applied) st.processedMoveKeys.add(e.key); }catch(_){}
-                continue;
-              }
-            }
-          }
-        }
-        const pos = st.game && typeof st.game.fen === 'function' ? st.game.fen() : null;
-        if(pos && st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(pos);
-        updateNotation(boardId);
-      }catch(e){ addNotification(boardId, 'Replay error: ' + (e && e.message)); }
-    }
-
-    function updateNotation(boardId){
-      const st = boardsState[boardId];
-      const notEl = document.getElementById('notation_' + boardId);
-      if(!st || !notEl) return;
-      try{
-        if(!st.game || typeof st.game.history !== 'function'){ notEl.innerHTML = 'No moves.'; return; }
-        const hist = st.game.history() || [];
-        if(hist.length === 0){ notEl.innerHTML = 'No moves.'; return; }
-        notEl.innerHTML = '';
-        for(let i=0;i<hist.length;i+=2){
-          const no = Math.floor(i/2)+1;
-          const w = hist[i]||'';
-          const b = hist[i+1]||'';
-          const div = document.createElement('div');
-          div.className = 'move';
-          div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${ b ? ('\u00A0' + b) : '' }`;
-          notEl.appendChild(div);
-        }
-      }catch(e){ console.warn('updateNotation error', e); }
-    }
-    function clearNotation(boardId){ const notEl = document.getElementById('notation_' + boardId); if(notEl) notEl.innerHTML = 'No moves.'; }
-
-    // ---------- presence & listeners (attach after auth) ----------
-    function attachPresenceAndListenersForMaster(uid, displayName, email){
-      if(!uid) return;
-      MASTER_ID = uid;
-      MASTER_NAME = displayName || localStorage.getItem('username') || localStorage.getItem('email') || email || 'master';
-
-      // publish master presence under /online/<uid> with required shape
-      try{
-        const n = onlineRef.child(MASTER_ID);
-        const payload = { name: MASTER_NAME, email: email || '', role: 'master', ts: firebase.database.ServerValue.TIMESTAMP };
-        n.set(payload).catch(()=>{});
-        // remove on disconnect
-        try{ n.onDisconnect().remove(); }catch(e){}
-        // refresh timestamp periodically
-        setInterval(()=> n.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
-      }catch(e){}
-
-      // online list watcher (only valid while authenticated)
-      onlineRef.on('value', snap => {
-        const val = snap.val() || {};
-        for(const k in onlineMap) delete onlineMap[k];
-        let countRecent = 0;
-        const now = Date.now();
-        const ONLINE_WINDOW_MS = 45_000;
-        for(const id in val){
-          if(!val.hasOwnProperty(id)) continue;
-          const rec = val[id] || {};
-          const ts = rec.ts || 0;
-          onlineMap[id] = { email: rec.email || id, role: rec.role || null, ts };
-          if(Number(ts) > (now - ONLINE_WINDOW_MS)) countRecent++;
-        }
-
-        if(lastOnlineCount === null || lastOnlineCount !== countRecent){
-          lastOnlineCount = countRecent;
-          STUDENTS.forEach(s => addNotification(s.id, `Players online: ${countRecent}`));
-        }
-
-        STUDENTS.forEach(s => populateSelectForBoard(s.id));
-        STUDENTS.forEach(s => updateMasterStudentsList(s.id));
-        STUDENTS.forEach(s => refreshBadge(s.id));
+        
+        // Remove the invite
+        snap.ref.remove().catch(()=>{});
       });
 
-      // spectateResponses listener for master
-      listenForSpectateResponsesForMaster(MASTER_ID);
-    }
-
-    // ---------- start watching / moves logic (reused above) ----------
-    // (startWatching, attachGameMoveListenersForStudent, attachMovesListenerForGame, stopWatching,
-    //  ingestPayloadWithMeta, ingestPayload, replayMoveRecords, updateNotation already defined)
-
-    // ---------- AUTH boot: require master to sign in ----------
-    // If your master account is a service account or a special auth user, you must sign-in on this page.
-    // For simplicity, we expect you to sign in previously or use other auth flows. We will detect auth state.
-    firebase.auth().onAuthStateChanged(user => {
-      if(user){
-        // user is authenticated - use real UID
-        const uid = user.uid;
-        const displayName = user.displayName || null;
-        const email = user.email || '';
-        console.log('Master signed in as', uid, email);
-        attachPresenceAndListenersForMaster(uid, displayName, email);
-      } else {
-        // not signed in. Show status and keep UI active but restrict invites
-        // Optionally you can redirect to index.html to sign in
-        console.warn('No auth user for master page. Master features disabled until sign-in.');
-        // If you want to automatically sign the master in using a saved token or custom flow,
-        // implement sign-in here (omitted for security).
+      function watchMoves(gameId){
+        if(!gameId) return;
+        movesRef = db.ref('moves/'+gameId);
+        movesRef.on('child_added', snap=>{
+          const m = snap.val();
+          if(!m) return;
+          if(m.by && m.by===myId) return;
+          if(m.payload){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove(m.payload); }catch(e){ console.warn(e); }
+          } else if(m.fen){
+            try{ if(typeof window.onBoardMove === 'function') window.onBoardMove({ fen: m.fen, move: m.move||null }); }catch(e){}
+          }
+          if(m.payload && m.payload.type === 'resign'){
+            try{
+              if(window.game) window.game.reset();
+              if(window.board) window.board.position('start');
+              if(document.getElementById('pairedBubble')) document.getElementById('pairedBubble').style.display='none';
+              if(document.getElementById('multiplayStatus')) document.getElementById('multiplayStatus').textContent = 'Opponent resigned / game ended';
+              try{ localStorage.removeItem('iq4u_last_game'); localStorage.removeItem('iq4u_last_color'); }catch(e){}
+            }catch(e){}
+          }
+        });
       }
-    });
 
-    // ---------- utilities ----------
-    function getDebugElem(boardId){ return document.getElementById('debug_' + boardId); }
+      function emitMoveForGame(gameId, payload){ if(!gameId || !payload) return; const node = db.ref('moves/'+gameId).push(); node.set({ payload: payload, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{}); }
 
-    document.getElementById('globalLogout').addEventListener('click', async () => {
-      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
-      try{ if(MASTER_ID) onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
-      // sign out if auth available
-      if(firebase.auth){
-        try{ await firebase.auth().signOut(); }catch(e){}
-      }
-      // clear local session storage id
-      try{ sessionStorage.removeItem('iq4u_clientId'); }catch(e){}
-      window.location.href = 'index.html';
-    });
+      document.getElementById('joinBtnBottom').addEventListener('click', function(){
+        const email = (document.getElementById('emailInputBottom').value||'').trim();
+        if(!email) return alert('Enter username to join online');
+        goOnline(email);
+      });
 
-    window.addEventListener('beforeunload', () => {
-      try{ if(MASTER_ID) onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
-      STUDENTS.forEach(s => stopWatching(s.id, { clearRecords:true }));
-    });
+      window.firebaseMultiplayer = {
+        emitMove: function(arg){ if(!currentGameId) return console.warn('Not in game'); emitMoveForGame(currentGameId, arg); },
+        emitFen: function(arg){ try{ const movesRef = db.ref('moves/' + myId); const node = movesRef.push(); node.set({ payload: arg, by: myId, ts: firebase.database.ServerValue.TIMESTAMP }); }catch(e){} },
+        startWatchingGame: function(gameId){ currentGameId = gameId; watchMoves(gameId); },
+        getMyId: () => myId,
+        getMyEmail: () => myEmail,
+        goOffline: goOffline,
+        autoJoin: function(name){ if(!name) return; try{ document.getElementById('emailInputBottom').value = name; goOnline(name); }catch(e){ goOnline(name); } },
+        getMyColor: () => null
+      };
 
+      window.addEventListener('beforeunload', ()=>{ });
+    })();
   })();
   </script>
 </body>
 </html>
-
