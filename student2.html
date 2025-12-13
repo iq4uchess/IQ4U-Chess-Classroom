@@ -46,7 +46,7 @@
   <!-- ACCESS CHECK: strict for student2 only -->
   <script>
     (function(){
-      const allowedRoles = ['student2'];
+      const allowedRoles = ['student2']; // strict: only student2 allowed on this page
       const role = localStorage.getItem('role');
       if(!role || allowedRoles.indexOf(role) === -1){
         try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
@@ -144,7 +144,7 @@
 
   <!-- libs -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
   <script>
@@ -194,20 +194,19 @@
     const pairedBubble = document.getElementById('pairedBubble');
 
     // State
-    let board = null;
-    let game = null;
+    let board = null;           // chessboard.js instance
+    let game = null;            // chess.js instance
     let currentTheme = null;
-    let currentCandidateList = [];
+    let currentCandidateList = []; // array of {row, meta}
     let currentCandidateIndex = -1;
 
     // Solution state
-    let solutionMoves = [];
-    let solutionMoveTypes = [];
-    let solutionIndex = 0;
-    let initialFen = null;
+    let solutionMoves = [];     // array of tokens (SAN strings or coordinate tokens)
+    let solutionMoveTypes = []; // array of 'san' or 'coord' matching solutionMoves
+    let solutionIndex = 0;      // next move index in solutionMoves (0-based)
+    let initialFen = null;      // initial position fen when puzzle loaded
     let solutionTimer = null;
-    let initialSideToMove = null;
-    let solutionDisplayed = false; // NEW: track if solution is being displayed
+    let initialSideToMove = null; // 'w' or 'b' — from FEN's active color
 
     // Stats
     let statCorrect = 0;
@@ -266,102 +265,34 @@
       });
     }
 
-    // notation refresh - UPDATED to support solution display mode
+    // notation refresh (use solutionMoves if present)
     function refreshNotation(highlightIndex=-1){
       try{
         if(!movesList) return;
-        
-        // NEW: If solution is being displayed, show solutionMoves in SAN format
-        if(solutionDisplayed && solutionMoves && solutionMoves.length > 0){
-          const sanMoves = convertToSAN(solutionMoves, solutionMoveTypes);
-          displayMovesInNotation(sanMoves, highlightIndex);
-          return;
-        }
-        
-        // Otherwise use game history
         const hist = game && typeof game.history === 'function' ? game.history() : [];
-        const arr = hist.slice();
+        const arr = (solutionMoves && solutionMoves.length>0) ? solutionMoves.slice() : hist.slice();
         if(arr.length===0){ movesList.innerHTML='No moves yet.'; return; }
-        displayMovesInNotation(arr, highlightIndex);
+        movesList.innerHTML = '';
+        for(let i=0;i<arr.length;i+=2){
+          const no = Math.floor(i/2)+1;
+          const w = arr[i]||'';
+          const b = arr[i+1]||'';
+          const div = document.createElement('div');
+          div.className = 'move';
+          const wspan = document.createElement('span'); wspan.textContent = w; wspan.dataset.idx = i;
+          if(i===highlightIndex) wspan.classList.add('current');
+          const bspan = document.createElement('span'); bspan.textContent = b; bspan.dataset.idx = i+1;
+          if((i+1)===highlightIndex) bspan.classList.add('current');
+          div.innerHTML = `<strong>${no}.</strong>&nbsp;`;
+          div.appendChild(wspan);
+          if(b){ div.appendChild(document.createTextNode('\u00A0')); div.appendChild(bspan); }
+          movesList.appendChild(div);
+        }
+        if(highlightIndex>=0){
+          const sel = movesList.querySelector(`[data-idx="${highlightIndex}"]`);
+          if(sel) sel.scrollIntoView({behavior:'smooth', block:'nearest', inline:'nearest'});
+        }
       }catch(e){ console.warn(e); }
-    }
-
-    // NEW: Helper to display moves in the notation strip
-    function displayMovesInNotation(movesArray, highlightIndex=-1){
-      if(!movesList) return;
-      if(!movesArray || movesArray.length === 0){
-        movesList.innerHTML = 'No moves yet.';
-        return;
-      }
-      
-      movesList.innerHTML = '';
-      for(let i=0; i<movesArray.length; i+=2){
-        const no = Math.floor(i/2)+1;
-        const w = movesArray[i]||'';
-        const b = movesArray[i+1]||'';
-        const div = document.createElement('div');
-        div.className = 'move';
-        const wspan = document.createElement('span'); 
-        wspan.textContent = w; 
-        wspan.dataset.idx = i;
-        if(i===highlightIndex) wspan.classList.add('current');
-        const bspan = document.createElement('span'); 
-        bspan.textContent = b; 
-        bspan.dataset.idx = i+1;
-        if((i+1)===highlightIndex) bspan.classList.add('current');
-        div.innerHTML = `<strong>${no}.</strong>&nbsp;`;
-        div.appendChild(wspan);
-        if(b){ 
-          div.appendChild(document.createTextNode('\u00A0')); 
-          div.appendChild(bspan); 
-        }
-        movesList.appendChild(div);
-      }
-      if(highlightIndex>=0){
-        const sel = movesList.querySelector(`[data-idx="${highlightIndex}"]`);
-        if(sel) sel.scrollIntoView({behavior:'smooth', block:'nearest', inline:'nearest'});
-      }
-    }
-
-    // NEW: Convert solution moves to SAN format for display
-    function convertToSAN(tokens, types){
-      if(!tokens || !types || tokens.length !== types.length) return [];
-      if(!initialFen) return tokens; // fallback
-      
-      const sanArray = [];
-      try{
-        const tempGame = new Chess(initialFen);
-        for(let i=0; i<tokens.length; i++){
-          const token = tokens[i];
-          const type = types[i];
-          
-          if(type === 'san'){
-            // Already SAN, just add it
-            sanArray.push(token);
-            tempGame.move(token, {sloppy: true});
-          } else {
-            // Convert coordinate to SAN
-            const m = token.trim();
-            const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
-            if(promMatch){
-              const from = promMatch[1], to = promMatch[2];
-              const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
-              const mv = tempGame.move({ from, to, promotion });
-              if(mv){
-                sanArray.push(mv.san);
-              } else {
-                sanArray.push(token); // fallback
-              }
-            } else {
-              sanArray.push(token); // fallback
-            }
-          }
-        }
-      }catch(e){
-        console.warn('convertToSAN error', e);
-        return tokens; // fallback to original
-      }
-      return sanArray;
     }
 
     // apply SAN or coordinate move on real game and update UI
@@ -376,6 +307,7 @@
           refreshNotation(solutionIndex-1);
           return mv;
         } else {
+          // coordinate style e.g. a4a6 or a7a8q (promotion)
           const m = token.trim();
           const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
           if(!promMatch) return null;
@@ -411,10 +343,13 @@
       }catch(e){ console.warn('expectedMatchesActual_givenFen error', e); return false; }
     }
 
+    // sanitize SAN: remove check/mate symbols and trailing annotation
     function sanitizeSanToken(s){ if(!s) return ''; return s.toString().replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\d+\.+/g,'').replace(/[+#?!]*$/g,'').replace(/\s+/g,'').trim(); }
 
+    // Clear and cancel any timers for opponent auto-play
     function clearSolutionTimer(){ if(solutionTimer){ clearTimeout(solutionTimer); solutionTimer = null; } }
 
+    // Auto-play opponent moves while next index is opponent
     function autoPlayOpponentNext(){
       clearSolutionTimer();
       if(!solutionMoves || solutionMoves.length===0) return;
@@ -422,10 +357,11 @@
 
       const delay = parseInt(solutionSpeed.value,10) || 500;
       function step(){
-        if(solutionIndex >= solutionMoves.length){
+        if(solutionIndex >= solutionMoves.length){ // finished
           onSolutionFinished();
           return;
         }
+        // opponent moves are those where (solutionIndex % 2 === 0) if initialSideToMove is color of "opponent"
         const isOpponentMove = (solutionIndex % 2 === 0);
         if(!isOpponentMove){
           solutionStatus.textContent = 'Your turn';
@@ -450,19 +386,24 @@
       solutionTimer = setTimeout(step, 120);
     }
 
+    // called when solution fully applied
     function onSolutionFinished(){
       try{
         clearSolutionTimer();
         console.info('Solution finished for candidateIndex=', currentCandidateIndex);
 
+        // Attempt to advance to next candidate if available
         if(Array.isArray(currentCandidateList) && currentCandidateIndex >= 0 && currentCandidateIndex < currentCandidateList.length - 1){
           const nextIndex = currentCandidateIndex + 1;
+          // small visual feedback
           solutionStatus.textContent = 'Loading next puzzle...';
+          // attempt to load; catch and log any errors
           try{
             loadPuzzleByCandidateIndex(nextIndex);
             console.info('Loading next puzzle index=', nextIndex);
           }catch(loadErr){
             console.error('Failed to load next puzzle (first try):', loadErr);
+            // try one more time after brief delay (handles transient parse/fetch race)
             setTimeout(()=>{
               try{
                 loadPuzzleByCandidateIndex(nextIndex);
@@ -476,6 +417,7 @@
           return;
         }
 
+        // No next puzzle available
         solutionStatus.textContent = 'Solution complete (no more puzzles)';
         console.info('No subsequent puzzle to load (candidateIndex at end).');
       }catch(e){
@@ -484,9 +426,11 @@
       }
     }
 
+    // onDrop handler checks student's move correctness vs expected move (if solution exists)
     async function onDrop(source, target){
       if(!game) return 'snapback';
 
+      // detect promotion candidate
       const legal = game.moves({ verbose:true }) || [];
       const candidatePromo = legal.find(m => m.from === source && m.to === target && m.promotion);
       let chosenPromo = null;
@@ -496,6 +440,7 @@
         if(!chosenPromo) chosenPromo = 'q';
       }
 
+      // Before applying student's move, capture fenBefore
       const fenBefore = game.fen();
 
       const moveObj = { from: source, to: target };
@@ -504,26 +449,26 @@
       const mv = game.move(moveObj);
       if(mv === null){ setMsg('Illegal move',900); return 'snapback'; }
 
+      // update board & highlight
       if(board) board.position(game.fen());
       setPersistentLastMove(mv.from, mv.to);
-      
-      // NEW: Clear solution display mode when student makes a move
-      solutionDisplayed = false;
       refreshNotation(solutionIndex);
 
+      // If we have a solution and expecting student's move now
       if(solutionMoves && solutionMoves.length > 0 && solutionIndex < solutionMoves.length){
         const expectedIndex = solutionIndex;
         const expectedToken = solutionMoves[expectedIndex];
         const expectedType = solutionMoveTypes[expectedIndex];
-        const expectedIsStudentMove = (expectedIndex % 2 === 1);
+        const expectedIsStudentMove = (expectedIndex % 2 === 1); // since index 0 belongs to initial sideToMove (opponent)
         if(expectedIsStudentMove){
           statAttempts++;
           const matches = expectedMatchesActual_givenFen(expectedToken, expectedType, fenBefore, mv);
           if(matches){
             statCorrect++;
             updateStatsDisplay();
-            solutionIndex++;
+            solutionIndex++; // advance
             solutionStatus.textContent = 'Correct';
+            // if next is opponent, auto play
             if(solutionIndex < solutionMoves.length && solutionIndex % 2 === 0 && autoOpponent.checked){
               setTimeout(()=> autoPlayOpponentNext(), parseInt(solutionSpeed.value,10) || 500);
             } else if(solutionIndex >= solutionMoves.length){
@@ -532,15 +477,21 @@
               solutionStatus.textContent = 'Your turn';
             }
           } else {
+            // incorrect
             statIncorrect++;
             updateStatsDisplay();
             setMsg('Incorrect — try again', 1200);
+            // undo student's incorrect move
             const undone = game.undo();
             if(board) board.position(game.fen());
+            // keep solutionIndex unchanged so student retries same move
           }
+        } else {
+          // Student moved when an opponent move was expected; allow it but don't treat as correct
         }
       }
 
+      // emit fen/move as before
       try{
         if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitMove){
           window.firebaseMultiplayer.emitMove({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null } });
@@ -553,15 +504,18 @@
       return;
     }
 
-    // CSV parsing helpers
+    // CSV parsing helpers (robust header normalization and quoting)
     function normalizeHeaderCell(h){ return (h||'').toString().trim().toLowerCase().replace(/\s+/g,''); }
     function parseCsvText(csvText){
+      // Simple, robust enough parser for moderate-sized files.
       csvText = csvText.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
       const lines = csvText.split('\n');
+      // find header
       let headerLineIdx = 0;
       while(headerLineIdx < lines.length && lines[headerLineIdx].trim() === '') headerLineIdx++;
       if(headerLineIdx >= lines.length) return [];
       const headerRaw = lines[headerLineIdx];
+      // parse header fields (respect quotes)
       const parseLineToCols = (line) => {
         const out = [];
         let cur = '', inQ=false;
@@ -583,6 +537,7 @@
         const line = lines[i];
         if(line.trim() === '') continue;
         const vals = parseLineToCols(line);
+        // pad
         while(vals.length < headerCols.length) vals.push('');
         const obj = {};
         for(let j=0;j<headerCols.length;j++){
@@ -594,6 +549,7 @@
       return rows;
     }
 
+    // load list of CSV files and populate tactics select
     async function fetchJsonQuiet(url){
       try{ const r = await fetch(url, {cache:'no-cache'}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }catch(e){ console.warn('fetchJsonQuiet', url, e); return null; }
     }
@@ -628,6 +584,7 @@
       }
     }
 
+    // build candidate list for a tactic (full-file parsing)
     async function buildCandidatesForTactic(tacticName){
       solutionStatus.textContent = 'Scanning…';
       currentCandidateList = [];
@@ -662,6 +619,7 @@
       else currentPuzzleIdEl.textContent = 'No puzzle';
     }
 
+    // helper to get candidate description
     function getCandidateDesc(idx){
       const c = currentCandidateList[idx];
       if(!c) return 'No puzzle';
@@ -669,14 +627,17 @@
       return (r['puzzleid'] || c.meta.file + ' #' + (c.meta.rowNum||'?'));
     }
 
+    // get moves tokens from row - prefer SAN column, fallback to Moves coordinate list
     function extractMovesFromRow(row){
       if(!row) return { tokens:[], types:[] };
+      // find SAN field (various possible header names)
       const tryGet = (names) => { for(const n of names) if(row[n] && row[n].toString().trim()) return row[n].toString().trim(); return ''; };
       const sanField = tryGet(['san','san.','sanmoves','san_moves','san_tokens','san']);
       const movesField = tryGet(['moves','move','mv','moves_tokens']);
       const pgnField = tryGet(['pgn','game','text']);
 
       if(sanField){
+        // sanitize: remove headers, braces, move numbers, results
         let s = sanField;
         s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\r?\n/g,' ').replace(/\(.*?\)/g,' ');
         s = s.replace(/1-0|0-1|1\/2-1\/2|\*/g,'');
@@ -687,8 +648,9 @@
       }
 
       if(pgnField){
+        // Keep this only as a move extractor — but since you asked to IGNORE PGN for FEN, we keep PGN only for moves extraction.
         let s = pgnField;
-        s = s.replace(/\[.*?\]\s*/g,'');
+        s = s.replace(/\[.*?\]\s*/g,''); // remove headers in brackets
         s = s.replace(/\{.*?\}/g,'').replace(/\$\d+/g,'').replace(/\(.*?\)/g,' ');
         s = s.replace(/1-0|0-1|1\/2-1\/2|\*/g,'');
         s = s.replace(/\d+\.+/g,' ');
@@ -698,8 +660,10 @@
       }
 
       if(movesField){
+        // assume coordinate tokens separated by whitespace
         let s = movesField.replace(/\r?\n/g,' ').replace(/\s+/g,' ').trim();
         const toks = s.split(' ').filter(t => t && t.length>0);
+        // normalize tokens (strip stray punctuation)
         const clean = toks.map(t => t.replace(/[;,.]+$/,'').trim()).filter(Boolean);
         return { tokens: clean, types: clean.map(()=> 'coord') };
       }
@@ -707,6 +671,7 @@
       return { tokens:[], types:[] };
     }
 
+    // load puzzle by index (ONLY use row['fen'] for the starting position; IGNORE PGN for FEN)
     async function loadPuzzleByCandidateIndex(idx){
       const cand = currentCandidateList[idx];
       if(!cand){ solutionStatus.textContent='No puzzle'; return; }
@@ -716,6 +681,7 @@
       solutionStatus.textContent = 'Loading ' + (raw['puzzleid'] || cand.meta.file);
 
       try{
+        // --- STRICT: only use 'fen' column; do not attempt to read FEN from PGN
         const fenRawCandidate = (raw['fen'] || '').toString().trim();
         if(!fenRawCandidate || fenRawCandidate.length === 0){
           console.warn('No FEN present in row.fen for candidate', cand.meta ? cand.meta.file : null, 'row:', raw);
@@ -723,35 +689,40 @@
           return;
         }
 
+        // sanitize surrounding quotes and whitespace
         let fenSelected = fenRawCandidate.replace(/^"+|"+$/g,'').trim();
 
+        // Validate minimal FEN format (should have at least 6 parts)
         const parts = fenSelected.split(/\s+/);
         if(parts.length < 6){
+          // if only piece placement is present, append safe defaults (white to move, no castling etc.)
           console.warn('FEN appears incomplete — appending defaults. Found parts:', parts.length, fenSelected);
           fenSelected = fenSelected + ' w - - 0 1';
         }
 
         initialFen = fenSelected;
 
+        // load into chess.js
         try{ if(typeof Chess !== 'undefined') game = new Chess(initialFen); else game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
         if(!game) game = new Chess();
+        // set board and initial fen
         if(board) board.position(game.fen());
+        // store initial side to move
         const parts2 = initialFen.split(/\s+/);
         initialSideToMove = (parts2 && parts2[1]) ? parts2[1] : 'w';
+        // prepare solutionMoves - prefer SAN column; PGN is ignored for FEN but allowed for move tokens extraction if SAN present
         const extracted = extractMovesFromRow(raw);
         solutionMoves = extracted.tokens || [];
         solutionMoveTypes = extracted.types || [];
         solutionIndex = 0;
-        
-        // NEW: Reset solution display mode
-        solutionDisplayed = false;
-        
+        // update stats for puzzle
         statPuzzles++;
         const rating = parseInt((raw['rating']||'').replace(/[^0-9]/g,''),10) || 0;
         statRatingSum += rating;
         updateStatsDisplay();
         refreshNotation(-1);
         solutionStatus.textContent = `Loaded: ${(raw['puzzleid']||cand.meta.file)} (${solutionMoves.length} moves)`;
+        // If first move is the side indicated by the FEN (i.e. index 0 belongs to the side to move), those are "opponent" moves.
         if(solutionMoves && solutionMoves.length>0 && solutionIndex % 2 === 0 && autoOpponent.checked){
           setTimeout(()=> autoPlayOpponentNext(), 200);
         }
@@ -766,6 +737,7 @@
     function loadNextCandidate(){ if(!currentCandidateList || currentCandidateList.length===0) return; if(currentCandidateIndex < currentCandidateList.length-1){ loadPuzzleByCandidateIndex(currentCandidateIndex+1); } else solutionStatus.textContent = 'Last puzzle'; }
     function loadPrevCandidate(){ if(!currentCandidateList || currentCandidateList.length===0) return; if(currentCandidateIndex > 0){ loadPuzzleByCandidateIndex(currentCandidateIndex-1); } else solutionStatus.textContent = 'First puzzle'; }
 
+    // Stats update
     function updateStatsDisplay(){
       statCorrectEl.textContent = statCorrect;
       statIncorrectEl.textContent = statIncorrect;
@@ -774,6 +746,7 @@
       statAvgRatingEl.textContent = statPuzzles>0 ? Math.round(statRatingSum / statPuzzles) : 0;
     }
 
+    // UI wiring
     tacticSelect.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
     ratingMin.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
     ratingMax.addEventListener('change', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value); });
@@ -781,26 +754,94 @@
     randomPuzzleBtn.addEventListener('click', ()=> { if(tacticSelect.value) buildCandidatesForTactic(tacticSelect.value).then(()=> loadRandomCandidate()); });
     prevPuzzleBtn.addEventListener('click', ()=> loadPrevCandidate());
     nextPuzzleBtn.addEventListener('click', ()=> loadNextCandidate());
-    
-    // NEW: Updated Show Solution button - only displays moves, doesn't play them
-    showSolutionBtn.addEventListener('click', ()=> {
-      if(!solutionMoves || solutionMoves.length === 0){
-        solutionStatus.textContent = 'No solution available';
-        return;
-      }
-      solutionDisplayed = true;
-      refreshNotation(-1);
-      solutionStatus.textContent = `Solution displayed (${solutionMoves.length} moves)`;
-    });
-    
+    showSolutionBtn.addEventListener('click', showSolutionOnly);
     resetSolutionBtn.addEventListener('click', ()=> resetToInitial());
 
+    // NEW: Show solution only (displays SAN moves without playing them)
+    function showSolutionOnly() {
+      if (!solutionMoves || solutionMoves.length === 0) {
+        solutionStatus.textContent = 'No solution loaded';
+        return;
+      }
+      
+      // Clear any auto-play timer
+      clearSolutionTimer();
+      
+      // Display all SAN moves in the notation strip
+      // Filter to show only SAN moves (skip coordinate moves)
+      const sanMoves = [];
+      for (let i = 0; i < solutionMoves.length; i++) {
+        if (solutionMoveTypes[i] === 'san') {
+          sanMoves.push(solutionMoves[i]);
+        } else if (solutionMoveTypes[i] === 'coord') {
+          // Convert coordinate moves to SAN if possible
+          try {
+            const tempGame = new Chess(initialFen);
+            // Replay all moves up to this point to get the position
+            for (let j = 0; j < i; j++) {
+              if (solutionMoveTypes[j] === 'san') {
+                tempGame.move(solutionMoves[j], { sloppy: true });
+              } else if (solutionMoveTypes[j] === 'coord') {
+                const m = solutionMoves[j].trim();
+                const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+                if (promMatch) {
+                  const from = promMatch[1], to = promMatch[2];
+                  const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+                  tempGame.move({ from, to, promotion });
+                }
+              }
+            }
+            // Now try to convert the coordinate move to SAN
+            const m = solutionMoves[i].trim();
+            const promMatch = m.match(/^([a-h][1-8])([a-h][1-8])([nbrqNBRQ])?$/);
+            if (promMatch) {
+              const from = promMatch[1], to = promMatch[2];
+              const promotion = promMatch[3] ? promMatch[3].toLowerCase() : undefined;
+              const move = tempGame.move({ from, to, promotion });
+              if (move && move.san) {
+                sanMoves.push(sanitizeSanToken(move.san));
+              } else {
+                sanMoves.push(solutionMoves[i]);
+              }
+            } else {
+              sanMoves.push(solutionMoves[i]);
+            }
+          } catch (e) {
+            sanMoves.push(solutionMoves[i]);
+          }
+        }
+      }
+      
+      // Update the notation display with all solution moves
+      movesList.innerHTML = '';
+      if (sanMoves.length === 0) {
+        movesList.innerHTML = 'No SAN moves in solution';
+        return;
+      }
+      
+      // Display moves in the standard notation format
+      for (let i = 0; i < sanMoves.length; i += 2) {
+        const no = Math.floor(i / 2) + 1;
+        const w = sanMoves[i] || '';
+        const b = sanMoves[i + 1] || '';
+        const div = document.createElement('div');
+        div.className = 'move';
+        div.innerHTML = `<strong>${no}.</strong>&nbsp;${w}${b ? ' ' + b : ''}`;
+        movesList.appendChild(div);
+      }
+      
+      solutionStatus.textContent = `Solution shown (${sanMoves.length} SAN moves)`;
+      
+      // Scroll to show the solution
+      movesList.scrollTop = movesList.scrollHeight;
+    }
+
+    // reset to initial fen and auto-play opponent if applicable
     function resetToInitial(){
       if(!initialFen) return;
       try{ game = new Chess(initialFen); }catch(e){ game = new Chess(initialFen); }
       if(board) board.position(game.fen());
       solutionIndex = 0;
-      solutionDisplayed = false;
       clearSolutionTimer();
       solutionStatus.textContent = 'Reset to initial';
       refreshNotation(-1);
@@ -808,28 +849,15 @@
         setTimeout(()=> autoPlayOpponentNext(), 200);
       }
     }
+    function resetToInitialAndAuto(){ resetToInitial(); if(autoOpponent.checked) setTimeout(()=> autoPlayOpponentNext(), 200); }
 
-    undoBtn.addEventListener('click', ()=>{ 
-      if(!game) return; 
-      const mv = game.undo(); 
-      if(mv){ 
-        if(board) board.position(game.fen()); 
-        solutionDisplayed = false;
-        refreshNotation(); 
-        setMsg('Undid move',900); 
-        try{ 
-          if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){ 
-            window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' }); 
-          } 
-        }catch(e){} 
-      } 
-    });
+    // Undo/Flip/Resign/Logout wiring
+    undoBtn.addEventListener('click', ()=>{ if(!game) return; const mv = game.undo(); if(mv){ if(board) board.position(game.fen()); refreshNotation(); setMsg('Undid move',900); try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.emitFen){ window.firebaseMultiplayer.emitFen({ fen: game.fen(), move: { from: mv.from, to: mv.to, san: mv.san, promotion: mv.promotion || null }, action: 'undo' }); } }catch(e){} } });
     flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
     resignBtn.addEventListener('click', ()=>{
       if(!game) return;
       game.reset();
       if(board) board.position('start');
-      solutionDisplayed = false;
       refreshNotation();
       setMsg('You resigned — game reset',1500);
       try{ 
@@ -848,10 +876,12 @@
       try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){} try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) window.firebaseMultiplayer.goOffline(); }catch(e){} window.location.href = 'index.html';
     });
 
+    // board size
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
     function setBoardSize(px){ if(!px || isNaN(px)) return; const clamped = Math.max(360, Math.min(1400, Number(px))); boardWrapper.style.maxWidth = clamped + 'px'; boardSizeRange.value = clamped; boardSizeLabel.textContent = clamped + 'px'; try{ if(board && typeof board.resize === 'function'){ board.resize(); } }catch(e){} setTimeout(updateOverlaySize,20); }
     function updateOverlaySize(){ try{ const rect = boardEl.getBoundingClientRect(); drawOverlay.style.width = rect.width + 'px'; drawOverlay.style.height = rect.height + 'px'; }catch(e){} }
 
+    // load and boot
     (async function boot(){
       await ensureChessLoaded();
       game = new Chess();
@@ -863,6 +893,7 @@
       await loadListAndPopulate();
     })();
 
+    // onBoardMove handler for inbound firebase moves (preserve prior behavior)
     window.onBoardMove = function(payload){
       try{
         if(!payload) return;
@@ -870,7 +901,6 @@
           if(!game) game = new Chess();
           if(typeof game.load === 'function'){ game.load(payload); }
           if(board) board.position(game.fen());
-          solutionDisplayed = false;
           refreshNotation();
           return;
         }
@@ -890,22 +920,23 @@
           if(typeof game.load === 'function') game.load(payload.fen);
         }
         if(board) board.position(game.fen());
-        solutionDisplayed = false;
         refreshNotation();
       }catch(e){ console.warn('onBoardMove failed', e); }
     };
 
+    // small debug export
     window._studentPuzzle = {
       getSolutionMoves: ()=> solutionMoves,
       getSolutionIndex: ()=> solutionIndex,
       getStats: ()=> ({correct:statCorrect, incorrect:statIncorrect, attempts:statAttempts, puzzles:statPuzzles, avgRating: statPuzzles?Math.round(statRatingSum/statPuzzles):0}),
-      getCurrentCandidateIndex: ()=> currentCandidateIndex
+      getCurrentCandidateIndex: ()=> currentCandidateIndex,
+      showSolutionOnly: showSolutionOnly
     };
 
   })();
   </script>
 
-  <!-- FIREBASE -->
+  <!-- FIREBASE (presence & watch behavior unchanged) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script>
@@ -1026,7 +1057,7 @@
         getMyColor: () => null
       };
 
-      window.addEventListener('beforeunload', ()=>{ });
+      window.addEventListener('beforeunload', ()=>{ /* do not auto-remove presence on unload per request */ });
     })();
   })();
   </script>
