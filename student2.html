@@ -983,6 +983,48 @@
         snap.ref.remove().catch(()=>{});
       });
 
+      // Listen for spectate invitations
+      db.ref('spectateInvites/'+myId).on('child_added', snap=>{
+        const invite = snap.val();
+        if(!invite) return;
+        
+        const accept = confirm(`${invite.fromEmail || 'A player'} invited you to spectate their game. Accept?`);
+        
+        if(accept){
+          // Accept the invitation
+          currentGameId = invite.gameId;
+          watchMoves(currentGameId);
+          document.getElementById('pairedBubble').style.display='inline-block';
+          document.getElementById('multiplayStatus').textContent = 'Spectating game';
+          
+          // Notify master of acceptance
+          db.ref('spectateAccepted/'+invite.fromId).push({
+            studentId: myId,
+            studentEmail: myEmail,
+            gameId: invite.gameId,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          }).catch(()=>{});
+          
+          // Load the current position if provided
+          if(invite.fen){
+            try{
+              if(window.game) window.game.load(invite.fen);
+              if(window.board) window.board.position(invite.fen);
+            }catch(e){ console.warn('Failed to load spectate position', e); }
+          }
+        } else {
+          // Decline the invitation
+          db.ref('spectateDeclined/'+invite.fromId).push({
+            studentId: myId,
+            studentEmail: myEmail,
+            ts: firebase.database.ServerValue.TIMESTAMP
+          }).catch(()=>{});
+        }
+        
+        // Remove the invite
+        snap.ref.remove().catch(()=>{});
+      });
+
       function watchMoves(gameId){
         if(!gameId) return;
         movesRef = db.ref('moves/'+gameId);
