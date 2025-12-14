@@ -37,51 +37,67 @@
     .engine-btn-stop { background:#ef4444; }
     .engine-btn-next { background:#10b981; }
     .engine-status { font-size:12px; color:#666; padding:4px 8px; background:#fff; border-radius:4px; border:1px solid #eef2f6; min-width:120px; }
-    .eval-display { font-size:12px; font-weight:bold; padding:4px 8px; border-radius:4px; }
-    .eval-positive { background: #d1fae5; color: #065f46; }
-    .eval-negative { background: #fee2e2; color: #991b1b; }
-    .eval-neutral { background: #e5e7eb; color: #4b5563; }
     
     /* Best move display */
     .best-move-display { font-size:13px; padding:4px 8px; background:#f0f9ff; border-radius:4px; border:1px solid #e0f2fe; margin-left:8px; }
     
-    /* Top moves panel */
-    .top-moves-panel {
+    /* Horizontal best moves strip */
+    .best-moves-strip {
       margin-top: 8px;
       padding: 8px;
       background: #f8f9fa;
       border-radius: 6px;
       border: 1px solid #eef2f6;
       display: none;
-      flex-direction: column;
-      gap: 4px;
     }
-    .top-moves-panel.active {
-      display: flex;
+    .best-moves-strip.active {
+      display: block;
     }
-    .top-move-item {
+    .best-moves-header {
+      font-size: 12px;
+      font-weight: bold;
+      color: #666;
+      margin-bottom: 6px;
+    }
+    .best-moves-container {
       display: flex;
-      justify-content: space-between;
+      gap: 12px;
       align-items: center;
+      flex-wrap: wrap;
+    }
+    .best-move-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      min-width: 60px;
+    }
+    .best-move-number {
+      font-size: 11px;
+      color: #666;
+      font-weight: bold;
+    }
+    .best-move-san {
+      font-family: monospace;
+      font-weight: bold;
       padding: 4px 8px;
       background: white;
       border-radius: 4px;
       border: 1px solid #e5e7eb;
-      font-size: 12px;
+      font-size: 14px;
+      min-width: 50px;
+      text-align: center;
     }
-    .top-move-move {
+    .best-move-item.main {
+      margin-left: 10px;
+    }
+    .best-move-san.main {
+      background: #d1fae5;
+      border-color: #10b981;
+      color: #065f46;
       font-weight: bold;
-      font-family: monospace;
+      padding: 6px 10px;
     }
-    .top-move-eval {
-      font-family: monospace;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 11px;
-    }
-    .top-move-positive { background: #d1fae5; color: #065f46; }
-    .top-move-negative { background: #fee2e2; color: #991b1b; }
-    .top-move-neutral { background: #f3f4f6; color: #4b5563; }
     
     .multiplayer-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; }
     .status-small { font-size:12px; color:#666; min-width:150px; }
@@ -99,13 +115,8 @@
       border-radius: 6px;
       font-size: 12px;
       z-index: 1000;
-      background: #fef3c7;
-      border: 1px solid #fbbf24;
-      color: #92400e;
-    }
-    .connection-status.connected {
       background: #d1fae5;
-      border-color: #10b981;
+      border: 1px solid #10b981;
       color: #065f46;
     }
     .connection-status.disconnected {
@@ -121,12 +132,18 @@
       margin-left: 8px;
     }
     
-    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } }
+    @media(max-width:900px){ 
+      .boards-grid{ grid-template-columns:1fr; padding:0 12px; } 
+      .notif-area{ flex-direction:column; }
+      .best-moves-container {
+        gap: 8px;
+      }
+    }
   </style>
 </head>
 <body>
   <!-- Connection Status Indicator -->
-  <div id="connectionStatus" class="connection-status">Connecting to Firebase...</div>
+  <div id="connectionStatus" class="connection-status">✅ Connected</div>
 
   <div class="container">
     <h1>Master Dashboard - IQ 4U Academy</h1>
@@ -178,7 +195,6 @@
 
     // Stockfish paths
     const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
-    const STOCKFISH_WASM = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.wasm';
 
     const STUDENTS = [
       { id: 'student1', name: 'Student 1' },
@@ -248,6 +264,8 @@
       try{ st.game = new Chess(); } catch(e){ st.game = null; }
       if(st.boardObj) st.boardObj.position('start');
       updateNotation(boardId);
+      clearArrow(boardId);
+      hideBestMoves(boardId);
 
       // Attach listeners for each candidate path
       st.listeners = {};
@@ -339,13 +357,15 @@
           st.analysisTimeout = null;
         }
         if (st.engineWorker) {
-          st.engineWorker.terminate();
+          try {
+            st.engineWorker.terminate();
+          } catch(e) {}
           st.engineWorker = null;
         }
         st.engineRunning = false;
-        updateEngineDisplay(boardId, null, 0, []);
+        updateEngineStatus(boardId, 'Engine off');
         clearArrow(boardId);
-        hideTopMoves(boardId);
+        hideBestMoves(boardId);
       }
       
       // Clean up Firebase listeners
@@ -365,10 +385,16 @@
       refreshBadge(boardId);
       addNotification(boardId, 'Stopped watching');
       clearNotation(boardId);
+      hideBestMoves(boardId);
       
       // Reset board
-      try{ if(st.game && typeof st.game.load === 'function'){ st.game.load('start'); } 
-        if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position('start'); 
+      try{ 
+        if(st.game && typeof st.game.load === 'function'){ 
+          st.game.load('start'); 
+        }
+        if(st.boardObj && typeof st.boardObj.position === 'function') {
+          st.boardObj.position('start'); 
+        }
       }catch(e){}
     }
 
@@ -416,7 +442,7 @@
           }
         }
       }catch(e){ 
-        addNotification(boardId, 'Normalize error: ' + (e && e.message)); 
+        console.error('Normalize error:', e);
       }
     }
 
@@ -474,7 +500,7 @@
           setTimeout(() => analyzePosition(boardId), 300);
         }
       }catch(e){ 
-        addNotification(boardId, 'Apply moves error: ' + (e && e.message)); 
+        console.error('Apply moves error:', e);
       }
     }
 
@@ -509,7 +535,7 @@
         }
         return false;
       }catch(e){ 
-        addNotification(boardId, 'Apply move shape error: ' + (e && e.message)); 
+        console.error('Apply move shape error:', e);
         return false; 
       }
     }
@@ -532,7 +558,7 @@
           st.boardObj.position(fen); 
         }
       }catch(e){ 
-        addNotification(boardId, 'Apply FEN error: ' + (e && e.message)); 
+        console.error('Apply FEN error:', e);
       }
     }
 
@@ -558,7 +584,7 @@
           if(fallbackFen) applyFenToBoard(boardId, fallbackFen);
         }
       }catch(e){ 
-        addNotification(boardId, 'Apply move error: ' + (e && e.message)); 
+        console.error('Apply move error:', e);
       }
     }
 
@@ -580,7 +606,7 @@
         const worker = new Worker(STOCKFISH_JS);
         st.engineWorker = worker;
         st.engineReady = false;
-        st.topMoves = [];
+        st.bestMoves = [];
         
         worker.onmessage = function(event) {
           const line = event.data;
@@ -598,7 +624,7 @@
             }
           } 
           // Parse analysis results
-          else if (line.startsWith('info')) {
+          else if (line.startsWith('info depth')) {
             parseStockfishInfo(boardId, line);
           }
           // Parse best move
@@ -610,7 +636,6 @@
         worker.onerror = function(error) {
           console.error(`Stockfish error for board ${boardId}:`, error);
           updateEngineStatus(boardId, 'Error');
-          addNotification(boardId, 'Engine error occurred');
         };
         
         // Initialize engine
@@ -638,21 +663,6 @@
         }
       }
       
-      // Extract evaluation
-      const evalMatch = line.match(/score\s+cp\s+(-?\d+)/);
-      if (evalMatch) {
-        st.evalScore = parseInt(evalMatch[1]) / 100;
-        updateEvalDisplay(boardId, st.evalScore);
-      }
-      
-      // Check for mate score
-      const mateMatch = line.match(/score\s+mate\s+(-?\d+)/);
-      if (mateMatch) {
-        const mateIn = parseInt(mateMatch[1]);
-        st.evalScore = mateIn > 0 ? `M${mateIn}` : `M${-mateIn}`;
-        updateEvalDisplay(boardId, st.evalScore);
-      }
-      
       // Parse top moves when MultiPV is present
       const pvMatch = line.match(/multipv\s+(\d+)/);
       if (pvMatch && line.includes('pv')) {
@@ -662,27 +672,11 @@
           const moves = moveMatch[1].trim().split(/\s+/);
           const bestMove = moves[0];
           
-          // Extract evaluation for this PV line
-          let pvEval = 0;
-          const pvEvalMatch = line.match(/score\s+cp\s+(-?\d+)/);
-          if (pvEvalMatch) {
-            pvEval = parseInt(pvEvalMatch[1]) / 100;
-          }
-          const pvMateMatch = line.match(/score\s+mate\s+(-?\d+)/);
-          if (pvMateMatch) {
-            const mateIn = parseInt(pvMateMatch[1]);
-            pvEval = mateIn > 0 ? `M${mateIn}` : `M${-mateIn}`;
-          }
-          
-          if (!st.topMoves) st.topMoves = [];
-          st.topMoves[pvIndex] = {
+          if (!st.bestMoves) st.bestMoves = [];
+          st.bestMoves[pvIndex] = {
             move: bestMove,
-            eval: pvEval,
-            moves: moves.slice(0, 3).join(' ')
+            san: uciToSan(boardId, bestMove) || bestMove
           };
-          
-          // Update top moves display
-          updateTopMovesDisplay(boardId);
         }
       }
     }
@@ -694,14 +688,15 @@
       const bestMoveMatch = line.match(/bestmove\s+(\w+)/);
       if (bestMoveMatch) {
         const bestMove = bestMoveMatch[1];
+        const sanMove = uciToSan(boardId, bestMove) || bestMove;
+        
         st.bestMove = bestMove;
-        st.bestMoveUCI = bestMove;
+        st.bestMoveSan = sanMove;
         
         // Update best move display
         const bestMoveEl = document.getElementById(`best-move-${boardId}`);
         if (bestMoveEl) {
-          const sanMove = uciToSan(boardId, bestMove);
-          bestMoveEl.textContent = sanMove ? `Best: ${sanMove}` : `Best: ${bestMove}`;
+          bestMoveEl.textContent = `Best: ${sanMove}`;
         }
         
         // Draw arrow for best move
@@ -709,13 +704,16 @@
           drawBestMoveArrow(boardId, bestMove);
         }
         
-        // Show top moves panel
-        showTopMoves(boardId);
+        // Show best moves strip
+        showBestMoves(boardId);
         
         // Schedule next analysis
         if (st.engineRunning) {
-          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
+          clearTimeout(st.analysisTimeout);
+          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 3000);
         }
+        
+        updateEngineStatus(boardId, 'Ready');
       }
     }
 
@@ -757,10 +755,9 @@
         st.analysisTimeout = null;
       }
       
-      // Reset top moves
-      st.topMoves = [];
-      updateTopMovesDisplay(boardId);
-      hideTopMoves(boardId);
+      // Reset best moves
+      st.bestMoves = [];
+      hideBestMoves(boardId);
       clearArrow(boardId);
       
       try {
@@ -789,6 +786,8 @@
       } catch (e) {
         console.error('Analysis error:', e);
         updateEngineStatus(boardId, 'Error');
+        // Retry after error
+        st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
       }
     }
 
@@ -807,9 +806,9 @@
               toggleBtn.textContent = 'Engine: ON';
               toggleBtn.className = 'engine-btn engine-btn-stop';
             }
-            addNotification(boardId, `Stockfish engine started (depth ${st.analysisDepth})`);
+            addNotification(boardId, `Engine started`);
             
-            // Start analysis
+            // Start analysis after a delay
             setTimeout(() => analyzePosition(boardId), 500);
           } else {
             if (toggleBtn) {
@@ -829,7 +828,9 @@
         }
         
         if (st.engineWorker) {
-          st.engineWorker.terminate();
+          try {
+            st.engineWorker.terminate();
+          } catch(e) {}
           st.engineWorker = null;
         }
         
@@ -839,9 +840,8 @@
         }
         
         updateEngineStatus(boardId, 'Engine off');
-        updateEngineDisplay(boardId, null, 0, []);
         clearArrow(boardId);
-        hideTopMoves(boardId);
+        hideBestMoves(boardId);
         
         addNotification(boardId, 'Engine stopped');
       }
@@ -852,99 +852,60 @@
       if (statusEl) statusEl.textContent = status;
     }
 
-    function updateEvalDisplay(boardId, evalScore) {
-      const evalEl = document.getElementById(`engine-eval-${boardId}`);
-      if (!evalEl) return;
-      
-      let evalText, evalClass;
-      
-      if (typeof evalScore === 'string' && evalScore.startsWith('M')) {
-        // Mate score
-        evalText = `#${evalScore.substring(1)}`;
-        evalClass = evalScore.startsWith('M-') ? 'eval-negative' : 'eval-positive';
-      } else {
-        // Centipawn evaluation
-        const numEval = typeof evalScore === 'number' ? evalScore : parseFloat(evalScore) || 0;
-        evalText = (numEval > 0 ? '+' : '') + numEval.toFixed(1);
-        
-        if (numEval > 1.0) {
-          evalClass = 'eval-positive';
-        } else if (numEval < -1.0) {
-          evalClass = 'eval-negative';
-        } else {
-          evalClass = 'eval-neutral';
-        }
-      }
-      
-      evalEl.textContent = evalText;
-      evalEl.className = `eval-display ${evalClass}`;
-    }
-
-    function updateEngineDisplay(boardId, bestMove, evaluation, variation) {
-      // This function is kept for compatibility
-    }
-
-    // ---------- TOP MOVES DISPLAY ----------
-    function updateTopMovesDisplay(boardId) {
+    // ---------- BEST MOVES STRIP DISPLAY ----------
+    function showBestMoves(boardId) {
       const st = boardsState[boardId];
-      if (!st || !st.topMoves) return;
+      if (!st || !st.bestMoves || st.bestMoves.length === 0) return;
       
-      const topMovesPanel = document.getElementById(`top-moves-${boardId}`);
-      if (!topMovesPanel) return;
+      const bestMovesStrip = document.getElementById(`best-moves-${boardId}`);
+      if (!bestMovesStrip) return;
       
       // Clear existing moves
-      topMovesPanel.innerHTML = '';
-      
-      // Add header
-      const header = document.createElement('div');
-      header.style.fontSize = '11px';
-      header.style.fontWeight = 'bold';
-      header.style.color = '#666';
-      header.style.marginBottom = '4px';
-      header.textContent = 'Top Moves:';
-      topMovesPanel.appendChild(header);
-      
-      // Add top moves (show up to 6)
-      const movesToShow = st.topMoves.filter(Boolean).slice(0, 6);
-      
-      movesToShow.forEach((moveData, index) => {
-        const moveItem = document.createElement('div');
-        moveItem.className = 'top-move-item';
+      const container = bestMovesStrip.querySelector('.best-moves-container');
+      if (container) {
+        container.innerHTML = '';
         
-        const moveSpan = document.createElement('span');
-        moveSpan.className = 'top-move-move';
-        const sanMove = uciToSan(boardId, moveData.move);
-        moveSpan.textContent = `${index + 1}. ${sanMove || moveData.move}`;
+        // Show only top 6 moves
+        const movesToShow = st.bestMoves.filter(Boolean).slice(0, 6);
         
-        const evalSpan = document.createElement('span');
-        evalSpan.className = 'top-move-eval';
+        // Add header
+        const header = document.createElement('div');
+        header.className = 'best-moves-header';
+        header.textContent = 'Best Moves:';
+        container.appendChild(header);
         
-        if (typeof moveData.eval === 'string' && moveData.eval.startsWith('M')) {
-          evalSpan.textContent = `#${moveData.eval.substring(1)}`;
-          evalSpan.className += moveData.eval.startsWith('M-') ? ' top-move-negative' : ' top-move-positive';
-        } else {
-          const evalNum = typeof moveData.eval === 'number' ? moveData.eval : parseFloat(moveData.eval) || 0;
-          evalSpan.textContent = (evalNum > 0 ? '+' : '') + evalNum.toFixed(1);
-          evalSpan.className += evalNum > 0 ? ' top-move-positive' : evalNum < 0 ? ' top-move-negative' : ' top-move-neutral';
-        }
-        
-        moveItem.appendChild(moveSpan);
-        moveItem.appendChild(evalSpan);
-        topMovesPanel.appendChild(moveItem);
-      });
-    }
-
-    function showTopMoves(boardId) {
-      const topMovesPanel = document.getElementById(`top-moves-${boardId}`);
-      if (topMovesPanel) {
-        topMovesPanel.classList.add('active');
+        // Add best moves
+        movesToShow.forEach((moveData, index) => {
+          const moveItem = document.createElement('div');
+          moveItem.className = 'best-move-item';
+          if (index === 0) {
+            moveItem.classList.add('main');
+          }
+          
+          const moveNumber = document.createElement('div');
+          moveNumber.className = 'best-move-number';
+          moveNumber.textContent = index + 1;
+          
+          const moveSan = document.createElement('div');
+          moveSan.className = 'best-move-san';
+          if (index === 0) {
+            moveSan.classList.add('main');
+          }
+          moveSan.textContent = moveData.san || moveData.move;
+          
+          moveItem.appendChild(moveNumber);
+          moveItem.appendChild(moveSan);
+          container.appendChild(moveItem);
+        });
       }
+      
+      bestMovesStrip.classList.add('active');
     }
 
-    function hideTopMoves(boardId) {
-      const topMovesPanel = document.getElementById(`top-moves-${boardId}`);
-      if (topMovesPanel) {
-        topMovesPanel.classList.remove('active');
+    function hideBestMoves(boardId) {
+      const bestMovesStrip = document.getElementById(`best-moves-${boardId}`);
+      if (bestMovesStrip) {
+        bestMovesStrip.classList.remove('active');
       }
     }
 
@@ -985,9 +946,9 @@
         from: from,
         to: to,
         color: '#10b981', // Green color like Lichess
-        width: 2,
-        opacity: 0.7,
-        headSize: 0.3 // Relative to square size
+        width: 3,
+        opacity: 0.8,
+        headSize: 0.25 // Relative to square size
       };
       
       drawArrow(boardId, arrow);
@@ -1035,7 +996,7 @@
       const angle = Math.atan2(dy, dx);
       
       // Adjust endpoint to not overlap the piece
-      const adjust = squareSize * 0.15;
+      const adjust = squareSize * 0.2;
       const x2_adj = x2 - Math.cos(angle) * adjust;
       const y2_adj = y2 - Math.sin(angle) * adjust;
       
@@ -1134,21 +1095,21 @@
           <option value="12">12</option>
           <option value="15" selected>15</option>
           <option value="18">18</option>
-          <option value="20">20</option>
-          <option value="22">22</option>
         </select>
         <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
-        <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
         <span id="engine-progress-${student.id}" class="engine-progress"></span>
         <span id="engine-status-${student.id}" class="engine-status">Engine off</span>
       `;
       card.appendChild(enginePanel);
       
-      // Top moves panel
-      const topMovesPanel = document.createElement('div');
-      topMovesPanel.className = 'top-moves-panel';
-      topMovesPanel.id = `top-moves-${student.id}`;
-      card.appendChild(topMovesPanel);
+      // Best moves strip (horizontal)
+      const bestMovesStrip = document.createElement('div');
+      bestMovesStrip.className = 'best-moves-strip';
+      bestMovesStrip.id = `best-moves-${student.id}`;
+      bestMovesStrip.innerHTML = `
+        <div class="best-moves-container"></div>
+      `;
+      card.appendChild(bestMovesStrip);
 
       const defaultSize = (index < 2) ? 570 : 360;
       boardsState[student.id] = {
@@ -1165,10 +1126,9 @@
         engineReady: false,
         pendingAnalysis: false,
         analysisDepth: 15,
-        evalScore: 0,
         bestMove: null,
-        bestMoveUCI: null,
-        topMoves: [],
+        bestMoveSan: null,
+        bestMoves: [],
         currentDepth: 0,
         analysisTimeout: null,
         arrowSvg: null
@@ -1187,8 +1147,8 @@
         const st = boardsState[student.id];
         st.flip = !st.flip;
         if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
-        if (st.bestMoveUCI) {
-          setTimeout(() => drawBestMoveArrow(student.id, st.bestMoveUCI), 100);
+        if (st.bestMove) {
+          setTimeout(() => drawBestMoveArrow(student.id, st.bestMove), 100);
         }
       });
 
@@ -1218,7 +1178,6 @@
             // Restart analysis with new depth
             if (st.analysisTimeout) {
               clearTimeout(st.analysisTimeout);
-              st.analysisTimeout = null;
             }
             analyzePosition(student.id);
           }
@@ -1322,7 +1281,7 @@
       pathHolder.textContent = st.watchedClientId ? `moves/${st.watchedClientId}` : '';
       if(!st.watchedClientId) return;
       const span = document.createElement('span');
-      span.className = onlineMap[st.watchedClientId] ? 'online-badge' : 'offline-badge';
+      span.style.cssText = 'font-size:11px; padding:2px 6px; border-radius:3px; background:#d1fae5; color:#065f46; border:1px solid #a7f3d0;';
       span.textContent = onlineMap[st.watchedClientId] ? 'online' : 'offline';
       badgeHolder.appendChild(span);
     }
@@ -1366,26 +1325,18 @@
       if(notEl) notEl.innerHTML = 'No moves.'; 
     }
 
-    function getDebugElem(boardId){ 
-      const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId); 
-      if(!card) return null; 
-      return card.querySelector('.debug'); 
-    }
-
     // ---------- CONNECTION STATUS ----------
     const connectedRef = db.ref('.info/connected');
     connectedRef.on('value', function(snap) {
       const statusElement = document.getElementById('connectionStatus');
       if (snap.val() === true) {
-        console.log('✅ Firebase connected');
         if (statusElement) {
-          statusElement.textContent = 'Connected to Firebase';
-          statusElement.className = 'connection-status connected';
+          statusElement.textContent = '✅ Connected';
+          statusElement.className = 'connection-status';
         }
       } else {
-        console.log('❌ Firebase disconnected');
         if (statusElement) {
-          statusElement.textContent = 'Disconnected from Firebase';
+          statusElement.textContent = '❌ Disconnected';
           statusElement.className = 'connection-status disconnected';
         }
       }
