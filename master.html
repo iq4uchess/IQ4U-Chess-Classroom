@@ -44,22 +44,44 @@
     
     /* Best move display */
     .best-move-display { font-size:13px; padding:4px 8px; background:#f0f9ff; border-radius:4px; border:1px solid #e0f2fe; margin-left:8px; }
-    .variation-moves { font-size:11px; color:#666; margin-left:8px; }
-    .move-san { display:inline-block; padding:2px 6px; margin:0 2px; background:#f3f4f6; border-radius:3px; }
     
-    /* Online players display */
-    .online-players-summary { 
-      position: absolute; 
-      top: 10px; 
-      right: 10px; 
-      background: rgba(255,255,255,0.9); 
-      border: 1px solid #e5e7eb; 
-      border-radius: 6px; 
-      padding: 6px 10px; 
-      font-size: 12px; 
-      z-index: 100; 
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    /* Top moves panel */
+    .top-moves-panel {
+      margin-top: 8px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #eef2f6;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
     }
+    .top-moves-panel.active {
+      display: flex;
+    }
+    .top-move-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      background: white;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+      font-size: 12px;
+    }
+    .top-move-move {
+      font-weight: bold;
+      font-family: monospace;
+    }
+    .top-move-eval {
+      font-family: monospace;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+    .top-move-positive { background: #d1fae5; color: #065f46; }
+    .top-move-negative { background: #fee2e2; color: #991b1b; }
+    .top-move-neutral { background: #f3f4f6; color: #4b5563; }
     
     .multiplayer-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; }
     .status-small { font-size:12px; color:#666; min-width:150px; }
@@ -90,6 +112,13 @@
       background: #fee2e2;
       border-color: #ef4444;
       color: #991b1b;
+    }
+    
+    /* Engine progress */
+    .engine-progress {
+      font-size: 11px;
+      color: #666;
+      margin-left: 8px;
     }
     
     @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } }
@@ -125,7 +154,7 @@
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
       databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "iq4u-chess-classroom",
-      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      storageBucket: "iq4uchess-classroom.firebasestorage.app",
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb6936fe0da4bb"
     };
@@ -146,6 +175,10 @@
 
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
+
+    // Stockfish paths
+    const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
+    const STOCKFISH_WASM = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.wasm';
 
     const STUDENTS = [
       { id: 'student1', name: 'Student 1' },
@@ -190,14 +223,13 @@
       grid.appendChild(card);
     }
 
-    // wait and then initialize engines & chessboards
+    // wait and then initialize chessboards
     await ensureChess();
     for(const s of STUDENTS){
-      initEngineAndBoard(s.id);
+      initBoard(s.id);
     }
 
     // ---------- SINGLE AUTHORITATIVE PIPELINE ----------
-    // This is the KEY: One path for all Firebase data → Chess.js → Chessboard.js
     const CANDIDATE_PATHS = ['','game','move','moves'];
 
     function startWatching(boardId, clientId){
@@ -217,13 +249,13 @@
       if(st.boardObj) st.boardObj.position('start');
       updateNotation(boardId);
 
-      // Attach listeners for each candidate path (SINGLE SOURCE OF TRUTH)
+      // Attach listeners for each candidate path
       st.listeners = {};
       CANDIDATE_PATHS.forEach(p => {
         const path = p ? `games/${clientId}/${p}` : `games/${clientId}`;
         const ref = db.ref(path);
         
-        // value listener (captures whole node or fen)
+        // value listener
         const onValue = snap => {
           const v = snap.val();
           if(!v) return;
@@ -302,13 +334,18 @@
       
       // Stop engine
       if(st.engineRunning) {
-        if (st.analysisInterval) {
-          clearInterval(st.analysisInterval);
-          st.analysisInterval = null;
+        if (st.analysisTimeout) {
+          clearTimeout(st.analysisTimeout);
+          st.analysisTimeout = null;
+        }
+        if (st.engineWorker) {
+          st.engineWorker.terminate();
+          st.engineWorker = null;
         }
         st.engineRunning = false;
         updateEngineDisplay(boardId, null, 0, []);
         clearArrow(boardId);
+        hideTopMoves(boardId);
       }
       
       // Clean up Firebase listeners
@@ -333,23 +370,11 @@
       try{ if(st.game && typeof st.game.load === 'function'){ st.game.load('start'); } 
         if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position('start'); 
       }catch(e){}
-      
-      // Update UI
-      const card = document.querySelector(`.board-card[data-student-id="${boardId}"]`);
-      if (card) {
-        const stopWatchBtn = card.querySelector(`#stop-watch-${boardId}`);
-        const spectateBtn = card.querySelector(`#master-spectate-${boardId}`);
-        if (stopWatchBtn && spectateBtn) {
-          stopWatchBtn.style.display = 'none';
-          spectateBtn.style.display = 'inline-block';
-        }
-      }
     }
 
-    // ---------- NORMALIZE AND APPLY (ORIGINAL ROBUST VERSION) ----------
+    // ---------- NORMALIZE AND APPLY ----------
     function normalizeAndApply(boardId, record){
       const st = boardsState[boardId];
-      const debug = getDebugElem(boardId);
       if(!st) return;
       try{
         if(record === null || typeof record === 'undefined'){ return; }
@@ -537,182 +562,233 @@
       }
     }
 
-    // ---------- STOCKFISH ENGINE ----------
-    // Simple inline engine that doesn't break CSP
-    function createInlineStockfishWorker() {
-      const stockfishCode = `
-// Simple chess analysis engine
-self.onmessage = function(e) {
-  const data = e.data;
-  
-  if (data === 'uci') {
-    self.postMessage('id name Simple Chess Engine 1.0');
-    self.postMessage('id author IQ4U Academy');
-    self.postMessage('uciok');
-    return;
-  }
-  
-  if (data.startsWith('position')) {
-    // Store position
-    return;
-  }
-  
-  if (data.startsWith('go')) {
-    const parts = data.split(' ');
-    let depth = 15;
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i] === 'depth' && i + 1 < parts.length) {
-        depth = parseInt(parts[i + 1]);
-      }
-    }
-    
-    // Simulate analysis
-    setTimeout(() => {
-      // Random evaluation between -2.0 and +2.0
-      const evalScore = (Math.random() - 0.5) * 4;
-      const moves = ['e2e4', 'd2d4', 'g1f3', 'c2c4', 'e7e5', 'd7d5'];
-      const bestMove = moves[Math.floor(Math.random() * moves.length)];
+    // ---------- STOCKFISH ENGINE INTEGRATION ----------
+    async function initStockfish(boardId) {
+      const st = boardsState[boardId];
+      if (!st) return false;
       
-      self.postMessage(\`info depth \${depth} score cp \${Math.round(evalScore * 100)}\`);
-      self.postMessage(\`bestmove \${bestMove}\`);
-    }, 500);
-    
-    return;
-  }
-  
-  if (data.startsWith('setoption')) {
-    return;
-  }
-  
-  if (data === 'isready') {
-    self.postMessage('readyok');
-    return;
-  }
-  
-  self.postMessage('readyok');
-};
-`;
-
-      const blob = new Blob([stockfishCode], { type: 'application/javascript' });
-      return URL.createObjectURL(blob);
-    }
-
-    // Global engine state
-    let engineWorker = null;
-    let engineLoaded = false;
-    let currentEngineVersion = 'Simple Engine';
-
-    async function loadEngine() {
       // Clean up existing worker
-      if (engineWorker) {
-        try { engineWorker.terminate(); } catch(e) {}
-        engineWorker = null;
-        engineLoaded = false;
+      if (st.engineWorker) {
+        try {
+          st.engineWorker.terminate();
+        } catch(e) {}
+        st.engineWorker = null;
       }
       
       try {
-        const workerUrl = createInlineStockfishWorker();
-        engineWorker = new Worker(workerUrl);
+        // Create Stockfish worker
+        const worker = new Worker(STOCKFISH_JS);
+        st.engineWorker = worker;
+        st.engineReady = false;
+        st.topMoves = [];
         
-        return new Promise((resolve) => {
-          const timeout = setTimeout(() => {
-            resolve(false);
-          }, 3000);
+        worker.onmessage = function(event) {
+          const line = event.data;
           
-          const messageHandler = (e) => {
-            if (e.data && (e.data.includes('uciok') || e.data.includes('id name'))) {
-              clearTimeout(timeout);
-              engineWorker.removeEventListener('message', messageHandler);
-              engineLoaded = true;
-              console.log('✅ Engine loaded');
-              
-              // Update all boards
-              STUDENTS.forEach(s => {
-                const versionEl = document.getElementById(`engine-version-${s.id}`);
-                if (versionEl) versionEl.textContent = currentEngineVersion;
-              });
-              
-              resolve(true);
+          // Handle engine initialization
+          if (line === 'uciok') {
+            st.engineReady = true;
+            worker.postMessage('setoption name MultiPV value 6');
+            worker.postMessage('isready');
+          } else if (line === 'readyok') {
+            updateEngineStatus(boardId, 'Ready');
+            if (st.pendingAnalysis) {
+              analyzePosition(boardId);
+              st.pendingAnalysis = false;
             }
-          };
-          
-          engineWorker.addEventListener('message', messageHandler);
-          engineWorker.postMessage('uci');
-          engineWorker.postMessage('isready');
-        });
+          } 
+          // Parse analysis results
+          else if (line.startsWith('info')) {
+            parseStockfishInfo(boardId, line);
+          }
+          // Parse best move
+          else if (line.startsWith('bestmove')) {
+            parseBestMove(boardId, line);
+          }
+        };
+        
+        worker.onerror = function(error) {
+          console.error(`Stockfish error for board ${boardId}:`, error);
+          updateEngineStatus(boardId, 'Error');
+          addNotification(boardId, 'Engine error occurred');
+        };
+        
+        // Initialize engine
+        worker.postMessage('uci');
+        updateEngineStatus(boardId, 'Loading...');
+        return true;
       } catch (error) {
-        console.error('Engine load failed:', error);
+        console.error('Failed to init Stockfish:', error);
+        updateEngineStatus(boardId, 'Failed');
         return false;
       }
     }
 
+    function parseStockfishInfo(boardId, line) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      // Extract depth
+      const depthMatch = line.match(/depth\s+(\d+)/);
+      if (depthMatch) {
+        st.currentDepth = parseInt(depthMatch[1]);
+        const progressEl = document.getElementById(`engine-progress-${boardId}`);
+        if (progressEl) {
+          progressEl.textContent = `Depth: ${st.currentDepth}`;
+        }
+      }
+      
+      // Extract evaluation
+      const evalMatch = line.match(/score\s+cp\s+(-?\d+)/);
+      if (evalMatch) {
+        st.evalScore = parseInt(evalMatch[1]) / 100;
+        updateEvalDisplay(boardId, st.evalScore);
+      }
+      
+      // Check for mate score
+      const mateMatch = line.match(/score\s+mate\s+(-?\d+)/);
+      if (mateMatch) {
+        const mateIn = parseInt(mateMatch[1]);
+        st.evalScore = mateIn > 0 ? `M${mateIn}` : `M${-mateIn}`;
+        updateEvalDisplay(boardId, st.evalScore);
+      }
+      
+      // Parse top moves when MultiPV is present
+      const pvMatch = line.match(/multipv\s+(\d+)/);
+      if (pvMatch && line.includes('pv')) {
+        const pvIndex = parseInt(pvMatch[1]) - 1;
+        const moveMatch = line.match(/pv\s+([\w\s]+)/);
+        if (moveMatch) {
+          const moves = moveMatch[1].trim().split(/\s+/);
+          const bestMove = moves[0];
+          
+          // Extract evaluation for this PV line
+          let pvEval = 0;
+          const pvEvalMatch = line.match(/score\s+cp\s+(-?\d+)/);
+          if (pvEvalMatch) {
+            pvEval = parseInt(pvEvalMatch[1]) / 100;
+          }
+          const pvMateMatch = line.match(/score\s+mate\s+(-?\d+)/);
+          if (pvMateMatch) {
+            const mateIn = parseInt(pvMateMatch[1]);
+            pvEval = mateIn > 0 ? `M${mateIn}` : `M${-mateIn}`;
+          }
+          
+          if (!st.topMoves) st.topMoves = [];
+          st.topMoves[pvIndex] = {
+            move: bestMove,
+            eval: pvEval,
+            moves: moves.slice(0, 3).join(' ')
+          };
+          
+          // Update top moves display
+          updateTopMovesDisplay(boardId);
+        }
+      }
+    }
+
+    function parseBestMove(boardId, line) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const bestMoveMatch = line.match(/bestmove\s+(\w+)/);
+      if (bestMoveMatch) {
+        const bestMove = bestMoveMatch[1];
+        st.bestMove = bestMove;
+        st.bestMoveUCI = bestMove;
+        
+        // Update best move display
+        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+        if (bestMoveEl) {
+          const sanMove = uciToSan(boardId, bestMove);
+          bestMoveEl.textContent = sanMove ? `Best: ${sanMove}` : `Best: ${bestMove}`;
+        }
+        
+        // Draw arrow for best move
+        if (bestMove && bestMove.length >= 4) {
+          drawBestMoveArrow(boardId, bestMove);
+        }
+        
+        // Show top moves panel
+        showTopMoves(boardId);
+        
+        // Schedule next analysis
+        if (st.engineRunning) {
+          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
+        }
+      }
+    }
+
+    function uciToSan(boardId, uciMove) {
+      const st = boardsState[boardId];
+      if (!st || !st.game || !uciMove || uciMove.length < 4) return uciMove;
+      
+      try {
+        const from = uciMove.substring(0, 2);
+        const to = uciMove.substring(2, 4);
+        const promotion = uciMove.length > 4 ? uciMove.substring(4) : null;
+        
+        const moveObj = {
+          from: from,
+          to: to,
+          promotion: promotion || undefined
+        };
+        
+        const move = st.game.move(moveObj);
+        if (move && move.san) {
+          // Undo the move
+          st.game.undo();
+          return move.san;
+        }
+      } catch(e) {
+        console.error('Failed to convert UCI to SAN:', e);
+      }
+      
+      return uciMove;
+    }
+
     function analyzePosition(boardId) {
       const st = boardsState[boardId];
-      if (!st || !st.engineRunning || !st.game || !engineWorker || !engineLoaded) return;
+      if (!st || !st.engineRunning || !st.game || !st.engineWorker) return;
+      
+      // Clear previous timeout
+      if (st.analysisTimeout) {
+        clearTimeout(st.analysisTimeout);
+        st.analysisTimeout = null;
+      }
+      
+      // Reset top moves
+      st.topMoves = [];
+      updateTopMovesDisplay(boardId);
+      hideTopMoves(boardId);
+      clearArrow(boardId);
       
       try {
         const fen = st.game.fen ? st.game.fen() : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        
+        // Don't analyze starting position
         if (fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
-          return; // Don't analyze starting position
+          updateEngineStatus(boardId, 'Start position');
+          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
+          return;
         }
         
-        let bestMove = null;
-        let evaluation = 0;
-        let analysisComplete = false;
+        if (!st.engineReady) {
+          st.pendingAnalysis = true;
+          return;
+        }
         
-        const messageHandler = (e) => {
-          const data = e.data;
-          
-          if (data.startsWith('info depth')) {
-            const parts = data.split(' ');
-            for (let i = 0; i < parts.length; i++) {
-              if (parts[i] === 'score' && i + 1 < parts.length) {
-                const scoreType = parts[i + 1];
-                const scoreValue = parts[i + 2];
-                if (scoreType === 'cp') {
-                  evaluation = parseInt(scoreValue) / 100;
-                }
-              }
-            }
-            
-            updateEngineDisplay(boardId, bestMove, evaluation, []);
-          }
-          
-          if (data.startsWith('bestmove')) {
-            analysisComplete = true;
-            const match = data.match(/bestmove\s+(\S+)/);
-            if (match) {
-              bestMove = match[1];
-              engineWorker.removeEventListener('message', messageHandler);
-              
-              // Store results
-              st.bestMove = bestMove;
-              st.bestMoveUCI = bestMove;
-              st.evalScore = evaluation;
-              
-              // Update display
-              updateEngineDisplay(boardId, bestMove, evaluation, []);
-              
-              // Draw arrow
-              if (bestMove && bestMove.length >= 4) {
-                drawBestMoveArrow(boardId, bestMove);
-              }
-            }
-          }
-        };
+        // Clear previous analysis
+        st.engineWorker.postMessage('stop');
         
-        engineWorker.addEventListener('message', messageHandler);
-        engineWorker.postMessage(`position fen ${fen}`);
-        engineWorker.postMessage(`go depth ${Math.min(st.analysisDepth, 20)}`);
+        // Set position and analyze
+        st.engineWorker.postMessage(`position fen ${fen}`);
+        st.engineWorker.postMessage(`go depth ${st.analysisDepth}`);
         
-        // Timeout
-        setTimeout(() => {
-          if (!analysisComplete) {
-            engineWorker.removeEventListener('message', messageHandler);
-          }
-        }, 5000);
+        updateEngineStatus(boardId, 'Analyzing...');
       } catch (e) {
         console.error('Analysis error:', e);
+        updateEngineStatus(boardId, 'Error');
       }
     }
 
@@ -721,110 +797,158 @@ self.onmessage = function(e) {
       if (!st) return;
       
       const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
-      const statusEl = document.getElementById(`engine-status-${boardId}`);
       
       if (!st.engineRunning) {
-        // Try to load engine if not loaded
-        if (!engineLoaded) {
-          loadEngine().then(success => {
-            if (success) {
-              startEngineForBoard(boardId);
-            } else {
-              addNotification(boardId, 'Failed to load engine');
+        // Start engine
+        initStockfish(boardId).then(success => {
+          if (success) {
+            st.engineRunning = true;
+            if (toggleBtn) {
+              toggleBtn.textContent = 'Engine: ON';
+              toggleBtn.className = 'engine-btn engine-btn-stop';
             }
-          });
-        } else {
-          startEngineForBoard(boardId);
-        }
+            addNotification(boardId, `Stockfish engine started (depth ${st.analysisDepth})`);
+            
+            // Start analysis
+            setTimeout(() => analyzePosition(boardId), 500);
+          } else {
+            if (toggleBtn) {
+              toggleBtn.textContent = 'Engine: OFF';
+              toggleBtn.className = 'engine-btn';
+            }
+            addNotification(boardId, 'Failed to start engine');
+          }
+        });
       } else {
         // Stop engine
         st.engineRunning = false;
         
-        if (st.analysisInterval) {
-          clearInterval(st.analysisInterval);
-          st.analysisInterval = null;
+        if (st.analysisTimeout) {
+          clearTimeout(st.analysisTimeout);
+          st.analysisTimeout = null;
+        }
+        
+        if (st.engineWorker) {
+          st.engineWorker.terminate();
+          st.engineWorker = null;
         }
         
         if (toggleBtn) {
           toggleBtn.textContent = 'Engine: OFF';
           toggleBtn.className = 'engine-btn';
         }
-        if (statusEl) statusEl.textContent = 'Engine off';
         
+        updateEngineStatus(boardId, 'Engine off');
         updateEngineDisplay(boardId, null, 0, []);
         clearArrow(boardId);
+        hideTopMoves(boardId);
         
         addNotification(boardId, 'Engine stopped');
       }
     }
 
-    function startEngineForBoard(boardId) {
-      const st = boardsState[boardId];
-      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
+    function updateEngineStatus(boardId, status) {
       const statusEl = document.getElementById(`engine-status-${boardId}`);
+      if (statusEl) statusEl.textContent = status;
+    }
+
+    function updateEvalDisplay(boardId, evalScore) {
+      const evalEl = document.getElementById(`engine-eval-${boardId}`);
+      if (!evalEl) return;
       
-      st.engineRunning = true;
+      let evalText, evalClass;
       
-      if (toggleBtn) {
-        toggleBtn.textContent = 'Engine: ON';
-        toggleBtn.className = 'engine-btn engine-btn-stop';
-      }
-      if (statusEl) statusEl.textContent = 'Analyzing...';
-      
-      addNotification(boardId, `Engine started (depth ${st.analysisDepth})`);
-      
-      // Start immediate analysis
-      setTimeout(() => analyzePosition(boardId), 300);
-      
-      // Set up periodic analysis
-      st.analysisInterval = setInterval(() => {
-        if (st.engineRunning && st.game && st.watchedClientId) {
-          analyzePosition(boardId);
+      if (typeof evalScore === 'string' && evalScore.startsWith('M')) {
+        // Mate score
+        evalText = `#${evalScore.substring(1)}`;
+        evalClass = evalScore.startsWith('M-') ? 'eval-negative' : 'eval-positive';
+      } else {
+        // Centipawn evaluation
+        const numEval = typeof evalScore === 'number' ? evalScore : parseFloat(evalScore) || 0;
+        evalText = (numEval > 0 ? '+' : '') + numEval.toFixed(1);
+        
+        if (numEval > 1.0) {
+          evalClass = 'eval-positive';
+        } else if (numEval < -1.0) {
+          evalClass = 'eval-negative';
+        } else {
+          evalClass = 'eval-neutral';
         }
-      }, 8000);
+      }
+      
+      evalEl.textContent = evalText;
+      evalEl.className = `eval-display ${evalClass}`;
     }
 
     function updateEngineDisplay(boardId, bestMove, evaluation, variation) {
+      // This function is kept for compatibility
+    }
+
+    // ---------- TOP MOVES DISPLAY ----------
+    function updateTopMovesDisplay(boardId) {
       const st = boardsState[boardId];
-      if (!st) return;
+      if (!st || !st.topMoves) return;
       
-      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-      const evalEl = document.getElementById(`engine-eval-${boardId}`);
-      const variationEl = document.getElementById(`variation-${boardId}`);
-      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      const topMovesPanel = document.getElementById(`top-moves-${boardId}`);
+      if (!topMovesPanel) return;
       
-      if (bestMoveEl) {
-        bestMoveEl.textContent = bestMove ? `Best: ${bestMove}` : 'Best: --';
-      }
+      // Clear existing moves
+      topMovesPanel.innerHTML = '';
       
-      if (evalEl) {
-        const evalText = (evaluation > 0 ? '+' : '') + evaluation.toFixed(1);
-        evalEl.textContent = evalText;
+      // Add header
+      const header = document.createElement('div');
+      header.style.fontSize = '11px';
+      header.style.fontWeight = 'bold';
+      header.style.color = '#666';
+      header.style.marginBottom = '4px';
+      header.textContent = 'Top Moves:';
+      topMovesPanel.appendChild(header);
+      
+      // Add top moves (show up to 6)
+      const movesToShow = st.topMoves.filter(Boolean).slice(0, 6);
+      
+      movesToShow.forEach((moveData, index) => {
+        const moveItem = document.createElement('div');
+        moveItem.className = 'top-move-item';
         
-        if (evaluation > 1.0) {
-          evalEl.className = 'eval-display eval-positive';
-        } else if (evaluation < -1.0) {
-          evalEl.className = 'eval-display eval-negative';
+        const moveSpan = document.createElement('span');
+        moveSpan.className = 'top-move-move';
+        const sanMove = uciToSan(boardId, moveData.move);
+        moveSpan.textContent = `${index + 1}. ${sanMove || moveData.move}`;
+        
+        const evalSpan = document.createElement('span');
+        evalSpan.className = 'top-move-eval';
+        
+        if (typeof moveData.eval === 'string' && moveData.eval.startsWith('M')) {
+          evalSpan.textContent = `#${moveData.eval.substring(1)}`;
+          evalSpan.className += moveData.eval.startsWith('M-') ? ' top-move-negative' : ' top-move-positive';
         } else {
-          evalEl.className = 'eval-display eval-neutral';
+          const evalNum = typeof moveData.eval === 'number' ? moveData.eval : parseFloat(moveData.eval) || 0;
+          evalSpan.textContent = (evalNum > 0 ? '+' : '') + evalNum.toFixed(1);
+          evalSpan.className += evalNum > 0 ? ' top-move-positive' : evalNum < 0 ? ' top-move-negative' : ' top-move-neutral';
         }
-      }
-      
-      if (variationEl && variation && variation.length > 0) {
-        let variationHTML = '';
-        for (let i = 0; i < Math.min(variation.length, 3); i++) {
-          if (i > 0) variationHTML += ' ';
-          variationHTML += `<span class="move-san">${variation[i]}</span>`;
-        }
-        variationEl.innerHTML = variationHTML;
-      }
-      
-      if (statusEl && st.engineRunning) {
-        statusEl.textContent = 'Analyzing...';
+        
+        moveItem.appendChild(moveSpan);
+        moveItem.appendChild(evalSpan);
+        topMovesPanel.appendChild(moveItem);
+      });
+    }
+
+    function showTopMoves(boardId) {
+      const topMovesPanel = document.getElementById(`top-moves-${boardId}`);
+      if (topMovesPanel) {
+        topMovesPanel.classList.add('active');
       }
     }
 
-    // ---------- ARROW FUNCTIONS ----------
+    function hideTopMoves(boardId) {
+      const topMovesPanel = document.getElementById(`top-moves-${boardId}`);
+      if (topMovesPanel) {
+        topMovesPanel.classList.remove('active');
+      }
+    }
+
+    // ---------- ARROW FUNCTIONS (Lichess style) ----------
     function initArrowOverlay(boardId) {
       const st = boardsState[boardId];
       if (!st) return;
@@ -856,12 +980,14 @@ self.onmessage = function(e) {
       const from = uciMove.substring(0, 2);
       const to = uciMove.substring(2, 4);
       
+      // Lichess-style arrow: green with slight transparency
       const arrow = {
         from: from,
         to: to,
-        color: '#10b981',
-        width: 3,
-        opacity: 0.7
+        color: '#10b981', // Green color like Lichess
+        width: 2,
+        opacity: 0.7,
+        headSize: 0.3 // Relative to square size
       };
       
       drawArrow(boardId, arrow);
@@ -902,33 +1028,43 @@ self.onmessage = function(e) {
         y2 = (7 - toRank) * squareSize + squareSize / 2;
       }
       
-      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-      marker.setAttribute('id', `arrowhead-${boardId}`);
-      marker.setAttribute('markerWidth', '10');
-      marker.setAttribute('markerHeight', '7');
-      marker.setAttribute('refX', '9');
-      marker.setAttribute('refY', '3.5');
-      marker.setAttribute('orient', 'auto');
+      // Calculate arrow length and angle
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
       
-      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
-      polygon.setAttribute('fill', arrow.color);
+      // Adjust endpoint to not overlap the piece
+      const adjust = squareSize * 0.15;
+      const x2_adj = x2 - Math.cos(angle) * adjust;
+      const y2_adj = y2 - Math.sin(angle) * adjust;
       
-      marker.appendChild(polygon);
-      defs.appendChild(marker);
-      st.arrowSvg.appendChild(defs);
-      
+      // Draw arrow line
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute('x1', x1);
       line.setAttribute('y1', y1);
-      line.setAttribute('x2', x2);
-      line.setAttribute('y2', y2);
+      line.setAttribute('x2', x2_adj);
+      line.setAttribute('y2', y2_adj);
       line.setAttribute('stroke', arrow.color);
       line.setAttribute('stroke-width', arrow.width);
       line.setAttribute('stroke-opacity', arrow.opacity);
-      line.setAttribute('marker-end', `url(#arrowhead-${boardId})`);
+      line.setAttribute('stroke-linecap', 'round');
       st.arrowSvg.appendChild(line);
+      
+      // Draw arrowhead (triangle)
+      const headLength = squareSize * arrow.headSize;
+      const headAngle = Math.PI / 6;
+      
+      const x3 = x2_adj - headLength * Math.cos(angle - headAngle);
+      const y3 = y2_adj - headLength * Math.sin(angle - headAngle);
+      const x4 = x2_adj - headLength * Math.cos(angle + headAngle);
+      const y4 = y2_adj - headLength * Math.sin(angle + headAngle);
+      
+      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      polygon.setAttribute('points', `${x2_adj},${y2_adj} ${x3},${y3} ${x4},${y4}`);
+      polygon.setAttribute('fill', arrow.color);
+      polygon.setAttribute('fill-opacity', arrow.opacity);
+      st.arrowSvg.appendChild(polygon);
     }
 
     function clearArrow(boardId) {
@@ -991,7 +1127,7 @@ self.onmessage = function(e) {
       enginePanel.className = 'engine-panel';
       enginePanel.innerHTML = `
         <button id="engine-toggle-${student.id}" class="engine-btn">Engine: OFF</button>
-        <span id="engine-version-${student.id}" class="version-display">None</span>
+        <span id="engine-version-${student.id}" class="version-display">Stockfish 17.1</span>
         <span style="font-size:12px;">Depth:</span>
         <select id="depth-select-${student.id}" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid #ccc;">
           <option value="10">10</option>
@@ -999,13 +1135,20 @@ self.onmessage = function(e) {
           <option value="15" selected>15</option>
           <option value="18">18</option>
           <option value="20">20</option>
+          <option value="22">22</option>
         </select>
         <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
         <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
-        <span id="variation-${student.id}" class="variation-moves"></span>
+        <span id="engine-progress-${student.id}" class="engine-progress"></span>
         <span id="engine-status-${student.id}" class="engine-status">Engine off</span>
       `;
       card.appendChild(enginePanel);
+      
+      // Top moves panel
+      const topMovesPanel = document.createElement('div');
+      topMovesPanel.className = 'top-moves-panel';
+      topMovesPanel.id = `top-moves-${student.id}`;
+      card.appendChild(topMovesPanel);
 
       const defaultSize = (index < 2) ? 570 : 360;
       boardsState[student.id] = {
@@ -1016,14 +1159,18 @@ self.onmessage = function(e) {
         boardObj: null,
         game: null,
         pieceTheme,
-        // Engine properties
+        // Stockfish engine properties
+        engineWorker: null,
         engineRunning: false,
+        engineReady: false,
+        pendingAnalysis: false,
         analysisDepth: 15,
         evalScore: 0,
         bestMove: null,
         bestMoveUCI: null,
-        variation: [],
-        analysisInterval: null,
+        topMoves: [],
+        currentDepth: 0,
+        analysisTimeout: null,
         arrowSvg: null
       };
 
@@ -1068,7 +1215,12 @@ self.onmessage = function(e) {
         if(st) {
           st.analysisDepth = parseInt(e.target.value);
           if (st.engineRunning) {
-            setTimeout(() => analyzePosition(student.id), 200);
+            // Restart analysis with new depth
+            if (st.analysisTimeout) {
+              clearTimeout(st.analysisTimeout);
+              st.analysisTimeout = null;
+            }
+            analyzePosition(student.id);
           }
         }
       });
@@ -1076,7 +1228,7 @@ self.onmessage = function(e) {
       return card;
     }
 
-    function initEngineAndBoard(studentId){
+    function initBoard(studentId){
       const st = boardsState[studentId];
       if(!st) return;
       try{ 
@@ -1258,26 +1410,7 @@ self.onmessage = function(e) {
         onlineRef.child(MASTER_ID).remove().catch(()=>{}); 
       }catch(e){}
       STUDENTS.forEach(s => stopWatching(s.id));
-      
-      if (engineWorker) {
-        try { engineWorker.terminate(); } catch(e) {}
-      }
     });
-
-    // Load engine on startup
-    setTimeout(() => {
-      loadEngine().then(success => {
-        if (success) {
-          STUDENTS.forEach(s => {
-            addNotification(s.id, `Chess engine ready: ${currentEngineVersion}`);
-          });
-        } else {
-          STUDENTS.forEach(s => {
-            addNotification(s.id, 'Chess engine failed to load');
-          });
-        }
-      });
-    }, 2000);
 
   })();
   </script>
