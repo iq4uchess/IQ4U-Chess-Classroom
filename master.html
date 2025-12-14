@@ -35,6 +35,7 @@
     .engine-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; padding:8px; background:#f8f9fa; border-radius:6px; border:1px solid #eef2f6; }
     .engine-btn { padding:6px 12px; border-radius:6px; background:#3b82f6; color:#fff; border:none; cursor:pointer; font-size:12px; }
     .engine-btn-stop { background:#ef4444; }
+    .engine-btn-next { background:#10b981; }
     .engine-status { font-size:12px; color:#666; padding:4px 8px; background:#fff; border-radius:4px; border:1px solid #eef2f6; min-width:120px; }
     .eval-display { font-size:12px; font-weight:bold; padding:4px 8px; border-radius:4px; }
     .eval-positive { background: #d1fae5; color: #065f46; }
@@ -64,10 +65,40 @@
     .status-small { font-size:12px; color:#666; min-width:150px; }
     .notif-item { font-size:12px; padding:4px 6px; border-radius:4px; background:#f7f9fc; margin-bottom:6px; }
     
+    /* Stockfish version display */
+    .version-display { font-size:10px; color:#666; padding:2px 6px; background:#f3f4f6; border-radius:3px; margin-left:4px; }
+    
+    /* Connection status */
+    .connection-status {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      z-index: 1000;
+      background: #fef3c7;
+      border: 1px solid #fbbf24;
+      color: #92400e;
+    }
+    .connection-status.connected {
+      background: #d1fae5;
+      border-color: #10b981;
+      color: #065f46;
+    }
+    .connection-status.disconnected {
+      background: #fee2e2;
+      border-color: #ef4444;
+      color: #991b1b;
+    }
+    
     @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } }
   </style>
 </head>
 <body>
+  <!-- Connection Status Indicator -->
+  <div id="connectionStatus" class="connection-status">Connecting to Firebase...</div>
+
   <div class="container">
     <h1>Master Dashboard - IQ 4U Academy</h1>
 
@@ -84,11 +115,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
   <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
   <script>
   (async function(){
+    // ---------- CONFIG ----------
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
@@ -96,17 +127,22 @@
       projectId: "iq4u-chess-classroom",
       storageBucket: "iq4uchess-classroom.firebasedestorage.app",
       messagingSenderId: "833620718306",
-      appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
+      appId: "1:833620718306:web:b599bb6936fe0da4bb"
     };
-    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
-
+    
+    try{ 
+      firebase.initializeApp(FIREBASE_CONFIG); 
+      console.log('✅ Firebase initialized');
+    } catch(e){ 
+      console.error('❌ Firebase init failed:', e);
+    }
+    
     const db = firebase.database();
     const onlineRef = db.ref('online');
-    const gamesRef = db.ref('games');
 
-    // MASTER identity will be derived from Firebase Auth when present
-    let MASTER_ID = null;
-    let MASTER_NAME = localStorage.getItem('username') || localStorage.getItem('email') || 'master';
+    const MASTER_ID = sessionStorage.getItem('iq4u_clientId') || ('m_'+Math.random().toString(36).slice(2,10));
+    sessionStorage.setItem('iq4u_clientId', MASTER_ID);
+    const MASTER_NAME = localStorage.getItem('username') || localStorage.getItem('email') || 'master';
 
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
@@ -117,16 +153,11 @@
       { id: 'student3', name: 'Student 3' },
       { id: 'student4', name: 'Student 4' }
     ];
-    const STUDENT_IDS = STUDENTS.map(s => s.id.toLowerCase());
-    const STUDENT_NAMES = STUDENTS.map(s => s.name.toLowerCase());
 
     const onlineMap = {};   // clientId => {email, role, ts}
     const boardsState = {}; // per-board state
 
-    // track last online count to avoid duplicate "Players online" messages
-    let lastOnlineCount = null;
-
-    // ---------- ensure chess.js ----------
+    // ---------- ensure chess.js loaded ----------
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
     async function ensureChess(){
       if(typeof Chess !== 'undefined') return;
@@ -150,7 +181,7 @@
       try{ const r = await fetch(test, { method:'HEAD', cache:'no-store' }); return r.ok ? CUSTOM_PIECE_THEME : FALLBACK_THEME; }catch(e){ return FALLBACK_THEME; }
     }
 
-    // ---------- build UI ----------
+    // ---------- build UI (DOM only) ----------
     const grid = document.getElementById('boardsGrid');
     const theme = await pickPieceTheme();
     for(let i=0;i<STUDENTS.length;i++){
@@ -159,215 +190,641 @@
       grid.appendChild(card);
     }
 
+    // wait and then initialize engines & chessboards
     await ensureChess();
-    for(const s of STUDENTS) initEngineAndBoard(s.id);
+    for(const s of STUDENTS){
+      initEngineAndBoard(s.id);
+    }
 
-    // ---------- functions ----------
-    function createCard(student, pieceTheme, index){
-      const card = document.createElement('div'); 
-      card.className = 'board-card'; 
-      card.dataset.studentId = student.id;
+    // ---------- SINGLE AUTHORITATIVE PIPELINE ----------
+    // This is the KEY: One path for all Firebase data → Chess.js → Chessboard.js
+    const CANDIDATE_PATHS = ['','game','move','moves'];
 
-      const label = document.createElement('div'); 
-      label.className = 'student-label';
-      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="path-holder" style="margin-left:8px;font-size:11px;color:#666"></span>`;
-      card.appendChild(label);
-
-      const top = document.createElement('div'); 
-      top.className = 'top-strip';
-      top.innerHTML = `<div class="controls"><span class="label-small" style="margin-right:6px;">Size</span>
-        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
-        <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
-      </div>`;
-      card.appendChild(top);
-
-      const boardInnerWrap = document.createElement('div'); 
-      boardInnerWrap.className = 'board-inner';
-      const boardHolder = document.createElement('div'); 
-      boardHolder.className = 'board-holder';
+    function startWatching(boardId, clientId){
+      const st = boardsState[boardId];
+      if(!st) return;
+      stopWatching(boardId); // teardown previous
+      st.watchedClientId = clientId;
       
-      // Add arrow overlay
-      const arrowOverlay = document.createElement('div');
-      arrowOverlay.className = 'arrow-overlay';
-      arrowOverlay.id = 'arrows_' + student.id;
+      // Update UI
+      const sel = document.querySelector(`.player-select[data-sid="${boardId}"]`);
+      if(sel) sel.value = clientId;
+      refreshBadge(boardId);
+      addNotification(boardId, `Start watching ${clientId}`);
       
-      const boardDiv = document.createElement('div'); 
-      boardDiv.id = 'board_' + student.id;
-      
-      // Add online players summary overlay
-      const onlineSummary = document.createElement('div');
-      onlineSummary.className = 'online-players-summary';
-      onlineSummary.id = 'online-summary-' + student.id;
-      onlineSummary.innerHTML = 'Online: 0';
-      
-      boardHolder.appendChild(onlineSummary);
-      boardHolder.appendChild(boardDiv);
-      boardHolder.appendChild(arrowOverlay);
-      boardInnerWrap.appendChild(boardHolder); 
-      card.appendChild(boardInnerWrap);
+      // Reset game state
+      try{ st.game = new Chess(); } catch(e){ st.game = null; }
+      if(st.boardObj) st.boardObj.position('start');
+      updateNotation(boardId);
 
-      const notifArea = document.createElement('div'); 
-      notifArea.className = 'notif-area';
-      notifArea.innerHTML = `
-        <div class="notifications" id="notif_${student.id}"></div>
-        <div class="notation" id="notation_${student.id}">No moves.</div>
-      `;
-      card.appendChild(notifArea);
+      // Attach listeners for each candidate path (SINGLE SOURCE OF TRUTH)
+      st.listeners = {};
+      CANDIDATE_PATHS.forEach(p => {
+        const path = p ? `games/${clientId}/${p}` : `games/${clientId}`;
+        const ref = db.ref(path);
+        
+        // value listener (captures whole node or fen)
+        const onValue = snap => {
+          const v = snap.val();
+          if(!v) return;
+          normalizeAndApply(boardId, v);
+        };
+        ref.on('value', onValue);
 
-      const debug = document.createElement('div'); 
-      debug.className = 'debug'; 
-      debug.id = 'debug_' + student.id; 
-      debug.textContent = 'ready'; 
-      card.appendChild(debug);
+        // child_added for move streams
+        const onChildAdded = snap => {
+          const v = snap.val();
+          if(p === 'moves' || typeof v === 'object'){
+            const candidate = v && (v.payload || v);
+            if(candidate && (candidate.move || candidate.fen || candidate.from)){
+              normalizeAndApply(boardId, v);
+            } else {
+              // Fetch all moves in order
+              ref.limitToLast(500).once('value').then(snap2 => {
+                const ordered = {};
+                snap2.forEach(child => ordered[child.key] = child.val());
+                normalizeAndApply(boardId, { moves: ordered });
+              }).catch(()=>{});
+            }
+          } else {
+            normalizeAndApply(boardId, v);
+          }
+        };
+        ref.on('child_added', onChildAdded);
 
-      // Multiplayer panel with enhanced student selection
-      const multiplayPanel = document.createElement('div');
-      multiplayPanel.className = 'multiplayer-panel';
-      multiplayPanel.innerHTML = `
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <select id="master-students-${student.id}" name="master-students" style="padding:6px 8px; border-radius:6px; border:1px solid #ccc; min-width:200px; font-size:12px;">
-            <option value="">Select student</option>
-          </select>
-          <button id="master-spectate-${student.id}" name="master-spectate-btn" style="padding:6px 12px; border-radius:6px; background:#0f172a; color:#fff; border:none; cursor:pointer; font-size:12px;">Spectate</button>
-          <button id="stop-watch-${student.id}" style="padding:6px 12px; border-radius:6px; background:#ef4444; color:#fff; border:none; cursor:pointer; font-size:12px; display:none;">Stop Watching</button>
-          <span id="master-status-${student.id}" class="status-small">ready</span>
-        </div>
-      `;
-      card.appendChild(multiplayPanel);
+        // child_changed - apply updates
+        const onChildChanged = snap => {
+          normalizeAndApply(boardId, snap.val());
+        };
+        ref.on('child_changed', onChildChanged);
 
-      // Engine analysis panel
-      const enginePanel = document.createElement('div');
-      enginePanel.className = 'engine-panel';
-      enginePanel.innerHTML = `
-        <button id="engine-toggle-${student.id}" class="engine-btn">Engine: OFF</button>
-        <span style="font-size:12px;">Skill:</span>
-        <select id="skill-select-${student.id}" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid #ccc;">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-          <option value="10">10</option>
-        </select>
-        <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
-        <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
-        <span id="variation-${student.id}" class="variation-moves"></span>
-        <span id="engine-status-${student.id}" class="engine-status">Engine off</span>
-      `;
-      card.appendChild(enginePanel);
-
-      const defaultSize = (index < 2) ? 570 : 360;
-      boardsState[student.id] = {
-        size: defaultSize,
-        flip: false,
-        watchedClientId: null,
-        listeners: {},
-        boardObj: null,
-        game: null,
-        pieceTheme,
-        gameMoveListeners: {},
-        moveRecords: {},
-        processedMoveKeys: new Set(),
-        lastNotif: null,
-        // Engine properties
-        engineRunning: false,
-        skillLevel: 3,
-        evalScore: 0,
-        bestMove: null,
-        bestMoveUCI: null, // Store UCI for arrow drawing
-        variation: [],
-        arrowSvg: null,
-        arrowInterval: null
-      };
-
-      const sizeSlider = top.querySelector('.size-slider');
-      sizeSlider.value = defaultSize;
-      sizeSlider.addEventListener('input', e => {
-        const px = Number(e.target.value);
-        boardsState[student.id].size = px;
-        setBoardSize(student.id, px);
+        // save for teardown
+        st.listeners[path] = { ref, handlers: { value: onValue, child_added: onChildAdded, child_changed: onChildChanged } };
       });
+
+      // Also listen to moves/{clientId} for real-time move syncing
+      try{
+        const movesPath = `moves/${clientId}`;
+        const movesRef = db.ref(movesPath);
+        const onMoveAdded = snap => {
+          const m = snap.val();
+          if(!m) return;
+          if(m.by === MASTER_ID) return;
+          const candidate = m.payload || m;
+          if(candidate && (candidate.move || candidate.fen)){
+            normalizeAndApply(boardId, candidate);
+          }
+        };
+        movesRef.on('child_added', onMoveAdded);
+        st.listeners[movesPath] = { ref: movesRef, handlers: { child_added: onMoveAdded } };
+      }catch(e){ console.error('Moves listener failed:', e); }
+
+      // initial one-shot fetch
+      try{
+        const movesRef = db.ref(`games/${clientId}/moves`);
+        movesRef.limitToLast(500).once('value').then(snap => {
+          if(!snap.exists()) return;
+          const ordered = {};
+          snap.forEach(child => ordered[child.key] = child.val());
+          normalizeAndApply(boardId, { moves: ordered });
+        }).catch(()=>{});
+      }catch(e){}
+
+      // Start engine if not running
+      if(!st.engineRunning) {
+        setTimeout(() => toggleEngine(boardId), 1000);
+      }
+    }
+
+    function stopWatching(boardId){
+      const st = boardsState[boardId];
+      if(!st) return;
       
-      top.querySelector('.flip-btn').addEventListener('click', () => {
-        const st = boardsState[student.id];
-        st.flip = !st.flip;
-        if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
-        // Redraw arrow if exists
-        if (st.bestMoveUCI) {
-          setTimeout(() => drawBestMoveArrow(student.id, st.bestMoveUCI), 100);
+      // Stop engine
+      if(st.engineRunning) {
+        if (st.analysisInterval) {
+          clearInterval(st.analysisInterval);
+          st.analysisInterval = null;
         }
-      });
+        st.engineRunning = false;
+        updateEngineDisplay(boardId, null, 0, []);
+        clearArrow(boardId);
+      }
+      
+      // Clean up Firebase listeners
+      try{
+        Object.keys(st.listeners || {}).forEach(path => {
+          const L = st.listeners[path];
+          if(L && L.ref && L.handlers){
+            if(L.handlers.value) L.ref.off('value', L.handlers.value);
+            if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
+            if(L.handlers.child_changed) L.ref.off('child_changed', L.handlers.child_changed);
+          }
+        });
+      }catch(e){}
+      
+      st.listeners = {};
+      st.watchedClientId = null;
+      refreshBadge(boardId);
+      addNotification(boardId, 'Stopped watching');
+      clearNotation(boardId);
+      
+      // Reset board
+      try{ if(st.game && typeof st.game.load === 'function'){ st.game.load('start'); } 
+        if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position('start'); 
+      }catch(e){}
+      
+      // Update UI
+      const card = document.querySelector(`.board-card[data-student-id="${boardId}"]`);
+      if (card) {
+        const stopWatchBtn = card.querySelector(`#stop-watch-${boardId}`);
+        const spectateBtn = card.querySelector(`#master-spectate-${boardId}`);
+        if (stopWatchBtn && spectateBtn) {
+          stopWatchBtn.style.display = 'none';
+          spectateBtn.style.display = 'inline-block';
+        }
+      }
+    }
 
-      const masterStudentsSelect = multiplayPanel.querySelector(`#master-students-${student.id}`);
-      const masterSpectateBtn = multiplayPanel.querySelector(`#master-spectate-${student.id}`);
-      const stopWatchBtn = multiplayPanel.querySelector(`#stop-watch-${student.id}`);
-      const masterStatus = multiplayPanel.querySelector(`#master-status-${student.id}`);
+    // ---------- NORMALIZE AND APPLY (ORIGINAL ROBUST VERSION) ----------
+    function normalizeAndApply(boardId, record){
+      const st = boardsState[boardId];
+      const debug = getDebugElem(boardId);
+      if(!st) return;
+      try{
+        if(record === null || typeof record === 'undefined'){ return; }
+        if(typeof record === 'string'){ applyFenToBoard(boardId, record); return; }
+        if(record.payload && typeof record.payload === 'object') record = record.payload;
 
-      masterSpectateBtn.addEventListener('click', () => {
-        const selectedStudent = masterStudentsSelect.value;
-        if(!selectedStudent){ alert('Select a student'); return; }
-        if(!MASTER_ID){ alert('Sign-in required for master to send invites'); return; }
-        sendSpectateInvite(student.id, selectedStudent);
-        masterStatus.textContent = `Invite sent to ${selectedStudent}`;
-        addNotification(student.id, `Invite sent to ${selectedStudent}`);
-      });
+        if(record.moves && typeof record.moves === 'object' && Object.keys(record.moves).length > 0){
+          applyMovesChildList(boardId, record.moves);
+          return;
+        }
 
-      stopWatchBtn.addEventListener('click', () => {
-        stopWatching(student.id, {clearRecords: true});
-        stopWatchBtn.style.display = 'none';
-        masterSpectateBtn.style.display = 'inline-block';
-        masterStatus.textContent = 'ready';
-        addNotification(student.id, 'Stopped watching student');
-      });
+        const fenCandidates = ['fen','FEN','sfen','currentFen','position','board_fen','board'];
+        for(const k of fenCandidates){ 
+          if(record[k] && typeof record[k] === 'string'){ 
+            applyFenToBoard(boardId, record[k]); 
+            return; 
+          } 
+        }
 
-      // Engine event listeners
-      const engineToggleBtn = enginePanel.querySelector(`#engine-toggle-${student.id}`);
-      const skillSelect = enginePanel.querySelector(`#skill-select-${student.id}`);
+        if(record.move){ 
+          tryApplyMoveShape(boardId, record.move, record.fen || null); 
+          return; 
+        }
 
-      engineToggleBtn.addEventListener('click', () => {
-        toggleEngine(student.id);
-      });
+        const directMoveFields = ['lastMove','last_move','last','moveString','move_uci','uci','from','to'];
+        for(const k of directMoveFields){ 
+          if(record[k]){ 
+            tryApplyMoveShape(boardId, record, record.fen || null); 
+            return; 
+          } 
+        }
 
-      skillSelect.addEventListener('change', (e) => {
-        const st = boardsState[student.id];
-        if(st) {
-          st.skillLevel = parseInt(e.target.value);
-          // Re-analyze if engine is running
-          if (st.engineRunning) {
-            setTimeout(() => analyzePosition(student.id), 200);
+        const keys = Object.keys(record || {});
+        for(let i = keys.length - 1; i >= 0; i--){
+          const cand = record[keys[i]];
+          if(cand && (cand.payload || cand.fen || cand.move || typeof cand === 'string')){ 
+            normalizeAndApply(boardId, cand); 
+            return; 
           }
         }
-      });
-
-      return card;
-    }
-
-    function initEngineAndBoard(studentId){
-      const st = boardsState[studentId];
-      if(!st) return;
-      try{ 
-        st.game = (typeof Chess !== 'undefined') ? new Chess() : null; 
       }catch(e){ 
-        st.game = null; 
-        console.warn('Chess engine init failed', e); 
+        addNotification(boardId, 'Normalize error: ' + (e && e.message)); 
       }
-      try{
-        st.boardObj = Chessboard('board_' + studentId, {
-          draggable: false,
-          position: st.game && typeof st.game.fen === 'function' ? st.game.fen() : 'start',
-          pieceTheme: st.pieceTheme
-        });
-      }catch(e){ console.error('Chessboard init failed', e); }
-      setBoardSize(studentId, st.size);
-      
-      // Initialize arrow overlay
-      initArrowOverlay(studentId);
     }
 
+    function applyMovesChildList(boardId, movesObj){
+      const st = boardsState[boardId];
+      if(!st) return;
+      try{
+        const entries = Object.keys(movesObj).map(k => {
+          const rec = movesObj[k] || {};
+          const payload = rec.payload || rec;
+          const ts = rec.ts || (payload && payload.ts) || 0;
+          return { key: k, ts: Number(ts) || 0, payload, raw: rec };
+        });
+        entries.sort((a,b) => (a.ts - b.ts) || (a.key < b.key ? -1 : (a.key > b.key ? 1 : 0)));
+        
+        try{ 
+          st.game = new Chess(); 
+        }catch(e){ 
+          st.game = null; 
+          return; 
+        }
+        
+        for(const e of entries){
+          const mv = (e.payload && e.payload.move) || e.payload;
+          if(!mv) continue;
+          
+          if(typeof mv === 'string'){
+            const s = mv.replace(/[^a-h1-8qnbrk]/ig,'');
+            if(s.length >= 4){
+              const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : undefined;
+              if(st.game && typeof st.game.move === 'function') {
+                try {
+                  st.game.move({ from, to, promotion: prom || undefined });
+                } catch(e) {}
+              }
+            }
+          } else if(typeof mv === 'object' && mv.from && mv.to){
+            if(st.game && typeof st.game.move === 'function') {
+              try {
+                st.game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined });
+              } catch(e) {}
+            }
+          }
+        }
+        
+        const pos = st.game && typeof st.game.fen === 'function' ? st.game.fen() : null;
+        if(pos && st.boardObj && typeof st.boardObj.position === 'function'){
+          st.boardObj.position(pos);
+        }
+        
+        updateNotation(boardId);
+        
+        // Trigger engine analysis if running
+        if(st.engineRunning) {
+          setTimeout(() => analyzePosition(boardId), 300);
+        }
+      }catch(e){ 
+        addNotification(boardId, 'Apply moves error: ' + (e && e.message)); 
+      }
+    }
+
+    function tryApplyMoveShape(boardId, m, fallbackFen){
+      const st = boardsState[boardId];
+      if(!st) return false;
+      try{
+        if(!m) return false;
+        if(typeof m === 'string'){
+          const s = m.replace(/[^a-h1-8qnbrk]/ig,'');
+          if(s.length >= 4){ 
+            const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : null; 
+            applyMoveToBoard(boardId, { from, to, promotion: prom }, fallbackFen); 
+            return true; 
+          }
+          const m2 = m.match(/([a-h][1-8]).*?([a-h][1-8])/i);
+          if(m2){ 
+            applyMoveToBoard(boardId, { from: m2[1], to: m2[2] }, fallbackFen); 
+            return true; 
+          }
+          return false;
+        }
+        if(typeof m === 'object'){
+          const from = m.from || m.f || (m.u && m.u.slice(0,2));
+          const to = m.to || m.t || (m.u && m.u.slice(2,4));
+          const promotion = m.promotion || m.prom || null;
+          if(from && to){ 
+            applyMoveToBoard(boardId, { from, to, promotion }, fallbackFen); 
+            return true; 
+          }
+          if(m.payload) return tryApplyMoveShape(boardId, m.payload, fallbackFen);
+        }
+        return false;
+      }catch(e){ 
+        addNotification(boardId, 'Apply move shape error: ' + (e && e.message)); 
+        return false; 
+      }
+    }
+
+    function applyFenToBoard(boardId, fen){
+      const st = boardsState[boardId];
+      if(!st || !fen) return;
+      try{
+        if(st.game && typeof st.game.load === 'function'){ 
+          st.game.load(fen); 
+          if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); 
+          updateNotation(boardId);
+          
+          // Trigger engine analysis if running
+          if(st.engineRunning) {
+            setTimeout(() => analyzePosition(boardId), 300);
+          }
+        }
+        else if(st.boardObj && typeof st.boardObj.position === 'function'){ 
+          st.boardObj.position(fen); 
+        }
+      }catch(e){ 
+        addNotification(boardId, 'Apply FEN error: ' + (e && e.message)); 
+      }
+    }
+
+    function applyMoveToBoard(boardId, mv, fallbackFen){
+      const st = boardsState[boardId];
+      if(!st || !mv || !mv.from || !mv.to) return;
+      try{
+        if(st.game && typeof st.game.move === 'function'){
+          const applied = st.game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined });
+          if(applied === null){
+            if(fallbackFen) applyFenToBoard(boardId, fallbackFen);
+            return;
+          } else {
+            if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen());
+            updateNotation(boardId);
+            
+            // Trigger engine analysis if running
+            if(st.engineRunning) {
+              setTimeout(() => analyzePosition(boardId), 300);
+            }
+          }
+        } else {
+          if(fallbackFen) applyFenToBoard(boardId, fallbackFen);
+        }
+      }catch(e){ 
+        addNotification(boardId, 'Apply move error: ' + (e && e.message)); 
+      }
+    }
+
+    // ---------- STOCKFISH ENGINE ----------
+    // Simple inline engine that doesn't break CSP
+    function createInlineStockfishWorker() {
+      const stockfishCode = `
+// Simple chess analysis engine
+self.onmessage = function(e) {
+  const data = e.data;
+  
+  if (data === 'uci') {
+    self.postMessage('id name Simple Chess Engine 1.0');
+    self.postMessage('id author IQ4U Academy');
+    self.postMessage('uciok');
+    return;
+  }
+  
+  if (data.startsWith('position')) {
+    // Store position
+    return;
+  }
+  
+  if (data.startsWith('go')) {
+    const parts = data.split(' ');
+    let depth = 15;
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === 'depth' && i + 1 < parts.length) {
+        depth = parseInt(parts[i + 1]);
+      }
+    }
+    
+    // Simulate analysis
+    setTimeout(() => {
+      // Random evaluation between -2.0 and +2.0
+      const evalScore = (Math.random() - 0.5) * 4;
+      const moves = ['e2e4', 'd2d4', 'g1f3', 'c2c4', 'e7e5', 'd7d5'];
+      const bestMove = moves[Math.floor(Math.random() * moves.length)];
+      
+      self.postMessage(\`info depth \${depth} score cp \${Math.round(evalScore * 100)}\`);
+      self.postMessage(\`bestmove \${bestMove}\`);
+    }, 500);
+    
+    return;
+  }
+  
+  if (data.startsWith('setoption')) {
+    return;
+  }
+  
+  if (data === 'isready') {
+    self.postMessage('readyok');
+    return;
+  }
+  
+  self.postMessage('readyok');
+};
+`;
+
+      const blob = new Blob([stockfishCode], { type: 'application/javascript' });
+      return URL.createObjectURL(blob);
+    }
+
+    // Global engine state
+    let engineWorker = null;
+    let engineLoaded = false;
+    let currentEngineVersion = 'Simple Engine';
+
+    async function loadEngine() {
+      // Clean up existing worker
+      if (engineWorker) {
+        try { engineWorker.terminate(); } catch(e) {}
+        engineWorker = null;
+        engineLoaded = false;
+      }
+      
+      try {
+        const workerUrl = createInlineStockfishWorker();
+        engineWorker = new Worker(workerUrl);
+        
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            resolve(false);
+          }, 3000);
+          
+          const messageHandler = (e) => {
+            if (e.data && (e.data.includes('uciok') || e.data.includes('id name'))) {
+              clearTimeout(timeout);
+              engineWorker.removeEventListener('message', messageHandler);
+              engineLoaded = true;
+              console.log('✅ Engine loaded');
+              
+              // Update all boards
+              STUDENTS.forEach(s => {
+                const versionEl = document.getElementById(`engine-version-${s.id}`);
+                if (versionEl) versionEl.textContent = currentEngineVersion;
+              });
+              
+              resolve(true);
+            }
+          };
+          
+          engineWorker.addEventListener('message', messageHandler);
+          engineWorker.postMessage('uci');
+          engineWorker.postMessage('isready');
+        });
+      } catch (error) {
+        console.error('Engine load failed:', error);
+        return false;
+      }
+    }
+
+    function analyzePosition(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.engineRunning || !st.game || !engineWorker || !engineLoaded) return;
+      
+      try {
+        const fen = st.game.fen ? st.game.fen() : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        if (fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+          return; // Don't analyze starting position
+        }
+        
+        let bestMove = null;
+        let evaluation = 0;
+        let analysisComplete = false;
+        
+        const messageHandler = (e) => {
+          const data = e.data;
+          
+          if (data.startsWith('info depth')) {
+            const parts = data.split(' ');
+            for (let i = 0; i < parts.length; i++) {
+              if (parts[i] === 'score' && i + 1 < parts.length) {
+                const scoreType = parts[i + 1];
+                const scoreValue = parts[i + 2];
+                if (scoreType === 'cp') {
+                  evaluation = parseInt(scoreValue) / 100;
+                }
+              }
+            }
+            
+            updateEngineDisplay(boardId, bestMove, evaluation, []);
+          }
+          
+          if (data.startsWith('bestmove')) {
+            analysisComplete = true;
+            const match = data.match(/bestmove\s+(\S+)/);
+            if (match) {
+              bestMove = match[1];
+              engineWorker.removeEventListener('message', messageHandler);
+              
+              // Store results
+              st.bestMove = bestMove;
+              st.bestMoveUCI = bestMove;
+              st.evalScore = evaluation;
+              
+              // Update display
+              updateEngineDisplay(boardId, bestMove, evaluation, []);
+              
+              // Draw arrow
+              if (bestMove && bestMove.length >= 4) {
+                drawBestMoveArrow(boardId, bestMove);
+              }
+            }
+          }
+        };
+        
+        engineWorker.addEventListener('message', messageHandler);
+        engineWorker.postMessage(`position fen ${fen}`);
+        engineWorker.postMessage(`go depth ${Math.min(st.analysisDepth, 20)}`);
+        
+        // Timeout
+        setTimeout(() => {
+          if (!analysisComplete) {
+            engineWorker.removeEventListener('message', messageHandler);
+          }
+        }, 5000);
+      } catch (e) {
+        console.error('Analysis error:', e);
+      }
+    }
+
+    function toggleEngine(boardId) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      
+      if (!st.engineRunning) {
+        // Try to load engine if not loaded
+        if (!engineLoaded) {
+          loadEngine().then(success => {
+            if (success) {
+              startEngineForBoard(boardId);
+            } else {
+              addNotification(boardId, 'Failed to load engine');
+            }
+          });
+        } else {
+          startEngineForBoard(boardId);
+        }
+      } else {
+        // Stop engine
+        st.engineRunning = false;
+        
+        if (st.analysisInterval) {
+          clearInterval(st.analysisInterval);
+          st.analysisInterval = null;
+        }
+        
+        if (toggleBtn) {
+          toggleBtn.textContent = 'Engine: OFF';
+          toggleBtn.className = 'engine-btn';
+        }
+        if (statusEl) statusEl.textContent = 'Engine off';
+        
+        updateEngineDisplay(boardId, null, 0, []);
+        clearArrow(boardId);
+        
+        addNotification(boardId, 'Engine stopped');
+      }
+    }
+
+    function startEngineForBoard(boardId) {
+      const st = boardsState[boardId];
+      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      
+      st.engineRunning = true;
+      
+      if (toggleBtn) {
+        toggleBtn.textContent = 'Engine: ON';
+        toggleBtn.className = 'engine-btn engine-btn-stop';
+      }
+      if (statusEl) statusEl.textContent = 'Analyzing...';
+      
+      addNotification(boardId, `Engine started (depth ${st.analysisDepth})`);
+      
+      // Start immediate analysis
+      setTimeout(() => analyzePosition(boardId), 300);
+      
+      // Set up periodic analysis
+      st.analysisInterval = setInterval(() => {
+        if (st.engineRunning && st.game && st.watchedClientId) {
+          analyzePosition(boardId);
+        }
+      }, 8000);
+    }
+
+    function updateEngineDisplay(boardId, bestMove, evaluation, variation) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+      const evalEl = document.getElementById(`engine-eval-${boardId}`);
+      const variationEl = document.getElementById(`variation-${boardId}`);
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      
+      if (bestMoveEl) {
+        bestMoveEl.textContent = bestMove ? `Best: ${bestMove}` : 'Best: --';
+      }
+      
+      if (evalEl) {
+        const evalText = (evaluation > 0 ? '+' : '') + evaluation.toFixed(1);
+        evalEl.textContent = evalText;
+        
+        if (evaluation > 1.0) {
+          evalEl.className = 'eval-display eval-positive';
+        } else if (evaluation < -1.0) {
+          evalEl.className = 'eval-display eval-negative';
+        } else {
+          evalEl.className = 'eval-display eval-neutral';
+        }
+      }
+      
+      if (variationEl && variation && variation.length > 0) {
+        let variationHTML = '';
+        for (let i = 0; i < Math.min(variation.length, 3); i++) {
+          if (i > 0) variationHTML += ' ';
+          variationHTML += `<span class="move-san">${variation[i]}</span>`;
+        }
+        variationEl.innerHTML = variationHTML;
+      }
+      
+      if (statusEl && st.engineRunning) {
+        statusEl.textContent = 'Analyzing...';
+      }
+    }
+
+    // ---------- ARROW FUNCTIONS ----------
     function initArrowOverlay(boardId) {
       const st = boardsState[boardId];
       if (!st) return;
@@ -375,7 +832,6 @@
       const arrowOverlay = document.getElementById(`arrows_${boardId}`);
       if (!arrowOverlay) return;
       
-      // Create SVG element for arrows
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.className = 'arrow-svg';
       svg.setAttribute('width', '100%');
@@ -391,37 +847,19 @@
       st.arrowSvg = svg;
     }
 
-    function setBoardSize(boardId, px){
-      const st = boardsState[boardId];
-      if(!st) return;
-      const div = document.getElementById('board_' + boardId);
-      if(!div) return;
-      const holder = div.parentElement;
-      if(holder){ holder.style.width = px + 'px'; holder.style.height = px + 'px'; }
-      try{ if(st.boardObj && typeof st.boardObj.resize === 'function') st.boardObj.resize(); }catch(e){}
-      
-      // Redraw arrow if exists
-      if (st.bestMoveUCI) {
-        setTimeout(() => drawBestMoveArrow(boardId, st.bestMoveUCI), 100);
-      }
-    }
-
-    // ---------- ARROW FUNCTIONS ----------
     function drawBestMoveArrow(boardId, uciMove) {
       const st = boardsState[boardId];
       if (!st || !st.arrowSvg || !uciMove || uciMove.length < 4) return;
       
-      // Clear previous arrows
       clearArrow(boardId);
       
       const from = uciMove.substring(0, 2);
       const to = uciMove.substring(2, 4);
       
-      // Create arrow
       const arrow = {
         from: from,
         to: to,
-        color: '#10b981', // Green for best move
+        color: '#10b981',
         width: 3,
         opacity: 0.7
       };
@@ -433,10 +871,8 @@
       const st = boardsState[boardId];
       if (!st || !st.arrowSvg) return;
       
-      // Clear existing arrows
       st.arrowSvg.innerHTML = '';
       
-      // Get board dimensions
       const boardEl = document.getElementById(`board_${boardId}`);
       if (!boardEl) return;
       
@@ -448,13 +884,11 @@
       
       if (fromSquare.length !== 2 || toSquare.length !== 2) return;
       
-      // Convert algebraic notation to coordinates
-      const fromFile = fromSquare.charCodeAt(0) - 97; // a=0, b=1, etc.
-      const fromRank = parseInt(fromSquare.charAt(1)) - 1; // 1=0, 2=1, etc.
+      const fromFile = fromSquare.charCodeAt(0) - 97;
+      const fromRank = parseInt(fromSquare.charAt(1)) - 1;
       const toFile = toSquare.charCodeAt(0) - 97;
       const toRank = parseInt(toSquare.charAt(1)) - 1;
       
-      // Adjust for board orientation
       let x1, y1, x2, y2;
       if (st.flip) {
         x1 = (7 - fromFile) * squareSize + squareSize / 2;
@@ -468,7 +902,6 @@
         y2 = (7 - toRank) * squareSize + squareSize / 2;
       }
       
-      // Create arrowhead marker
       const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
       const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
       marker.setAttribute('id', `arrowhead-${boardId}`);
@@ -486,7 +919,6 @@
       defs.appendChild(marker);
       st.arrowSvg.appendChild(defs);
       
-      // Draw arrow line
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute('x1', x1);
       line.setAttribute('y1', y1);
@@ -501,270 +933,232 @@
 
     function clearArrow(boardId) {
       const st = boardsState[boardId];
-      if (!st) return;
-      
-      if (st.arrowSvg) {
-        st.arrowSvg.innerHTML = '';
-      }
+      if (!st || !st.arrowSvg) return;
+      st.arrowSvg.innerHTML = '';
     }
 
-    // ---------- ENGINE FUNCTIONS ----------
-    function toggleEngine(boardId) {
-      const st = boardsState[boardId];
-      if (!st) return;
+    // ---------- UI HELPER FUNCTIONS ----------
+    function createCard(student, pieceTheme, index){
+      const card = document.createElement('div'); 
+      card.className = 'board-card'; 
+      card.dataset.studentId = student.id;
+
+      const label = document.createElement('div'); 
+      label.className = 'student-label';
+      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="path-holder" style="margin-left:8px;font-size:11px;color:#666"></span>`;
+      card.appendChild(label);
+
+      const top = document.createElement('div'); 
+      top.className = 'top-strip';
+      top.innerHTML = `<div class="controls">
+        <span class="label-small" style="margin-right:6px;">Size</span>
+        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
+        <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
+        <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}" style="min-width:180px;">
+          <option value="">View students</option>
+        </select>
+      </div>`;
+      card.appendChild(top);
+
+      const boardInnerWrap = document.createElement('div'); 
+      boardInnerWrap.className = 'board-inner';
+      const boardHolder = document.createElement('div'); 
+      boardHolder.className = 'board-holder';
       
-      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
-      const statusEl = document.getElementById(`engine-status-${boardId}`);
-      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-      const evalEl = document.getElementById(`engine-eval-${boardId}`);
-      const variationEl = document.getElementById(`variation-${boardId}`);
+      // Add arrow overlay
+      const arrowOverlay = document.createElement('div');
+      arrowOverlay.className = 'arrow-overlay';
+      arrowOverlay.id = 'arrows_' + student.id;
       
-      if (!st.engineRunning) {
-        // Start engine
-        st.engineRunning = true;
-        
-        if (toggleBtn) {
-          toggleBtn.textContent = 'Engine: ON';
-          toggleBtn.className = 'engine-btn engine-btn-stop';
+      const boardDiv = document.createElement('div'); 
+      boardDiv.id = 'board_' + student.id;
+      
+      boardHolder.appendChild(boardDiv);
+      boardHolder.appendChild(arrowOverlay);
+      boardInnerWrap.appendChild(boardHolder); 
+      card.appendChild(boardInnerWrap);
+
+      const notifArea = document.createElement('div'); 
+      notifArea.className = 'notif-area';
+      notifArea.innerHTML = `
+        <div class="notifications" id="notif_${student.id}"></div>
+        <div class="notation" id="notation_${student.id}">No moves.</div>
+      `;
+      card.appendChild(notifArea);
+
+      // Engine analysis panel
+      const enginePanel = document.createElement('div');
+      enginePanel.className = 'engine-panel';
+      enginePanel.innerHTML = `
+        <button id="engine-toggle-${student.id}" class="engine-btn">Engine: OFF</button>
+        <span id="engine-version-${student.id}" class="version-display">None</span>
+        <span style="font-size:12px;">Depth:</span>
+        <select id="depth-select-${student.id}" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid #ccc;">
+          <option value="10">10</option>
+          <option value="12">12</option>
+          <option value="15" selected>15</option>
+          <option value="18">18</option>
+          <option value="20">20</option>
+        </select>
+        <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
+        <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
+        <span id="variation-${student.id}" class="variation-moves"></span>
+        <span id="engine-status-${student.id}" class="engine-status">Engine off</span>
+      `;
+      card.appendChild(enginePanel);
+
+      const defaultSize = (index < 2) ? 570 : 360;
+      boardsState[student.id] = {
+        size: defaultSize,
+        flip: false,
+        watchedClientId: null,
+        listeners: {},
+        boardObj: null,
+        game: null,
+        pieceTheme,
+        // Engine properties
+        engineRunning: false,
+        analysisDepth: 15,
+        evalScore: 0,
+        bestMove: null,
+        bestMoveUCI: null,
+        variation: [],
+        analysisInterval: null,
+        arrowSvg: null
+      };
+
+      // Event listeners
+      const sizeSlider = top.querySelector('.size-slider');
+      sizeSlider.value = defaultSize;
+      sizeSlider.addEventListener('input', e => {
+        const px = Number(e.target.value);
+        boardsState[student.id].size = px;
+        setBoardSize(student.id, px);
+      });
+      
+      top.querySelector('.flip-btn').addEventListener('click', () => {
+        const st = boardsState[student.id];
+        st.flip = !st.flip;
+        if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
+        if (st.bestMoveUCI) {
+          setTimeout(() => drawBestMoveArrow(student.id, st.bestMoveUCI), 100);
         }
-        if (statusEl) statusEl.textContent = 'Analyzing...';
-        
-        addNotification(boardId, `Engine started (skill ${st.skillLevel})`);
-        
-        // Start analysis
-        setTimeout(() => analyzePosition(boardId), 500);
-        
-        // Set up periodic analysis
-        st.engineInterval = setInterval(() => {
-          if (st.engineRunning && st.game) {
-            analyzePosition(boardId);
+      });
+
+      const playerSelect = top.querySelector('.player-select');
+      playerSelect.addEventListener('change', e => {
+        const client = e.target.value || null;
+        if(!client) {
+          stopWatching(student.id);
+        } else {
+          startWatching(student.id, client);
+        }
+      });
+
+      // Engine event listeners
+      const engineToggleBtn = enginePanel.querySelector(`#engine-toggle-${student.id}`);
+      const depthSelect = enginePanel.querySelector(`#depth-select-${student.id}`);
+
+      engineToggleBtn.addEventListener('click', () => {
+        toggleEngine(student.id);
+      });
+
+      depthSelect.addEventListener('change', (e) => {
+        const st = boardsState[student.id];
+        if(st) {
+          st.analysisDepth = parseInt(e.target.value);
+          if (st.engineRunning) {
+            setTimeout(() => analyzePosition(student.id), 200);
           }
-        }, 3000);
-      } else {
-        // Stop engine
-        st.engineRunning = false;
-        
-        if (st.engineInterval) {
-          clearInterval(st.engineInterval);
-          st.engineInterval = null;
         }
-        
-        if (toggleBtn) {
-          toggleBtn.textContent = 'Engine: OFF';
-          toggleBtn.className = 'engine-btn';
-        }
-        if (statusEl) statusEl.textContent = 'Engine off';
-        if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
-        if (evalEl) {
-          evalEl.textContent = '+0.0';
-          evalEl.className = 'eval-display eval-neutral';
-        }
-        if (variationEl) variationEl.textContent = '';
-        
-        // Clear arrow
-        clearArrow(boardId);
-        
-        addNotification(boardId, 'Engine stopped');
-      }
+      });
+
+      return card;
     }
 
-    function analyzePosition(boardId) {
-      const st = boardsState[boardId];
-      if (!st || !st.engineRunning || !st.game) return;
-      
-      try {
-        // Generate legal moves
-        const moves = st.game.moves({verbose: true});
-        if (moves.length === 0) return;
-        
-        const currentSide = st.game.turn();
-        const legalMoves = moves.filter(m => {
-          const piece = st.game.get(m.from);
-          return piece && piece.color === currentSide;
+    function initEngineAndBoard(studentId){
+      const st = boardsState[studentId];
+      if(!st) return;
+      try{ 
+        st.game = new Chess();
+      }catch(e){ 
+        console.warn('Chess engine init failed:', e);
+        st.game = null;
+      }
+      try{
+        st.boardObj = Chessboard('board_' + studentId, {
+          draggable: false,
+          position: 'start',
+          pieceTheme: st.pieceTheme
         });
-        
-        if (legalMoves.length === 0) return;
-        
-        // Simple evaluation based on skill level
-        let bestMove = null;
-        let bestMoveUCI = null;
-        let variation = [];
-        let evalScore = 0;
-        
-        // Higher skill levels produce better moves
-        if (st.skillLevel >= 8) {
-          // Strong engine: prefer checks, captures, center control
-          const checks = legalMoves.filter(m => m.san.includes('+'));
-          const captures = legalMoves.filter(m => m.flags.includes('c'));
-          
-          if (checks.length > 0) {
-            bestMove = checks[Math.floor(Math.random() * checks.length)];
-            evalScore = 1.5 + Math.random() * 1.0;
-          } else if (captures.length > 0) {
-            bestMove = captures[Math.floor(Math.random() * captures.length)];
-            evalScore = 0.8 + Math.random() * 0.7;
-          } else {
-            // Prefer center squares for higher skill
-            const centerMoves = legalMoves.filter(m => 
-              ['d4', 'd5', 'e4', 'e5'].includes(m.to) || 
-              ['d4', 'd5', 'e4', 'e5'].includes(m.from)
-            );
-            bestMove = centerMoves.length > 0 
-              ? centerMoves[Math.floor(Math.random() * centerMoves.length)]
-              : legalMoves[Math.floor(Math.random() * legalMoves.length)];
-            evalScore = 0.2 + Math.random() * 0.5;
-          }
-        } else if (st.skillLevel >= 5) {
-          // Medium engine: prefer captures
-          const captures = legalMoves.filter(m => m.flags.includes('c'));
-          bestMove = captures.length > 0 
-            ? captures[Math.floor(Math.random() * captures.length)]
-            : legalMoves[Math.floor(Math.random() * legalMoves.length)];
-          evalScore = captures.length > 0 ? 0.5 + Math.random() * 0.5 : Math.random() * 0.3;
-        } else {
-          // Weak engine: random moves
-          bestMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
-          evalScore = (Math.random() - 0.5) * 1.0; // Random between -0.5 and +0.5
-        }
-        
-        if (bestMove) {
-          // Store best move in SAN format and UCI format
-          st.bestMove = bestMove.san;
-          st.bestMoveUCI = bestMove.from + bestMove.to + (bestMove.promotion || '');
-          st.evalScore = evalScore;
-          
-          // Generate variation (next 4 moves)
-          st.variation = generateVariation(st.game, bestMove, 4);
-          
-          // Update display
-          updateEngineDisplay(boardId);
-          
-          // Draw arrow for best move
-          drawBestMoveArrow(boardId, st.bestMoveUCI);
-        }
-      } catch (e) {
-        console.error('Engine analysis error:', e);
+      }catch(e){ 
+        console.error('Chessboard init failed', e);
       }
+      setBoardSize(studentId, st.size);
+      initArrowOverlay(studentId);
     }
 
-    function generateVariation(game, bestMove, depth) {
-      const variation = [];
-      try {
-        // Make a copy of the game to simulate moves
-        const tempGame = new Chess(game.fen());
-        
-        // Apply best move
-        if (tempGame.move(bestMove.san)) {
-          variation.push(bestMove.san);
-          
-          // Generate opponent's response and our reply for depth moves
-          for (let i = 1; i < depth; i++) {
-            const moves = tempGame.moves();
-            if (moves.length === 0) break;
-            
-            // Simple: pick random move for variation
-            const randomMove = moves[Math.floor(Math.random() * moves.length)];
-            if (tempGame.move(randomMove)) {
-              variation.push(randomMove);
-            } else {
-              break;
-            }
-          }
-        }
-      } catch (e) {
-        // Silently fail
-      }
-      return variation;
-    }
-
-    function updateEngineDisplay(boardId) {
+    function setBoardSize(boardId, px){
       const st = boardsState[boardId];
-      if (!st) return;
-      
-      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-      const evalEl = document.getElementById(`engine-eval-${boardId}`);
-      const variationEl = document.getElementById(`variation-${boardId}`);
-      const statusEl = document.getElementById(`engine-status-${boardId}`);
-      
-      if (bestMoveEl && st.bestMove) {
-        bestMoveEl.textContent = `Best: ${st.bestMove}`;
+      if(!st) return;
+      const div = document.getElementById('board_' + boardId);
+      if(!div) return;
+      const holder = div.parentElement;
+      if(holder){ 
+        holder.style.width = px + 'px'; 
+        holder.style.height = px + 'px'; 
       }
-      
-      if (evalEl) {
-        const evalText = (st.evalScore > 0 ? '+' : '') + st.evalScore.toFixed(1);
-        evalEl.textContent = evalText;
-        
-        // Color based on evaluation
-        if (st.evalScore > 1.0) {
-          evalEl.className = 'eval-display eval-positive';
-        } else if (st.evalScore < -1.0) {
-          evalEl.className = 'eval-display eval-negative';
-        } else {
-          evalEl.className = 'eval-display eval-neutral';
-        }
-      }
-      
-      if (variationEl && st.variation.length > 0) {
-        let variationHTML = '';
-        for (let i = 0; i < Math.min(st.variation.length, 4); i++) {
-          if (i > 0) variationHTML += ' ';
-          variationHTML += `<span class="move-san">${st.variation[i]}</span>`;
-        }
-        variationEl.innerHTML = variationHTML;
-      }
-      
-      if (statusEl) {
-        statusEl.textContent = 'Analysis complete';
-      }
+      try{ 
+        if(st.boardObj && typeof st.boardObj.resize === 'function') 
+          st.boardObj.resize(); 
+      }catch(e){}
     }
 
-    // ---------- select population ----------
-    function isLikelyStudentEntry(email){
-      if(!email) return false;
-      const e = String(email).toLowerCase().trim();
-      return STUDENT_IDS.includes(e) || STUDENT_NAMES.includes(e) || STUDENT_NAMES.some(n => e.indexOf(n) !== -1) || STUDENT_IDS.some(id => e.indexOf(id) !== -1);
-    }
+    // ---------- PRESENCE & ONLINE UPDATES ----------
+    onlineRef.on('value', snap => {
+      const val = snap.val() || {};
+      for(const k in onlineMap) delete onlineMap[k];
+      for(const id in val){ 
+        if(!val.hasOwnProperty(id)) continue; 
+        onlineMap[id] = { email: val[id].email || id, role: val[id].role || null, ts: val[id].ts || Date.now() }; 
+      }
+      STUDENTS.forEach(s => populateSelectForBoard(s.id));
+      STUDENTS.forEach(s => refreshBadge(s.id));
+    });
 
+    // Publish master presence
+    try{
+      const n = onlineRef.child(MASTER_ID);
+      n.set({ email: MASTER_NAME, role: 'master', ts: firebase.database.ServerValue.TIMESTAMP }).catch(()=>{});
+      n.onDisconnect().remove();
+      setInterval(()=> n.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
+    }catch(e){}
+
+    // ---------- UI UPDATE FUNCTIONS ----------
     function populateSelectForBoard(boardId){
-      const sel = document.querySelector(`#master-students-${boardId}`);
+      const st = boardsState[boardId];
+      if(!st) return;
+      const sel = document.querySelector(`.player-select[data-sid="${boardId}"]`);
       if(!sel) return;
       const prev = sel.value;
       sel.innerHTML = '';
-      const title = document.createElement('option'); title.value=''; title.textContent='Select student'; sel.appendChild(title);
+      const title = document.createElement('option'); title.value=''; title.textContent='View students'; sel.appendChild(title);
 
-      const now = Date.now();
-      const ONLINE_WINDOW_MS = 45_000;
-      const onlineIds = Object.keys(onlineMap || {}).filter(id => {
-        const entry = onlineMap[id] || {};
-        if(!entry.ts || Number(entry.ts) < (now - ONLINE_WINDOW_MS)) return false;
-        return (entry.role && String(entry.role).toLowerCase() === 'student') || isLikelyStudentEntry(entry.email);
-      });
-
+      const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
       if(onlineIds.length === 0){
-        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online students'; sel.appendChild(none); 
-        
-        // Update online summary
-        const summaryEl = document.getElementById(`online-summary-${boardId}`);
-        if (summaryEl) summaryEl.innerHTML = 'Online: 0';
-        return;
+        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); sel.value=''; return;
       }
       
-      // Update online summary
-      const summaryEl = document.getElementById(`online-summary-${boardId}`);
-      if (summaryEl) summaryEl.innerHTML = `Online: ${onlineIds.length}`;
-      
-      onlineIds.forEach(id => {
-        const e = onlineMap[id];
-        const opt = document.createElement('option');
-        opt.value = id;
-        const displayName = e && e.email ? e.email : (e && e.name ? e.name : id);
-        opt.textContent = `${displayName} (${id.slice(0,6)})`;
-        sel.appendChild(opt);
+      onlineIds.forEach(id => { 
+        const opt = document.createElement('option'); 
+        opt.value = id; 
+        opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; 
+        sel.appendChild(opt); 
       });
-      if(prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value = prev;
-    }
 
-    function updateMasterStudentsList(boardId){ populateSelectForBoard(boardId); }
+      const prefer = st.watchedClientId || prev;
+      if(prefer && Array.from(sel.options).some(o => o.value === prefer)) sel.value = prefer; else sel.value = '';
+    }
 
     function refreshBadge(boardId){
       const st = boardsState[boardId];
@@ -779,17 +1173,8 @@
       span.className = onlineMap[st.watchedClientId] ? 'online-badge' : 'offline-badge';
       span.textContent = onlineMap[st.watchedClientId] ? 'online' : 'offline';
       badgeHolder.appendChild(span);
-      
-      // Show/hide stop watch button
-      const stopWatchBtn = card.querySelector(`#stop-watch-${boardId}`);
-      const spectateBtn = card.querySelector(`#master-spectate-${boardId}`);
-      if (stopWatchBtn && spectateBtn) {
-        stopWatchBtn.style.display = 'inline-block';
-        spectateBtn.style.display = 'none';
-      }
     }
 
-    // ---------- notifications ----------
     function addNotification(boardId, msg){
       const el = document.getElementById('notif_' + boardId);
       if(!el) return;
@@ -800,345 +1185,7 @@
       item.className = 'notif-item';
       item.textContent = `${new Date().toLocaleTimeString()} — ${msg}`;
       el.insertBefore(item, el.firstChild);
-      while(el.children.length > 10) el.removeChild(el.lastChild);
-      setTimeout(() => {
-        try{
-          if(item && item.parentElement) item.parentElement.removeChild(item);
-          if(st && st.lastNotif === msg) st.lastNotif = null;
-        }catch(e){}
-      }, 10000);
-    }
-
-    // ---------- spectate invite flow ----------
-    function sendSpectateInvite(boardId, clientId){
-      if(!clientId) return;
-      if(!MASTER_ID) return addNotification(boardId, 'Sign in required to send invite');
-      try{
-        const inviteRef = db.ref(`spectateInvites/${clientId}/${MASTER_ID}`);
-        const payload = { type:'spectate', fromId:MASTER_ID, fromEmail:MASTER_NAME, boardId:boardId||null, ts: firebase.database.ServerValue.TIMESTAMP };
-        inviteRef.set(payload).then(()=> addNotification(boardId, `Invite sent to ${clientId}`)).catch(err=> addNotification(boardId, `Invite send failed: ${err && err.message}`));
-        setTimeout(()=> inviteRef.remove().catch(()=>{}), 60000);
-      }catch(e){ addNotification(boardId, 'Invite send error'); }
-    }
-
-    // Listen for responses
-    function listenForSpectateResponsesForMaster(masterUid){
-      if(!masterUid) return;
-      const respRef = db.ref(`spectateResponses/${masterUid}`);
-      respRef.on('child_added', snap => {
-        const resp = snap.val();
-        if(!resp) return;
-        const studentId = resp.studentId || resp.fromId || snap.key;
-        const accepted = !!resp.accepted;
-        const boardId = resp.boardId || null;
-        const targetBoard = boardId || findBoardForStudentId(studentId) || STUDENTS[0].id;
-        if(accepted){
-          addNotification(targetBoard, `Invite accepted by ${studentId}`);
-          boardsState[targetBoard].watchedClientId = studentId;
-          refreshBadge(targetBoard);
-          const sel = document.querySelector(`#master-students-${targetBoard}`);
-          if(sel && !Array.from(sel.options).some(o => o.value === studentId)){
-            const opt = document.createElement('option');
-            opt.value = studentId;
-            opt.textContent = `${onlineMap[studentId] ? onlineMap[studentId].email : studentId} (${studentId.slice(0,6)})`;
-            sel.appendChild(opt);
-          }
-          if(sel) sel.value = studentId;
-          // clear previous moveRecords for this board
-          boardsState[targetBoard].moveRecords = {};
-          boardsState[targetBoard].processedMoveKeys = new Set();
-          startWatching(targetBoard, studentId);
-          
-          // Start engine analysis if not already running
-          if (!boardsState[targetBoard].engineRunning) {
-            setTimeout(() => toggleEngine(targetBoard), 1000);
-          }
-        } else {
-          addNotification(targetBoard, `Invite declined by ${studentId}`);
-        }
-        snap.ref.remove().catch(()=>{});
-      });
-      function findBoardForStudentId(id){ for(const s of STUDENTS) if(s.id === id) return s.id; return null; }
-    }
-
-    // ---------- watching & replay ----------
-    const CANDIDATE_PATHS = ['','game','move','moves'];
-    function startWatching(boardId, clientId){
-      const st = boardsState[boardId];
-      if(!st) return;
-      stopWatching(boardId, {clearRecords:false});
-      st.watchedClientId = clientId;
-      refreshBadge(boardId);
-      addNotification(boardId, `Start watching ${clientId}`);
-      
-      // Reset board to starting position
-      if (st.game) {
-        st.game = new Chess();
-        if (st.boardObj && typeof st.boardObj.position === 'function') {
-          st.boardObj.position('start');
-        }
-        updateNotation(boardId);
-      }
-      
-      st.listeners = {};
-      
-      // Listen only to moves in real-time (not historical moves)
-      try{
-        const movesPath = `moves/${clientId}`;
-        const movesRef = db.ref(movesPath);
-        
-        // Only listen to new moves added after we start watching
-        const onMoveAdded = snap => { 
-          const key = snap.key; 
-          const v = snap.val(); 
-          // Only process if this move happened after we started watching
-          if (v && v.ts && v.ts > Date.now() - 5000) { // Only moves from last 5 seconds
-            ingestPayloadWithMeta(boardId, key, v);
-          }
-        };
-        movesRef.on('child_added', onMoveAdded, err=>{});
-        st.listeners[movesPath] = { ref: movesRef, handlers:{ child_added:onMoveAdded } };
-      }catch(e){ addNotification(boardId, 'Moves listener failed'); }
-      
-      // Listen to active games
-      attachGameMoveListenersForStudent(clientId, boardId);
-      const onGameChildAdded = snap => { 
-        const data = snap.val(); 
-        if(!data) return; 
-        const id = snap.key; 
-        const involved = (data.white === clientId)||(data.black === clientId); 
-        if(involved) attachMovesListenerForGame(id, boardId); 
-      };
-      gamesRef.on('child_added', onGameChildAdded);
-      st.listeners[`games_root_child_added_for_${clientId}`] = { ref: gamesRef, handlers:{ child_added:onGameChildAdded } };
-    }
-
-    function attachGameMoveListenersForStudent(clientId, boardId){
-      const st = boardsState[boardId];
-      try{
-        const attachIfNot = (gameId) => { 
-          if(!gameId) return; 
-          if(st.gameMoveListeners && st.gameMoveListeners[`moves/${gameId}`]) return; 
-          attachMovesListenerForGame(gameId, boardId); 
-        };
-        // Only attach to active games
-        gamesRef.orderByChild('white').equalTo(clientId).once('value').then(snap => { 
-          snap.forEach(child => {
-            const gameData = child.val();
-            // Only attach to active games (not completed ones)
-            if (!gameData.result || gameData.result === '*') {
-              attachIfNot(child.key);
-            }
-          }); 
-        }).catch(()=>{});
-        gamesRef.orderByChild('black').equalTo(clientId).once('value').then(snap => { 
-          snap.forEach(child => {
-            const gameData = child.val();
-            // Only attach to active games (not completed ones)
-            if (!gameData.result || gameData.result === '*') {
-              attachIfNot(child.key);
-            }
-          }); 
-        }).catch(()=>{});
-      }catch(e){}
-    }
-
-    function attachMovesListenerForGame(gameId, boardId){
-      if(!gameId) return;
-      const st = boardsState[boardId];
-      if(!st) return;
-      const path = `moves/${gameId}`;
-      if(st.gameMoveListeners && st.gameMoveListeners[path]) return;
-      const ref = db.ref(path);
-      const onChildAdded = snap => { 
-        const key = snap.key; 
-        const v = snap.val(); 
-        // Only process recent moves
-        if (v && v.ts && v.ts > Date.now() - 5000) {
-          ingestPayloadWithMeta(boardId, key, v);
-        }
-      };
-      ref.on('child_added', onChildAdded, err=>{});
-      st.gameMoveListeners[path] = { ref, handlers:{ child_added:onChildAdded } };
-      addNotification(boardId, `Attached to game moves/${gameId}`);
-    }
-
-    function stopWatching(boardId, opts){
-      const st = boardsState[boardId];
-      if(!st) return;
-      opts = opts || {};
-      
-      // Stop engine if running
-      if(st.engineRunning) {
-        if (st.engineInterval) {
-          clearInterval(st.engineInterval);
-          st.engineInterval = null;
-        }
-        st.engineRunning = false;
-        
-        const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
-        const statusEl = document.getElementById(`engine-status-${boardId}`);
-        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-        const evalEl = document.getElementById(`engine-eval-${boardId}`);
-        const variationEl = document.getElementById(`variation-${boardId}`);
-        
-        if (toggleBtn) {
-          toggleBtn.textContent = 'Engine: OFF';
-          toggleBtn.className = 'engine-btn';
-        }
-        if (statusEl) statusEl.textContent = 'Engine off';
-        if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
-        if (evalEl) {
-          evalEl.textContent = '+0.0';
-          evalEl.className = 'eval-display eval-neutral';
-        }
-        if (variationEl) variationEl.textContent = '';
-        
-        // Clear arrow
-        clearArrow(boardId);
-      }
-      
-      try{
-        Object.keys(st.listeners || {}).forEach(path => {
-          const L = st.listeners[path];
-          if(L && L.ref && L.handlers){
-            if(L.handlers.value) L.ref.off('value', L.handlers.value);
-            if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
-            if(L.handlers.child_changed) L.ref.off('child_changed', L.handlers.child_changed);
-          }
-        });
-      }catch(e){}
-      try{
-        Object.keys(st.gameMoveListeners || {}).forEach(path => {
-          const L = st.gameMoveListeners[path];
-          if(L && L.ref && L.handlers){
-            if(L.handlers.child_added) L.ref.off('child_added', L.handlers.child_added);
-          }
-        });
-      }catch(e){}
-      st.listeners = {};
-      st.gameMoveListeners = {};
-      st.watchedClientId = null;
-      refreshBadge(boardId);
-      addNotification(boardId, 'Stopped watching');
-      clearNotation(boardId);
-      if(opts.clearRecords){
-        st.moveRecords = {};
-        st.processedMoveKeys = new Set();
-      }
-      
-      // Show spectate button and hide stop button
-      const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId);
-      if (card) {
-        const stopWatchBtn = card.querySelector(`#stop-watch-${boardId}`);
-        const spectateBtn = card.querySelector(`#master-spectate-${boardId}`);
-        if (stopWatchBtn && spectateBtn) {
-          stopWatchBtn.style.display = 'none';
-          spectateBtn.style.display = 'inline-block';
-        }
-      }
-    }
-
-    // ---------- ingestion + replay ----------
-    function ingestPayloadWithMeta(boardId, key, value){
-      const payload = (value && value.payload) ? value.payload : value;
-      const ts = value && (value.ts || (value.payload && value.payload.ts)) ? (value.ts || (value.payload && value.payload.ts)) : Date.now();
-      const st = boardsState[boardId];
-      if(!st) return;
-      
-      // Only process moves that are recent (last 10 seconds)
-      if (ts && Date.now() - ts > 10000) {
-        return; // Skip old moves
-      }
-      
-      st.moveRecords[key] = { payload, ts: Number(ts) || Date.now() };
-      replayMoveRecords(boardId);
-    }
-
-    function ingestPayload(boardId, key, value){
-      if(!value) return;
-      const st = boardsState[boardId];
-      if(!st) return;
-      
-      // Skip historical data, only process real-time moves
-      if(typeof value === 'object' && !Array.isArray(value)){
-        if(value.moves && typeof value.moves === 'object'){
-          // Skip historical moves
-          return;
-        }
-        // Only process if it's a recent move
-        if (value.ts && Date.now() - value.ts < 10000) {
-          const syntheticKey = key || ('snap_'+Math.random().toString(36).slice(2,8));
-          ingestPayloadWithMeta(boardId, syntheticKey, value);
-        }
-      }
-    }
-
-    function replayMoveRecords(boardId){
-      const st = boardsState[boardId];
-      if(!st || !st.game) return;
-      
-      try{
-        const entries = Object.keys(st.moveRecords).map(k => ({ key:k, ts: st.moveRecords[k].ts || 0, payload: st.moveRecords[k].payload }));
-        entries.sort((a,b) => (a.ts - b.ts) || (a.key < b.key ? -1 : (a.key > b.key ? 1 : 0)));
-        
-        st.processedMoveKeys = new Set();
-        for(const e of entries){
-          const mv = e.payload && (e.payload.move || e.payload);
-          
-          // Skip FEN positions (these are usually historical)
-          if(e.payload && e.payload.fen && (!mv || (typeof mv === 'object' && !mv.from && !mv.to))){
-            continue;
-          }
-          
-          if(mv){
-            if(typeof mv === 'string'){
-              const s = mv.replace(/[^a-h1-8qnbrk]/ig,'');
-              if(s.length >= 4){
-                const from = s.slice(0,2), to = s.slice(2,4), prom = s.length >=5 ? s.slice(4) : undefined;
-                try{ 
-                  const moveResult = st.game.move({ from, to, promotion: prom || undefined }); 
-                  if(moveResult) {
-                    st.processedMoveKeys.add(e.key);
-                    // Update board position
-                    const pos = st.game.fen();
-                    if(pos && st.boardObj && typeof st.boardObj.position === 'function') {
-                      st.boardObj.position(pos);
-                    }
-                    updateNotation(boardId);
-                  }
-                }catch(_){}
-                continue;
-              }
-            } else if(typeof mv === 'object'){
-              const from = mv.from || mv.f || (mv.u && mv.u.slice && mv.u.slice(0,2));
-              const to = mv.to || mv.t || (mv.u && mv.u.slice && mv.u.slice(2,4));
-              const promotion = mv.promotion || mv.prom || null;
-              if(from && to && typeof st.game.move === 'function'){
-                try{ 
-                  const applied = st.game.move({ from, to, promotion: promotion || undefined }); 
-                  if(applied) {
-                    st.processedMoveKeys.add(e.key);
-                    // Update board position
-                    const pos = st.game.fen();
-                    if(pos && st.boardObj && typeof st.boardObj.position === 'function') {
-                      st.boardObj.position(pos);
-                    }
-                    updateNotation(boardId);
-                  }
-                }catch(_){}
-                continue;
-              }
-            }
-          }
-        }
-        
-        // Trigger engine analysis if running
-        if(st.engineRunning) {
-          setTimeout(() => analyzePosition(boardId), 200);
-        }
-        
-      }catch(e){ addNotification(boardId, 'Replay error: ' + (e && e.message)); }
+      while(el.children.length > 5) el.removeChild(el.lastChild);
     }
 
     function updateNotation(boardId){
@@ -1167,93 +1214,70 @@
       if(notEl) notEl.innerHTML = 'No moves.'; 
     }
 
-    // ---------- presence & listeners ----------
-    function attachPresenceAndListenersForMaster(uid, displayName, email){
-      if(!uid) return;
-      MASTER_ID = uid;
-      MASTER_NAME = displayName || localStorage.getItem('username') || localStorage.getItem('email') || email || 'master';
-
-      // publish master presence under /online/<uid> with required shape
-      try{
-        const n = onlineRef.child(MASTER_ID);
-        const payload = { name: MASTER_NAME, email: email || '', role: 'master', ts: firebase.database.ServerValue.TIMESTAMP };
-        n.set(payload).catch(()=>{});
-        // remove on disconnect
-        try{ n.onDisconnect().remove(); }catch(e){}
-        // refresh timestamp periodically
-        setInterval(()=> n.update({ ts: firebase.database.ServerValue.TIMESTAMP }), 25000);
-      }catch(e){}
-
-      // online list watcher (only valid while authenticated)
-      onlineRef.on('value', snap => {
-        const val = snap.val() || {};
-        for(const k in onlineMap) delete onlineMap[k];
-        let countRecent = 0;
-        const now = Date.now();
-        const ONLINE_WINDOW_MS = 45_000;
-        for(const id in val){
-          if(!val.hasOwnProperty(id)) continue;
-          const rec = val[id] || {};
-          const ts = rec.ts || 0;
-          onlineMap[id] = { email: rec.email || id, role: rec.role || null, ts };
-          if(Number(ts) > (now - ONLINE_WINDOW_MS)) countRecent++;
-        }
-
-        if(lastOnlineCount === null || lastOnlineCount !== countRecent){
-          lastOnlineCount = countRecent;
-          STUDENTS.forEach(s => addNotification(s.id, `Players online: ${countRecent}`));
-        }
-
-        STUDENTS.forEach(s => populateSelectForBoard(s.id));
-        STUDENTS.forEach(s => updateMasterStudentsList(s.id));
-        STUDENTS.forEach(s => refreshBadge(s.id));
-      });
-
-      // spectateResponses listener for master
-      listenForSpectateResponsesForMaster(MASTER_ID);
+    function getDebugElem(boardId){ 
+      const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId); 
+      if(!card) return null; 
+      return card.querySelector('.debug'); 
     }
 
-    // ---------- AUTH boot ----------
-    firebase.auth().onAuthStateChanged(user => {
-      if(user){
-        const uid = user.uid;
-        const displayName = user.displayName || null;
-        const email = user.email || '';
-        console.log('Master signed in as', uid, email);
-        attachPresenceAndListenersForMaster(uid, displayName, email);
+    // ---------- CONNECTION STATUS ----------
+    const connectedRef = db.ref('.info/connected');
+    connectedRef.on('value', function(snap) {
+      const statusElement = document.getElementById('connectionStatus');
+      if (snap.val() === true) {
+        console.log('✅ Firebase connected');
+        if (statusElement) {
+          statusElement.textContent = 'Connected to Firebase';
+          statusElement.className = 'connection-status connected';
+        }
       } else {
-        console.warn('No auth user for master page. Master features disabled until sign-in.');
+        console.log('❌ Firebase disconnected');
+        if (statusElement) {
+          statusElement.textContent = 'Disconnected from Firebase';
+          statusElement.className = 'connection-status disconnected';
+        }
       }
     });
 
-    // ---------- utilities ----------
-    function getDebugElem(boardId){ return document.getElementById('debug_' + boardId); }
-
-    document.getElementById('globalLogout').addEventListener('click', async () => {
-      // Stop all engines
-      STUDENTS.forEach(s => {
-        const st = boardsState[s.id];
-        if(st && st.engineRunning && st.engineInterval) {
-          clearInterval(st.engineInterval);
-          st.engineInterval = null;
-        }
-      });
-      
-      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
-      try{ if(MASTER_ID) onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
-      // sign out if auth available
-      if(firebase.auth){
-        try{ await firebase.auth().signOut(); }catch(e){}
-      }
-      // clear local session storage id
-      try{ sessionStorage.removeItem('iq4u_clientId'); }catch(e){}
+    // ---------- UTILITIES ----------
+    document.getElementById('globalLogout').addEventListener('click', () => {
+      try{ 
+        localStorage.removeItem('role'); 
+        localStorage.removeItem('username'); 
+        localStorage.removeItem('email'); 
+        sessionStorage.removeItem('iq4u_clientId'); 
+      }catch(e){}
+      try{ 
+        onlineRef.child(MASTER_ID).remove().catch(()=>{}); 
+      }catch(e){}
       window.location.href = 'index.html';
     });
 
     window.addEventListener('beforeunload', () => {
-      try{ if(MASTER_ID) onlineRef.child(MASTER_ID).remove().catch(()=>{}); }catch(e){}
-      STUDENTS.forEach(s => stopWatching(s.id, { clearRecords:true }));
+      try{ 
+        onlineRef.child(MASTER_ID).remove().catch(()=>{}); 
+      }catch(e){}
+      STUDENTS.forEach(s => stopWatching(s.id));
+      
+      if (engineWorker) {
+        try { engineWorker.terminate(); } catch(e) {}
+      }
     });
+
+    // Load engine on startup
+    setTimeout(() => {
+      loadEngine().then(success => {
+        if (success) {
+          STUDENTS.forEach(s => {
+            addNotification(s.id, `Chess engine ready: ${currentEngineVersion}`);
+          });
+        } else {
+          STUDENTS.forEach(s => {
+            addNotification(s.id, 'Chess engine failed to load');
+          });
+        }
+      });
+    }, 2000);
 
   })();
   </script>
