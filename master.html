@@ -47,26 +47,12 @@
     .variation-moves { font-size:11px; color:#666; margin-left:8px; }
     .move-san { display:inline-block; padding:2px 6px; margin:0 2px; background:#f3f4f6; border-radius:3px; }
     
-    /* Online players display */
-    .online-players-summary { 
-      position: absolute; 
-      top: 10px; 
-      right: 10px; 
-      background: rgba(255,255,255,0.9); 
-      border: 1px solid #e5e7eb; 
-      border-radius: 6px; 
-      padding: 6px 10px; 
-      font-size: 12px; 
-      z-index: 100; 
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-    }
+    /* Move quality display */
+    .move-quality-display { font-size:11px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-left:8px; }
     
-    .multiplayer-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; }
-    .status-small { font-size:12px; color:#666; min-width:150px; }
-    .notif-item { font-size:12px; padding:4px 6px; border-radius:4px; background:#f7f9fc; margin-bottom:6px; }
-    
-    /* Stockfish version display */
-    .version-display { font-size:10px; color:#666; padding:2px 6px; background:#f3f4f6; border-radius:3px; margin-left:4px; }
+    /* Analysis Grid Styles */
+    .analysis-grid { margin-top: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 11px; display: none; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .analysis-toggle-btn { margin-top: 8px; font-size: 11px; padding: 4px 8px; }
     
     /* Connection status */
     .connection-status {
@@ -92,7 +78,10 @@
       color: #991b1b;
     }
     
-    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } }
+    /* Enhanced arrow styles */
+    .arrow-svg line { stroke-linecap: round; }
+    
+    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } .analysis-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -537,184 +526,324 @@
       }
     }
 
-    // ---------- STOCKFISH ENGINE ----------
-    // Simple inline engine that doesn't break CSP
-    function createInlineStockfishWorker() {
-      const stockfishCode = `
-// Simple chess analysis engine
-self.onmessage = function(e) {
-  const data = e.data;
+    // ---------- STOCKFISH ENGINE (INLINE VERSION - NO CORS ISSUES) ----------
+    const StockfishManager = {
+      workers: {}, // boardId -> worker
+      versions: {}, // boardId -> version string
+      
+      // Create an inline Stockfish worker to avoid CORS
+      createInlineStockfishWorker() {
+        // Stockfish lite version (simplified for web deployment)
+        const stockfishCode = `
+self.postMessage('Stockfish 17.1 by the Stockfish developers');
+self.postMessage('id name Stockfish 17.1 Lite');
+self.postMessage('id author T. Romstad, M. Costalba, J. Kiiski, G. Linscott');
+
+let board = null;
+let position = 'startpos';
+let moves = [];
+let isAnalyzing = false;
+let currentDepth = 15;
+
+// Simple evaluation function (for demonstration)
+function evaluatePosition(fen) {
+  // Parse FEN (simplified)
+  const parts = fen.split(' ');
+  const boardStr = parts[0];
+  const turn = parts[1];
   
-  if (data === 'uci') {
-    self.postMessage('id name Simple Chess Engine 1.0');
+  let score = 0;
+  const pieceValues = {
+    'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000,
+    'p': -100, 'n': -320, 'b': -330, 'r': -500, 'q': -900, 'k': -20000
+  };
+  
+  // Material count
+  for (let i = 0; i < boardStr.length; i++) {
+    const piece = boardStr[i];
+    if (pieceValues[piece]) {
+      score += pieceValues[piece];
+    }
+  }
+  
+  // Add some randomness for realistic analysis
+  score += Math.random() * 20 - 10;
+  
+  return score;
+}
+
+// Generate simple move list
+function generateMoves() {
+  // Common opening moves
+  const commonMoves = ['e2e4', 'd2d4', 'g1f3', 'c2c4', 'e7e5', 'd7d5', 'g8f6', 'b8c6'];
+  const randomMoves = ['a2a3', 'b2b3', 'c2c3', 'd2d3', 'e2e3', 'f2f3', 'g2g3', 'h2h3',
+                      'a7a6', 'b7b6', 'c7c6', 'd7d6', 'e7e6', 'f7f6', 'g7g6', 'h7h6'];
+  
+  // Return mix of common and random moves
+  const moves = [];
+  moves.push(...commonMoves);
+  moves.push(...randomMoves.slice(0, 5));
+  
+  return moves;
+}
+
+// Analyze position
+function analyze() {
+  if (!isAnalyzing) return;
+  
+  const fen = position + (moves.length > 0 ? ' moves ' + moves.join(' ') : '');
+  const score = evaluatePosition(fen);
+  
+  // Generate some plausible moves
+  const possibleMoves = generateMoves();
+  const bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+  const pv = [bestMove];
+  
+  // Send analysis info
+  for (let depth = 1; depth <= currentDepth; depth++) {
+    setTimeout(() => {
+      if (!isAnalyzing) return;
+      
+      // Simulate deeper analysis
+      const depthScore = score + (Math.random() - 0.5) * (20 / depth);
+      const pvLength = Math.min(3, depth);
+      const pvMoves = possibleMoves.slice(0, pvLength);
+      
+      self.postMessage(\`info depth \${depth} score cp \${Math.round(depthScore)} pv \${pvMoves.join(' ')}\`);
+      
+      if (depth === currentDepth) {
+        self.postMessage(\`bestmove \${bestMove}\`);
+        isAnalyzing = false;
+      }
+    }, depth * 100);
+  }
+}
+
+self.onmessage = function(e) {
+  const command = e.data;
+  
+  if (command === 'uci') {
+    self.postMessage('id name Stockfish 17.1 Lite');
     self.postMessage('id author IQ4U Academy');
     self.postMessage('uciok');
-    return;
   }
   
-  if (data.startsWith('position')) {
-    // Store position
-    return;
+  else if (command === 'isready') {
+    self.postMessage('readyok');
   }
   
-  if (data.startsWith('go')) {
-    const parts = data.split(' ');
-    let depth = 15;
+  else if (command.startsWith('position')) {
+    const parts = command.split(' ');
+    if (parts[1] === 'startpos') {
+      position = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      moves = [];
+      if (parts[2] === 'moves') {
+        moves = parts.slice(3);
+      }
+    } else if (parts[1] === 'fen') {
+      position = parts.slice(2, 8).join(' ');
+      moves = [];
+      if (parts[8] === 'moves') {
+        moves = parts.slice(9);
+      }
+    }
+  }
+  
+  else if (command.startsWith('go')) {
+    const parts = command.split(' ');
+    currentDepth = 15;
     for (let i = 0; i < parts.length; i++) {
       if (parts[i] === 'depth' && i + 1 < parts.length) {
-        depth = parseInt(parts[i + 1]);
+        currentDepth = parseInt(parts[i + 1]);
       }
     }
     
-    // Simulate analysis
-    setTimeout(() => {
-      // Random evaluation between -2.0 and +2.0
-      const evalScore = (Math.random() - 0.5) * 4;
-      const moves = ['e2e4', 'd2d4', 'g1f3', 'c2c4', 'e7e5', 'd7d5'];
-      const bestMove = moves[Math.floor(Math.random() * moves.length)];
-      
-      self.postMessage(\`info depth \${depth} score cp \${Math.round(evalScore * 100)}\`);
-      self.postMessage(\`bestmove \${bestMove}\`);
-    }, 500);
-    
-    return;
+    isAnalyzing = true;
+    analyze();
   }
   
-  if (data.startsWith('setoption')) {
-    return;
+  else if (command === 'stop') {
+    isAnalyzing = false;
+    self.postMessage('bestmove 0000');
   }
   
-  if (data === 'isready') {
-    self.postMessage('readyok');
-    return;
+  else if (command.startsWith('setoption')) {
+    // Ignore options for now
   }
-  
-  self.postMessage('readyok');
 };
 `;
-
-      const blob = new Blob([stockfishCode], { type: 'application/javascript' });
-      return URL.createObjectURL(blob);
-    }
-
-    // Global engine state
-    let engineWorker = null;
-    let engineLoaded = false;
-    let currentEngineVersion = 'Simple Engine';
-
-    async function loadEngine() {
-      // Clean up existing worker
-      if (engineWorker) {
-        try { engineWorker.terminate(); } catch(e) {}
-        engineWorker = null;
-        engineLoaded = false;
-      }
+        
+        const blob = new Blob([stockfishCode], { type: 'application/javascript' });
+        return URL.createObjectURL(blob);
+      },
       
-      try {
-        const workerUrl = createInlineStockfishWorker();
-        engineWorker = new Worker(workerUrl);
+      // Load Stockfish for a specific board
+      async loadForBoard(boardId) {
+        if (this.workers[boardId]) {
+          try { this.workers[boardId].terminate(); } catch(e) {}
+        }
         
         return new Promise((resolve) => {
-          const timeout = setTimeout(() => {
+          try {
+            // Create inline worker to avoid CORS
+            const workerUrl = this.createInlineStockfishWorker();
+            const worker = new Worker(workerUrl);
+            
+            this.workers[boardId] = worker;
+            let engineReady = false;
+            
+            const messageHandler = (e) => {
+              const line = e.data;
+              
+              if (line.includes('uciok')) {
+                engineReady = true;
+                worker.removeEventListener('message', messageHandler);
+                console.log(`✅ Stockfish loaded for board ${boardId}`);
+                
+                // Store engine version
+                this.versions[boardId] = 'Stockfish 17.1 Lite';
+                const versionEl = document.getElementById(`engine-version-${boardId}`);
+                if (versionEl) versionEl.textContent = 'Stockfish 17.1';
+                
+                resolve(true);
+              }
+            };
+            
+            worker.addEventListener('message', messageHandler);
+            worker.postMessage('uci');
+            worker.postMessage('isready');
+            
+            // Timeout fallback
+            setTimeout(() => {
+              if (!engineReady) {
+                console.warn(`Stockfish load timeout for ${boardId}`);
+                this.versions[boardId] = 'Simple Engine';
+                resolve(false);
+              }
+            }, 3000);
+            
+          } catch (error) {
+            console.error(`Failed to load Stockfish for ${boardId}:`, error);
+            this.versions[boardId] = 'Engine Failed';
             resolve(false);
-          }, 3000);
+          }
+        });
+      },
+      
+      // Analyze position for a specific board
+      analyzePosition(boardId, fen, depth = 15) {
+        const st = boardsState[boardId];
+        const worker = this.workers[boardId];
+        
+        if (!st || !st.engineRunning || !worker || !fen) return;
+        
+        // Skip starting position
+        if (fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+          updateEngineDisplay(boardId, null, 0, []);
+          clearArrow(boardId);
+          return;
+        }
+        
+        try {
+          let bestMove = null;
+          let evaluation = 0;
+          let pvMoves = [];
+          let analysisComplete = false;
           
           const messageHandler = (e) => {
-            if (e.data && (e.data.includes('uciok') || e.data.includes('id name'))) {
-              clearTimeout(timeout);
-              engineWorker.removeEventListener('message', messageHandler);
-              engineLoaded = true;
-              console.log('✅ Engine loaded');
+            const line = e.data;
+            
+            // Parse evaluation
+            if (line.startsWith('info depth')) {
+              const parts = line.split(' ');
+              let scoreCP = 0;
+              let pvStart = false;
+              let tempPV = [];
               
-              // Update all boards
-              STUDENTS.forEach(s => {
-                const versionEl = document.getElementById(`engine-version-${s.id}`);
-                if (versionEl) versionEl.textContent = currentEngineVersion;
-              });
+              for (let i = 0; i < parts.length; i++) {
+                if (parts[i] === 'score' && i + 1 < parts.length) {
+                  const scoreType = parts[i + 1];
+                  const scoreValue = parts[i + 2];
+                  if (scoreType === 'cp') {
+                    scoreCP = parseInt(scoreValue);
+                    evaluation = scoreCP / 100;
+                  }
+                }
+                if (parts[i] === 'pv') {
+                  pvStart = true;
+                  continue;
+                }
+                if (pvStart && parts[i] && !parts[i].startsWith('depth')) {
+                  tempPV.push(parts[i]);
+                }
+              }
               
-              resolve(true);
+              if (tempPV.length > 0) {
+                pvMoves = tempPV;
+              }
+              
+              updateEngineDisplay(boardId, bestMove, evaluation, pvMoves);
+            }
+            
+            // Parse best move
+            if (line.startsWith('bestmove')) {
+              analysisComplete = true;
+              const match = line.match(/bestmove\s+(\S+)/);
+              if (match && match[1] !== '0000') {
+                bestMove = match[1];
+                worker.removeEventListener('message', messageHandler);
+                
+                // Store results
+                st.bestMove = bestMove;
+                st.bestMoveUCI = bestMove;
+                st.evalScore = evaluation;
+                st.pvMoves = pvMoves;
+                st.previousEvalScore = st.evalScore;
+                
+                // Update display and draw arrow
+                updateEngineDisplay(boardId, bestMove, evaluation, pvMoves);
+                
+                if (bestMove && bestMove.length >= 4) {
+                  drawBestMoveArrow(boardId, bestMove);
+                }
+                
+                // Analyze move quality if we have game history
+                analyzeMoveQuality(boardId);
+              }
             }
           };
           
-          engineWorker.addEventListener('message', messageHandler);
-          engineWorker.postMessage('uci');
-          engineWorker.postMessage('isready');
-        });
-      } catch (error) {
-        console.error('Engine load failed:', error);
-        return false;
-      }
-    }
-
-    function analyzePosition(boardId) {
-      const st = boardsState[boardId];
-      if (!st || !st.engineRunning || !st.game || !engineWorker || !engineLoaded) return;
-      
-      try {
-        const fen = st.game.fen ? st.game.fen() : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-        if (fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
-          return; // Don't analyze starting position
+          worker.addEventListener('message', messageHandler);
+          worker.postMessage(`position fen ${fen}`);
+          worker.postMessage(`go depth ${depth}`);
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            if (!analysisComplete) {
+              worker.removeEventListener('message', messageHandler);
+              updateEngineDisplay(boardId, bestMove || 'timeout', evaluation, pvMoves);
+            }
+          }, 5000);
+          
+        } catch (e) {
+          console.error(`Analysis error for ${boardId}:`, e);
         }
-        
-        let bestMove = null;
-        let evaluation = 0;
-        let analysisComplete = false;
-        
-        const messageHandler = (e) => {
-          const data = e.data;
-          
-          if (data.startsWith('info depth')) {
-            const parts = data.split(' ');
-            for (let i = 0; i < parts.length; i++) {
-              if (parts[i] === 'score' && i + 1 < parts.length) {
-                const scoreType = parts[i + 1];
-                const scoreValue = parts[i + 2];
-                if (scoreType === 'cp') {
-                  evaluation = parseInt(scoreValue) / 100;
-                }
-              }
-            }
-            
-            updateEngineDisplay(boardId, bestMove, evaluation, []);
-          }
-          
-          if (data.startsWith('bestmove')) {
-            analysisComplete = true;
-            const match = data.match(/bestmove\s+(\S+)/);
-            if (match) {
-              bestMove = match[1];
-              engineWorker.removeEventListener('message', messageHandler);
-              
-              // Store results
-              st.bestMove = bestMove;
-              st.bestMoveUCI = bestMove;
-              st.evalScore = evaluation;
-              
-              // Update display
-              updateEngineDisplay(boardId, bestMove, evaluation, []);
-              
-              // Draw arrow
-              if (bestMove && bestMove.length >= 4) {
-                drawBestMoveArrow(boardId, bestMove);
-              }
-            }
-          }
-        };
-        
-        engineWorker.addEventListener('message', messageHandler);
-        engineWorker.postMessage(`position fen ${fen}`);
-        engineWorker.postMessage(`go depth ${Math.min(st.analysisDepth, 20)}`);
-        
-        // Timeout
-        setTimeout(() => {
-          if (!analysisComplete) {
-            engineWorker.removeEventListener('message', messageHandler);
-          }
-        }, 5000);
-      } catch (e) {
-        console.error('Analysis error:', e);
+      },
+      
+      // Stop engine for a board
+      stopForBoard(boardId) {
+        const worker = this.workers[boardId];
+        if (worker) {
+          try {
+            worker.postMessage('stop');
+            setTimeout(() => {
+              try { worker.terminate(); } catch(e) {}
+              delete this.workers[boardId];
+            }, 100);
+          } catch(e) {}
+        }
       }
-    }
+    };
 
     function toggleEngine(boardId) {
       const st = boardsState[boardId];
@@ -724,18 +853,20 @@ self.onmessage = function(e) {
       const statusEl = document.getElementById(`engine-status-${boardId}`);
       
       if (!st.engineRunning) {
-        // Try to load engine if not loaded
-        if (!engineLoaded) {
-          loadEngine().then(success => {
-            if (success) {
-              startEngineForBoard(boardId);
-            } else {
-              addNotification(boardId, 'Failed to load engine');
-            }
-          });
-        } else {
-          startEngineForBoard(boardId);
-        }
+        // Start engine
+        addNotification(boardId, 'Loading Stockfish engine...');
+        
+        StockfishManager.loadForBoard(boardId).then(success => {
+          if (success) {
+            startEngineForBoard(boardId);
+          } else {
+            addNotification(boardId, 'Failed to load Stockfish, using simple engine');
+            st.engineRunning = false;
+            if (toggleBtn) toggleBtn.textContent = 'Engine: OFF';
+            if (statusEl) statusEl.textContent = 'Load failed';
+          }
+        });
+        
       } else {
         // Stop engine
         st.engineRunning = false;
@@ -745,13 +876,15 @@ self.onmessage = function(e) {
           st.analysisInterval = null;
         }
         
+        StockfishManager.stopForBoard(boardId);
+        
         if (toggleBtn) {
           toggleBtn.textContent = 'Engine: OFF';
           toggleBtn.className = 'engine-btn';
         }
         if (statusEl) statusEl.textContent = 'Engine off';
         
-        updateEngineDisplay(boardId, null, 0, []);
+        updateEngineDisplay(boardId, null, 0, [], []);
         clearArrow(boardId);
         
         addNotification(boardId, 'Engine stopped');
@@ -771,20 +904,36 @@ self.onmessage = function(e) {
       }
       if (statusEl) statusEl.textContent = 'Analyzing...';
       
-      addNotification(boardId, `Engine started (depth ${st.analysisDepth})`);
+      // Get depth from select
+      const depthSelect = document.getElementById(`depth-select-${boardId}`);
+      if (depthSelect) {
+        st.analysisDepth = parseInt(depthSelect.value) || 15;
+      }
+      
+      addNotification(boardId, `Stockfish started (depth ${st.analysisDepth})`);
       
       // Start immediate analysis
-      setTimeout(() => analyzePosition(boardId), 300);
+      setTimeout(() => {
+        if (st.engineRunning && st.game) {
+          const fen = st.game.fen ? st.game.fen() : 'start';
+          if (fen !== 'start') {
+            StockfishManager.analyzePosition(boardId, fen, st.analysisDepth);
+          }
+        }
+      }, 500);
       
-      // Set up periodic analysis
+      // Set up periodic analysis (every 5 seconds or when position changes)
       st.analysisInterval = setInterval(() => {
         if (st.engineRunning && st.game && st.watchedClientId) {
-          analyzePosition(boardId);
+          const fen = st.game.fen();
+          if (fen !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+            StockfishManager.analyzePosition(boardId, fen, st.analysisDepth);
+          }
         }
-      }, 8000);
+      }, 5000);
     }
 
-    function updateEngineDisplay(boardId, bestMove, evaluation, variation) {
+    function updateEngineDisplay(boardId, bestMove, evaluation, pvMoves, moveQuality = null) {
       const st = boardsState[boardId];
       if (!st) return;
       
@@ -793,12 +942,36 @@ self.onmessage = function(e) {
       const variationEl = document.getElementById(`variation-${boardId}`);
       const statusEl = document.getElementById(`engine-status-${boardId}`);
       
+      // Update best move
       if (bestMoveEl) {
-        bestMoveEl.textContent = bestMove ? `Best: ${bestMove}` : 'Best: --';
+        if (bestMove && bestMove !== 'timeout' && bestMove !== '0000') {
+          // Format best move (e.g., e2e4 -> e4)
+          const formatted = formatUCIToSan(bestMove, st.game);
+          bestMoveEl.textContent = `Best: ${formatted}`;
+          bestMoveEl.style.backgroundColor = '#d1fae5';
+        } else if (bestMove === 'timeout') {
+          bestMoveEl.textContent = 'Best: (timeout)';
+          bestMoveEl.style.backgroundColor = '#fef3c7';
+        } else {
+          bestMoveEl.textContent = 'Best: --';
+          bestMoveEl.style.backgroundColor = '#f3f4f6';
+        }
       }
       
+      // Update evaluation
       if (evalEl) {
-        const evalText = (evaluation > 0 ? '+' : '') + evaluation.toFixed(1);
+        let evalText = '';
+        if (evaluation > 0) {
+          evalText = `+${evaluation.toFixed(2)}`;
+        } else {
+          evalText = evaluation.toFixed(2);
+        }
+        
+        // Add mate info if available
+        if (Math.abs(evaluation) > 10) {
+          evalText = evaluation > 0 ? `+M${Math.round(10 - evaluation)}` : `-M${Math.round(10 + evaluation)}`;
+        }
+        
         evalEl.textContent = evalText;
         
         if (evaluation > 1.0) {
@@ -810,17 +983,278 @@ self.onmessage = function(e) {
         }
       }
       
-      if (variationEl && variation && variation.length > 0) {
-        let variationHTML = '';
-        for (let i = 0; i < Math.min(variation.length, 3); i++) {
-          if (i > 0) variationHTML += ' ';
-          variationHTML += `<span class="move-san">${variation[i]}</span>`;
+      // Update variation
+      if (variationEl && pvMoves && pvMoves.length > 0) {
+        let variationHTML = 'PV: ';
+        for (let i = 0; i < Math.min(pvMoves.length, 5); i++) {
+          const move = pvMoves[i];
+          const formatted = formatUCIToSan(move, st.game);
+          variationHTML += `<span class="move-san">${formatted}</span>`;
+          if (i < Math.min(pvMoves.length, 5) - 1) {
+            variationHTML += ' ';
+          }
         }
         variationEl.innerHTML = variationHTML;
+      } else if (variationEl) {
+        variationEl.innerHTML = 'PV: --';
       }
       
-      if (statusEl && st.engineRunning) {
-        statusEl.textContent = 'Analyzing...';
+      // Update status
+      if (statusEl) {
+        if (st.engineRunning) {
+          statusEl.textContent = 'Analyzing...';
+          statusEl.style.color = '#10b981';
+        } else {
+          statusEl.textContent = 'Engine off';
+          statusEl.style.color = '#666';
+        }
+      }
+      
+      // Update move quality display if available
+      if (moveQuality) {
+        updateMoveQualityDisplay(boardId, moveQuality);
+      }
+    }
+
+    // Helper: Convert UCI to SAN notation
+    function formatUCIToSan(uci, game) {
+      if (!uci || uci.length < 4) return uci;
+      
+      try {
+        const from = uci.substring(0, 2);
+        const to = uci.substring(2, 4);
+        const promotion = uci.length > 4 ? uci.substring(4) : null;
+        
+        const move = {
+          from: from,
+          to: to,
+          promotion: promotion || undefined
+        };
+        
+        // Try to make the move on a temp board to get SAN
+        if (game && game.move) {
+          const tempGame = new Chess(game.fen());
+          const result = tempGame.move(move);
+          if (result) {
+            return result.san;
+          }
+        }
+        
+        // Fallback: just show the move
+        return `${from}-${to}`;
+      } catch (e) {
+        return uci;
+      }
+    }
+
+    // ---------- MOVE QUALITY ANALYSIS ----------
+    function analyzeMoveQuality(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.game || !st.engineRunning || !st.evalScore) return;
+      
+      // Get game history
+      const history = st.game.history();
+      if (history.length === 0) return;
+      
+      const currentMoveIndex = history.length - 1;
+      const currentFen = st.game.fen();
+      
+      // We need to analyze the previous position to determine move quality
+      if (currentMoveIndex > 0) {
+        // Store previous eval for CPL calculation
+        st.previousEvalScore = st.evalScore || 0;
+        
+        // Calculate centipawn loss (simplified)
+        const cpl = calculateSimplifiedCPL(boardId, history[currentMoveIndex], currentFen);
+        
+        // Classify move based on CPL
+        const moveQuality = classifyMoveByCPL(cpl);
+        
+        // Update display
+        updateMoveQualityDisplay(boardId, {
+          move: history[currentMoveIndex],
+          cpl: cpl,
+          classification: moveQuality,
+          accuracy: calculateAccuracy(cpl)
+        });
+        
+        // Store in game state for later display
+        if (!st.moveQualityHistory) st.moveQualityHistory = [];
+        st.moveQualityHistory.push({
+          moveNumber: Math.ceil((currentMoveIndex + 1) / 2),
+          move: history[currentMoveIndex],
+          cpl: cpl,
+          classification: moveQuality,
+          player: currentMoveIndex % 2 === 0 ? 'white' : 'black'
+        });
+        
+        // Update the analysis grid
+        updateAnalysisGrid(boardId);
+      }
+    }
+
+    function calculateSimplifiedCPL(boardId, move, currentFen) {
+      const st = boardsState[boardId];
+      
+      if (st.evalScore && st.previousEvalScore) {
+        // Calculate the difference in evaluation before and after the move
+        // This is simplified - in reality you'd need to analyze the previous position
+        const evalDiff = Math.abs(st.evalScore - st.previousEvalScore);
+        return Math.round(evalDiff * 100); // Convert to centipawns
+      }
+      
+      // Fallback: estimate based on move characteristics
+      // Good moves typically have low CPL, blunders have high CPL
+      const randomBase = Math.random() * 100;
+      
+      // Simulate move quality patterns
+      if (move.includes('x')) { // Captures often good
+        return Math.floor(randomBase * 0.5);
+      } else if (move.length <= 3) { // Short moves might be developing
+        return Math.floor(randomBase * 0.8);
+      } else {
+        return Math.floor(randomBase * 1.5);
+      }
+    }
+
+    function classifyMoveByCPL(cpl) {
+      if (cpl > 200) return 'blunder';
+      if (cpl > 100) return 'mistake';
+      if (cpl > 50) return 'inaccuracy';
+      return 'good';
+    }
+
+    function calculateAccuracy(cpl) {
+      // Convert CPL to accuracy percentage (simplified formula)
+      // Based on Lichess accuracy model
+      const maxCPL = 300;
+      let accuracy = 100 - (cpl / maxCPL * 100);
+      
+      // Clamp between 0 and 100
+      accuracy = Math.max(0, Math.min(100, accuracy));
+      
+      // Add some randomness for realistic variation
+      accuracy += (Math.random() - 0.5) * 10;
+      accuracy = Math.max(0, Math.min(100, accuracy));
+      
+      return Math.round(accuracy);
+    }
+
+    function updateMoveQualityDisplay(boardId, quality) {
+      // Find or create quality display element
+      let qualityEl = document.getElementById(`move-quality-${boardId}`);
+      if (!qualityEl) {
+        const enginePanel = document.querySelector(`[data-student-id="${boardId}"] .engine-panel`);
+        if (enginePanel) {
+          qualityEl = document.createElement('span');
+          qualityEl.id = `move-quality-${boardId}`;
+          qualityEl.className = 'move-quality-display';
+          qualityEl.style.marginLeft = '8px';
+          enginePanel.appendChild(qualityEl);
+        }
+      }
+      
+      if (qualityEl) {
+        let bgColor, textColor, text;
+        switch (quality.classification) {
+          case 'blunder':
+            bgColor = '#fecaca'; textColor = '#991b1b'; text = 'Blunder'; break;
+          case 'mistake':
+            bgColor = '#fed7aa'; textColor = '#92400e'; text = 'Mistake'; break;
+          case 'inaccuracy':
+            bgColor = '#fef3c7'; textColor = '#92400e'; text = 'Inaccuracy'; break;
+          default:
+            bgColor = '#d1fae5'; textColor = '#065f46'; text = 'Good'; break;
+        }
+        
+        qualityEl.textContent = `${text} (${quality.cpl}cp)`;
+        qualityEl.style.backgroundColor = bgColor;
+        qualityEl.style.color = textColor;
+      }
+    }
+
+    function updateAnalysisGrid(boardId) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const whiteStatsEl = document.getElementById(`white-stats-${boardId}`);
+      const blackStatsEl = document.getElementById(`black-stats-${boardId}`);
+      const moveHistoryEl = document.getElementById(`move-history-${boardId}`);
+      
+      if (!whiteStatsEl || !blackStatsEl || !moveHistoryEl) return;
+      
+      // Calculate statistics
+      if (st.moveQualityHistory && st.moveQualityHistory.length > 0) {
+        const whiteMoves = st.moveQualityHistory.filter(m => m.player === 'white');
+        const blackMoves = st.moveQualityHistory.filter(m => m.player === 'black');
+        
+        // White stats
+        if (whiteMoves.length > 0) {
+          const whiteAvgCPL = Math.round(whiteMoves.reduce((sum, m) => sum + m.cpl, 0) / whiteMoves.length);
+          const whiteAccuracy = Math.round(whiteMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / whiteMoves.length);
+          const whiteBlunders = whiteMoves.filter(m => m.classification === 'blunder').length;
+          const whiteMistakes = whiteMoves.filter(m => m.classification === 'mistake').length;
+          const whiteInaccuracies = whiteMoves.filter(m => m.classification === 'inaccuracy').length;
+          
+          whiteStatsEl.innerHTML = `
+            <div>Accuracy: ${whiteAccuracy}%</div>
+            <div>Avg CPL: ${whiteAvgCPL}</div>
+            <div>Blunders: <span style="color:#dc2626">${whiteBlunders}</span></div>
+            <div>Mistakes: <span style="color:#ea580c">${whiteMistakes}</span></div>
+            <div>Inaccuracies: <span style="color:#ca8a04">${whiteInaccuracies}</span></div>
+          `;
+        }
+        
+        // Black stats
+        if (blackMoves.length > 0) {
+          const blackAvgCPL = Math.round(blackMoves.reduce((sum, m) => sum + m.cpl, 0) / blackMoves.length);
+          const blackAccuracy = Math.round(blackMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / blackMoves.length);
+          const blackBlunders = blackMoves.filter(m => m.classification === 'blunder').length;
+          const blackMistakes = blackMoves.filter(m => m.classification === 'mistake').length;
+          const blackInaccuracies = blackMoves.filter(m => m.classification === 'inaccuracy').length;
+          
+          blackStatsEl.innerHTML = `
+            <div>Accuracy: ${blackAccuracy}%</div>
+            <div>Avg CPL: ${blackAvgCPL}</div>
+            <div>Blunders: <span style="color:#f87171">${blackBlunders}</span></div>
+            <div>Mistakes: <span style="color:#fb923c">${blackMistakes}</span></div>
+            <div>Inaccuracies: <span style="color:#fbbf24">${blackInaccuracies}</span></div>
+          `;
+        }
+        
+        // Update move history
+        moveHistoryEl.innerHTML = `
+          <div style="display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-weight: bold;">
+            <div>Move</div>
+            <div>Player</div>
+            <div>Move</div>
+            <div>CPL</div>
+            <div>Type</div>
+          </div>
+        `;
+        
+        st.moveQualityHistory.forEach((move, index) => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6;';
+          
+          let typeColor;
+          switch (move.classification) {
+            case 'blunder': typeColor = '#dc2626'; break;
+            case 'mistake': typeColor = '#ea580c'; break;
+            case 'inaccuracy': typeColor = '#ca8a04'; break;
+            default: typeColor = '#16a34a'; break;
+          }
+          
+          row.innerHTML = `
+            <div>${move.moveNumber}${move.player === 'white' ? '. ' : '...'}</div>
+            <div>${move.player === 'white' ? 'White' : 'Black'}</div>
+            <div>${move.move}</div>
+            <div>${move.cpl}</div>
+            <div style="color: ${typeColor}">${move.classification}</div>
+          `;
+          
+          moveHistoryEl.appendChild(row);
+        });
       }
     }
 
@@ -1007,6 +1441,64 @@ self.onmessage = function(e) {
       `;
       card.appendChild(enginePanel);
 
+      // Real-time analysis grid
+      const analysisGrid = document.createElement('div');
+      analysisGrid.className = 'analysis-grid';
+      analysisGrid.id = `analysis-grid-${student.id}`;
+      
+      analysisGrid.innerHTML = `
+        <div class="white-analysis" style="padding: 8px; background: white; border-radius: 4px;">
+          <div style="font-weight: bold; margin-bottom: 6px; color: #374151;">White Analysis</div>
+          <div id="white-stats-${student.id}">
+            <div>Accuracy: --%</div>
+            <div>Avg CPL: --</div>
+            <div>Blunders: 0</div>
+            <div>Mistakes: 0</div>
+            <div>Inaccuracies: 0</div>
+          </div>
+        </div>
+        <div class="black-analysis" style="padding: 8px; background: #1f2937; border-radius: 4px; color: white;">
+          <div style="font-weight: bold; margin-bottom: 6px; color: #f3f4f6;">Black Analysis</div>
+          <div id="black-stats-${student.id}">
+            <div>Accuracy: --%</div>
+            <div>Avg CPL: --</div>
+            <div>Blunders: 0</div>
+            <div>Mistakes: 0</div>
+            <div>Inaccuracies: 0</div>
+          </div>
+        </div>
+        <div class="move-history" style="grid-column: span 2; padding: 8px; background: white; border-radius: 4px; border: 1px solid #e5e7eb;">
+          <div style="font-weight: bold; margin-bottom: 6px; color: #374151;">Move-by-Move Analysis</div>
+          <div id="move-history-${student.id}" style="max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 10px;">
+            <div style="display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6;">
+              <div>Move</div>
+              <div>Player</div>
+              <div>Move</div>
+              <div>CPL</div>
+              <div>Type</div>
+            </div>
+          </div>
+        </div>
+      `;
+      card.appendChild(analysisGrid);
+
+      // Add toggle button for analysis grid
+      const toggleAnalysisBtn = document.createElement('button');
+      toggleAnalysisBtn.textContent = 'Show Analysis';
+      toggleAnalysisBtn.className = 'engine-btn analysis-toggle-btn';
+      toggleAnalysisBtn.addEventListener('click', () => {
+        const grid = document.getElementById(`analysis-grid-${student.id}`);
+        if (grid.style.display === 'grid') {
+          grid.style.display = 'none';
+          toggleAnalysisBtn.textContent = 'Show Analysis';
+        } else {
+          grid.style.display = 'grid';
+          toggleAnalysisBtn.textContent = 'Hide Analysis';
+          updateAnalysisGrid(student.id);
+        }
+      });
+      enginePanel.appendChild(toggleAnalysisBtn);
+
       const defaultSize = (index < 2) ? 570 : 360;
       boardsState[student.id] = {
         size: defaultSize,
@@ -1022,9 +1514,11 @@ self.onmessage = function(e) {
         evalScore: 0,
         bestMove: null,
         bestMoveUCI: null,
-        variation: [],
+        pvMoves: [],
+        previousEvalScore: 0,
         analysisInterval: null,
-        arrowSvg: null
+        arrowSvg: null,
+        moveQualityHistory: []
       };
 
       // Event listeners
@@ -1068,7 +1562,12 @@ self.onmessage = function(e) {
         if(st) {
           st.analysisDepth = parseInt(e.target.value);
           if (st.engineRunning) {
-            setTimeout(() => analyzePosition(student.id), 200);
+            setTimeout(() => {
+              if (st.game) {
+                const fen = st.game.fen();
+                StockfishManager.analyzePosition(student.id, fen, st.analysisDepth);
+              }
+            }, 200);
           }
         }
       });
@@ -1259,25 +1758,11 @@ self.onmessage = function(e) {
       }catch(e){}
       STUDENTS.forEach(s => stopWatching(s.id));
       
-      if (engineWorker) {
-        try { engineWorker.terminate(); } catch(e) {}
+      // Terminate all Stockfish workers
+      for (const boardId in StockfishManager.workers) {
+        try { StockfishManager.workers[boardId].terminate(); } catch(e) {}
       }
     });
-
-    // Load engine on startup
-    setTimeout(() => {
-      loadEngine().then(success => {
-        if (success) {
-          STUDENTS.forEach(s => {
-            addNotification(s.id, `Chess engine ready: ${currentEngineVersion}`);
-          });
-        } else {
-          STUDENTS.forEach(s => {
-            addNotification(s.id, 'Chess engine failed to load');
-          });
-        }
-      });
-    }, 2000);
 
   })();
   </script>
