@@ -11,11 +11,11 @@
     html,body{ height:100%; margin:0; background:#f5f7fb; }
     .container{ margin:16px auto; max-width:1200px; padding-bottom:28px; }
     h1{ margin:0 0 12px 0; font-size:20px; }
-    .boards-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--card-gap); }
+    .boards-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(500px, 1fr)); gap:var(--card-gap); }
     .board-card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px; min-height:260px; box-shadow:0 1px 3px rgba(20,30,40,0.05); }
     .top-strip{ display:flex; align-items:center; justify-content:flex-start; gap:8px; height:var(--control-height); }
     .student-label{ font-weight:600; text-align:center; display:flex; align-items:center; gap:8px; justify-content:center; }
-    .controls{ display:flex; gap:8px; align-items:center; width:100%; }
+    .controls{ display:flex; gap:8px; align-items:center; width:100%; flex-wrap:wrap; }
     .controls select, .controls button, .controls input[type=range]{ height:32px; padding:4px 8px; border-radius:6px; border:1px solid #ccc; background:#fff; }
     .board-inner{ width:100%; display:flex; justify-content:center; }
     .board-holder{ box-sizing:border-box; border-radius:6px; overflow:hidden; background:#fff; position: relative; }
@@ -81,7 +81,22 @@
     /* Enhanced arrow styles */
     .arrow-svg line { stroke-linecap: round; }
     
-    @media(max-width:900px){ .boards-grid{ grid-template-columns:1fr; padding:0 12px; } .notif-area{ flex-direction:column; } .analysis-grid { grid-template-columns: 1fr; } }
+    /* Multi-watch styling */
+    .multi-watch-controls { display:flex; gap:6px; align-items:center; margin-left:auto; }
+    .watch-mode-label { font-size:11px; color:#666; }
+    .watch-mode-btn { padding:4px 8px; font-size:11px; border-radius:4px; background:#f3f4f6; border:1px solid #d1d5db; cursor:pointer; }
+    .watch-mode-btn.active { background:#3b82f6; color:white; border-color:#2563eb; }
+    .player-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:4px; font-weight:bold; }
+    .player-badge.white { background:#f3f4f6; color:#111827; }
+    .player-badge.black { background:#1f2937; color:#f9fafb; }
+    .game-info { font-size:12px; color:#666; margin-left:12px; }
+    
+    @media(max-width:900px){ 
+      .boards-grid{ grid-template-columns:1fr; padding:0 12px; } 
+      .notif-area{ flex-direction:column; } 
+      .analysis-grid { grid-template-columns: 1fr; } 
+      .controls { flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -114,7 +129,7 @@
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
       databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "iq4u-chess-classroom",
-      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      storageBucket: "iq4uchess-classroom.firebasestorage.app",
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb6936fe0da4bb"
     };
@@ -145,6 +160,14 @@
 
     const onlineMap = {};   // clientId => {email, role, ts}
     const boardsState = {}; // per-board state
+    const gameMatches = {}; // Stores which players are playing which color
+
+    // ---------- WATCH MODES (DEFINED EARLY) ----------
+    const WATCH_MODES = {
+      SINGLE: 'single',
+      MULTI_WHITE: 'multi_white',
+      MULTI_BLACK: 'multi_black'
+    };
 
     // ---------- ensure chess.js loaded ----------
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
@@ -173,6 +196,255 @@
     // ---------- build UI (DOM only) ----------
     const grid = document.getElementById('boardsGrid');
     const theme = await pickPieceTheme();
+    
+    // First define createCard function before using it
+    function createCard(student, pieceTheme, index){
+      const card = document.createElement('div'); 
+      card.className = 'board-card'; 
+      card.dataset.studentId = student.id;
+
+      const label = document.createElement('div'); 
+      label.className = 'student-label';
+      label.id = `label-${student.id}`;
+      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="game-info" id="game-info-${student.id}"></span>`;
+      card.appendChild(label);
+
+      const top = document.createElement('div'); 
+      top.className = 'top-strip';
+      top.innerHTML = `
+        <div class="controls">
+          <span class="label-small" style="margin-right:6px;">Size</span>
+          <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
+          <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
+          <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}" style="min-width:180px;">
+            <option value="">Select student or game</option>
+          </select>
+        </div>
+        <div class="multi-watch-controls">
+          <span class="watch-mode-label">Watch:</span>
+          <button class="watch-mode-btn watch-single" data-sid="${student.id}" title="Watch complete game">Full Game</button>
+          <button class="watch-mode-btn watch-white" data-sid="${student.id}" title="Watch White only">White</button>
+          <button class="watch-mode-btn watch-black" data-sid="${student.id}" title="Watch Black only">Black</button>
+        </div>
+      `;
+      card.appendChild(top);
+
+      const boardInnerWrap = document.createElement('div'); 
+      boardInnerWrap.className = 'board-inner';
+      const boardHolder = document.createElement('div'); 
+      boardHolder.className = 'board-holder';
+      
+      // Add arrow overlay
+      const arrowOverlay = document.createElement('div');
+      arrowOverlay.className = 'arrow-overlay';
+      arrowOverlay.id = 'arrows_' + student.id;
+      
+      const boardDiv = document.createElement('div'); 
+      boardDiv.id = 'board_' + student.id;
+      
+      boardHolder.appendChild(boardDiv);
+      boardHolder.appendChild(arrowOverlay);
+      boardInnerWrap.appendChild(boardHolder); 
+      card.appendChild(boardInnerWrap);
+
+      const notifArea = document.createElement('div'); 
+      notifArea.className = 'notif-area';
+      notifArea.innerHTML = `
+        <div class="notifications" id="notif_${student.id}"></div>
+        <div class="notation" id="notation_${student.id}">No moves.</div>
+      `;
+      card.appendChild(notifArea);
+
+      // Engine analysis panel
+      const enginePanel = document.createElement('div');
+      enginePanel.className = 'engine-panel';
+      enginePanel.innerHTML = `
+        <button id="engine-toggle-${student.id}" class="engine-btn">Engine: OFF</button>
+        <span id="engine-version-${student.id}" class="version-display">None</span>
+        <span style="font-size:12px;">Depth:</span>
+        <select id="depth-select-${student.id}" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid #ccc;">
+          <option value="10">10</option>
+          <option value="12">12</option>
+          <option value="15" selected>15</option>
+          <option value="18">18</option>
+          <option value="20">20</option>
+        </select>
+        <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
+        <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
+        <span id="variation-${student.id}" class="variation-moves"></span>
+        <span id="engine-status-${student.id}" class="engine-status">Engine off</span>
+      `;
+      card.appendChild(enginePanel);
+
+      // Real-time analysis grid
+      const analysisGrid = document.createElement('div');
+      analysisGrid.className = 'analysis-grid';
+      analysisGrid.id = `analysis-grid-${student.id}`;
+      
+      analysisGrid.innerHTML = `
+        <div class="white-analysis" style="padding: 8px; background: white; border-radius: 4px;">
+          <div style="font-weight: bold; margin-bottom: 6px; color: #374151;">White Analysis</div>
+          <div id="white-stats-${student.id}">
+            <div>Accuracy: --%</div>
+            <div>Avg CPL: --</div>
+            <div>Blunders: 0</div>
+            <div>Mistakes: 0</div>
+            <div>Inaccuracies: 0</div>
+          </div>
+        </div>
+        <div class="black-analysis" style="padding: 8px; background: #1f2937; border-radius: 4px; color: white;">
+          <div style="font-weight: bold; margin-bottom: 6px; color: #f3f4f6;">Black Analysis</div>
+          <div id="black-stats-${student.id}">
+            <div>Accuracy: --%</div>
+            <div>Avg CPL: --</div>
+            <div>Blunders: 0</div>
+            <div>Mistakes: 0</div>
+            <div>Inaccuracies: 0</div>
+          </div>
+        </div>
+        <div class="move-history" style="grid-column: span 2; padding: 8px; background: white; border-radius: 4px; border: 1px solid #e5e7eb;">
+          <div style="font-weight: bold; margin-bottom: 6px; color: #374151;">Move-by-Move Analysis</div>
+          <div id="move-history-${student.id}" style="max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 10px;">
+            <div style="display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6;">
+              <div>Move</div>
+              <div>Player</div>
+              <div>Move</div>
+              <div>CPL</div>
+              <div>Type</div>
+            </div>
+          </div>
+        </div>
+      `;
+      card.appendChild(analysisGrid);
+
+      // Add toggle button for analysis grid
+      const toggleAnalysisBtn = document.createElement('button');
+      toggleAnalysisBtn.textContent = 'Show Analysis';
+      toggleAnalysisBtn.className = 'engine-btn analysis-toggle-btn';
+      toggleAnalysisBtn.addEventListener('click', () => {
+        const grid = document.getElementById(`analysis-grid-${student.id}`);
+        if (grid.style.display === 'grid') {
+          grid.style.display = 'none';
+          toggleAnalysisBtn.textContent = 'Show Analysis';
+        } else {
+          grid.style.display = 'grid';
+          toggleAnalysisBtn.textContent = 'Hide Analysis';
+          updateAnalysisGrid(student.id);
+        }
+      });
+      enginePanel.appendChild(toggleAnalysisBtn);
+
+      const defaultSize = 500;
+      boardsState[student.id] = {
+        size: defaultSize,
+        flip: false,
+        watchedClientId: null,
+        whitePlayer: null,
+        blackPlayer: null,
+        watchMode: WATCH_MODES.SINGLE,
+        listeners: {},
+        boardObj: null,
+        game: null,
+        pieceTheme,
+        // Engine properties
+        engineRunning: false,
+        analysisDepth: 15,
+        evalScore: 0,
+        bestMove: null,
+        bestMoveUCI: null,
+        pvMoves: [],
+        previousEvalScore: 0,
+        analysisInterval: null,
+        arrowSvg: null,
+        moveQualityHistory: []
+      };
+
+      // Event listeners
+      const sizeSlider = top.querySelector('.size-slider');
+      sizeSlider.value = defaultSize;
+      sizeSlider.addEventListener('input', e => {
+        const px = Number(e.target.value);
+        boardsState[student.id].size = px;
+        setBoardSize(student.id, px);
+      });
+      
+      top.querySelector('.flip-btn').addEventListener('click', () => {
+        const st = boardsState[student.id];
+        st.flip = !st.flip;
+        if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
+        if (st.bestMoveUCI) {
+          setTimeout(() => drawBestMoveArrow(student.id, st.bestMoveUCI), 100);
+        }
+      });
+
+      const playerSelect = top.querySelector('.player-select');
+      playerSelect.addEventListener('change', e => {
+        const selectedValue = e.target.value;
+        if (!selectedValue) {
+          stopWatching(student.id);
+          return;
+        }
+        
+        // Check if it's a combined game selection (contains |)
+        if (selectedValue.includes('|')) {
+          const [whiteId, blackId] = selectedValue.split('|');
+          startWatchingGame(student.id, whiteId, blackId);
+        } else {
+          // Single player selection
+          startWatching(student.id, selectedValue);
+        }
+      });
+
+      // Multi-watch mode buttons
+      const singleBtn = top.querySelector('.watch-single');
+      const whiteBtn = top.querySelector('.watch-white');
+      const blackBtn = top.querySelector('.watch-black');
+      
+      singleBtn.addEventListener('click', () => {
+        if (boardsState[student.id].whitePlayer && boardsState[student.id].blackPlayer) {
+          setWatchMode(student.id, WATCH_MODES.SINGLE);
+        }
+      });
+      
+      whiteBtn.addEventListener('click', () => {
+        if (boardsState[student.id].whitePlayer) {
+          setWatchMode(student.id, WATCH_MODES.MULTI_WHITE);
+        }
+      });
+      
+      blackBtn.addEventListener('click', () => {
+        if (boardsState[student.id].blackPlayer) {
+          setWatchMode(student.id, WATCH_MODES.MULTI_BLACK);
+        }
+      });
+
+      // Engine event listeners
+      const engineToggleBtn = enginePanel.querySelector(`#engine-toggle-${student.id}`);
+      const depthSelect = enginePanel.querySelector(`#depth-select-${student.id}`);
+
+      engineToggleBtn.addEventListener('click', () => {
+        toggleEngine(student.id);
+      });
+
+      depthSelect.addEventListener('change', (e) => {
+        const st = boardsState[student.id];
+        if(st) {
+          st.analysisDepth = parseInt(e.target.value);
+          if (st.engineRunning) {
+            setTimeout(() => {
+              if (st.game) {
+                const fen = st.game.fen();
+                StockfishManager.analyzePosition(student.id, fen, st.analysisDepth);
+              }
+            }, 200);
+          }
+        }
+      });
+
+      return card;
+    }
+
+    // Now create the cards
     for(let i=0;i<STUDENTS.length;i++){
       const s = STUDENTS[i];
       const card = createCard(s, theme, i);
@@ -185,6 +457,65 @@
       initEngineAndBoard(s.id);
     }
 
+    // ---------- MULTI-WATCH FUNCTIONS ----------
+    function updateWatchModeButtons(boardId) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const card = document.querySelector(`.board-card[data-student-id="${boardId}"]`);
+      if (!card) return;
+      
+      const singleBtn = card.querySelector('.watch-single');
+      const whiteBtn = card.querySelector('.watch-white');
+      const blackBtn = card.querySelector('.watch-black');
+      
+      if (singleBtn) singleBtn.classList.toggle('active', st.watchMode === WATCH_MODES.SINGLE);
+      if (whiteBtn) whiteBtn.classList.toggle('active', st.watchMode === WATCH_MODES.MULTI_WHITE);
+      if (blackBtn) blackBtn.classList.toggle('active', st.watchMode === WATCH_MODES.MULTI_BLACK);
+    }
+
+    function setWatchMode(boardId, mode) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      st.watchMode = mode;
+      updateWatchModeButtons(boardId);
+      
+      // Update the player select based on mode
+      const playerSelect = document.querySelector(`.player-select[data-sid="${boardId}"]`);
+      if (playerSelect) {
+        const selectedValue = playerSelect.value;
+        
+        if (mode === WATCH_MODES.SINGLE && st.whitePlayer && st.blackPlayer) {
+          // In single mode, show combined option
+          const whiteName = onlineMap[st.whitePlayer]?.email || st.whitePlayer;
+          const blackName = onlineMap[st.blackPlayer]?.email || st.blackPlayer;
+          
+          // Create a special option showing both players
+          playerSelect.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = `${st.whitePlayer}|${st.blackPlayer}`;
+          option.textContent = `${whiteName} vs ${blackName}`;
+          option.selected = true;
+          playerSelect.appendChild(option);
+          
+          // Restart watching with both players
+          stopWatching(boardId);
+          startWatchingGame(boardId, st.whitePlayer, st.blackPlayer);
+        } else if (mode === WATCH_MODES.MULTI_WHITE && st.whitePlayer) {
+          // Just watch white player
+          playerSelect.value = st.whitePlayer;
+          stopWatching(boardId);
+          startWatching(boardId, st.whitePlayer);
+        } else if (mode === WATCH_MODES.MULTI_BLACK && st.blackPlayer) {
+          // Just watch black player
+          playerSelect.value = st.blackPlayer;
+          stopWatching(boardId);
+          startWatching(boardId, st.blackPlayer);
+        }
+      }
+    }
+
     // ---------- SINGLE AUTHORITATIVE PIPELINE ----------
     // This is the KEY: One path for all Firebase data → Chess.js → Chessboard.js
     const CANDIDATE_PATHS = ['','game','move','moves'];
@@ -194,11 +525,12 @@
       if(!st) return;
       stopWatching(boardId); // teardown previous
       st.watchedClientId = clientId;
+      st.whitePlayer = clientId; // Default to white
+      st.blackPlayer = null;
+      st.watchMode = WATCH_MODES.SINGLE;
       
       // Update UI
-      const sel = document.querySelector(`.player-select[data-sid="${boardId}"]`);
-      if(sel) sel.value = clientId;
-      refreshBadge(boardId);
+      updateBoardLabel(boardId);
       addNotification(boardId, `Start watching ${clientId}`);
       
       // Reset game state
@@ -285,6 +617,99 @@
       }
     }
 
+    // New function to watch a complete game (both players)
+    function startWatchingGame(boardId, whitePlayerId, blackPlayerId) {
+      const st = boardsState[boardId];
+      if(!st) return;
+      
+      stopWatching(boardId); // teardown previous
+      st.whitePlayer = whitePlayerId;
+      st.blackPlayer = blackPlayerId;
+      st.watchedClientId = `${whitePlayerId}|${blackPlayerId}`;
+      st.watchMode = WATCH_MODES.SINGLE;
+      
+      // Update UI
+      updateBoardLabel(boardId);
+      addNotification(boardId, `Watching game: ${whitePlayerId} (White) vs ${blackPlayerId} (Black)`);
+      
+      // Reset game state
+      try{ st.game = new Chess(); } catch(e){ st.game = null; }
+      if(st.boardObj) st.boardObj.position('start');
+      updateNotation(boardId);
+
+      // Listen to both players' moves
+      st.listeners = {};
+      
+      // Function to handle moves from either player
+      const handlePlayerMove = (playerId, moveData) => {
+        if (!moveData) return;
+        
+        // Extract the move
+        const candidate = moveData.payload || moveData;
+        if (candidate && (candidate.move || candidate.fen)) {
+          // Apply the move to our local game
+          normalizeAndApply(boardId, candidate);
+        }
+      };
+
+      // Watch white player
+      const whiteMovesRef = db.ref(`moves/${whitePlayerId}`);
+      const onWhiteMove = snap => {
+        const m = snap.val();
+        if (!m || m.by === MASTER_ID) return;
+        handlePlayerMove(whitePlayerId, m);
+      };
+      whiteMovesRef.on('child_added', onWhiteMove);
+      st.listeners[`white_${whitePlayerId}`] = { ref: whiteMovesRef, handlers: { child_added: onWhiteMove } };
+
+      // Watch black player
+      const blackMovesRef = db.ref(`moves/${blackPlayerId}`);
+      const onBlackMove = snap => {
+        const m = snap.val();
+        if (!m || m.by === MASTER_ID) return;
+        handlePlayerMove(blackPlayerId, m);
+      };
+      blackMovesRef.on('child_added', onBlackMove);
+      st.listeners[`black_${blackPlayerId}`] = { ref: blackMovesRef, handlers: { child_added: onBlackMove } };
+
+      // Also watch their game states
+      [whitePlayerId, blackPlayerId].forEach(playerId => {
+        CANDIDATE_PATHS.forEach(p => {
+          const path = p ? `games/${playerId}/${p}` : `games/${playerId}`;
+          const ref = db.ref(path);
+          
+          const onValue = snap => {
+            const v = snap.val();
+            if(!v) return;
+            normalizeAndApply(boardId, v);
+          };
+          ref.on('value', onValue);
+          st.listeners[`game_${playerId}_${p}`] = { ref, handlers: { value: onValue } };
+        });
+      });
+
+      // Load initial moves from both players
+      try{
+        const loadPlayerMoves = (playerId) => {
+          const movesRef = db.ref(`games/${playerId}/moves`);
+          movesRef.limitToLast(500).once('value').then(snap => {
+            if(!snap.exists()) return;
+            const ordered = {};
+            snap.forEach(child => ordered[child.key] = child.val());
+            normalizeAndApply(boardId, { moves: ordered, player: playerId });
+          }).catch(()=>{});
+        };
+        
+        loadPlayerMoves(whitePlayerId);
+        setTimeout(() => loadPlayerMoves(blackPlayerId), 500);
+      }catch(e){}
+
+      // Start engine if not running
+      if(!st.engineRunning) {
+        setTimeout(() => toggleEngine(boardId), 1000);
+      }
+    }
+
     function stopWatching(boardId){
       const st = boardsState[boardId];
       if(!st) return;
@@ -314,7 +739,9 @@
       
       st.listeners = {};
       st.watchedClientId = null;
-      refreshBadge(boardId);
+      st.whitePlayer = null;
+      st.blackPlayer = null;
+      updateBoardLabel(boardId);
       addNotification(boardId, 'Stopped watching');
       clearNotation(boardId);
       
@@ -326,11 +753,9 @@
       // Update UI
       const card = document.querySelector(`.board-card[data-student-id="${boardId}"]`);
       if (card) {
-        const stopWatchBtn = card.querySelector(`#stop-watch-${boardId}`);
-        const spectateBtn = card.querySelector(`#master-spectate-${boardId}`);
-        if (stopWatchBtn && spectateBtn) {
-          stopWatchBtn.style.display = 'none';
-          spectateBtn.style.display = 'inline-block';
+        const playerSelect = card.querySelector(`.player-select[data-sid="${boardId}"]`);
+        if (playerSelect) {
+          playerSelect.value = '';
         }
       }
     }
@@ -415,12 +840,14 @@
                 try {
                   st.game.move({ from, to, promotion: prom || undefined });
                 } catch(e) {}
+                updateNotation(boardId);
               }
             }
           } else if(typeof mv === 'object' && mv.from && mv.to){
             if(st.game && typeof st.game.move === 'function') {
               try {
                 st.game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined });
+                updateNotation(boardId);
               } catch(e) {}
             }
           }
@@ -430,8 +857,6 @@
         if(pos && st.boardObj && typeof st.boardObj.position === 'function'){
           st.boardObj.position(pos);
         }
-        
-        updateNotation(boardId);
         
         // Trigger engine analysis if running
         if(st.engineRunning) {
@@ -1371,210 +1796,6 @@ self.onmessage = function(e) {
       st.arrowSvg.innerHTML = '';
     }
 
-    // ---------- UI HELPER FUNCTIONS ----------
-    function createCard(student, pieceTheme, index){
-      const card = document.createElement('div'); 
-      card.className = 'board-card'; 
-      card.dataset.studentId = student.id;
-
-      const label = document.createElement('div'); 
-      label.className = 'student-label';
-      label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="path-holder" style="margin-left:8px;font-size:11px;color:#666"></span>`;
-      card.appendChild(label);
-
-      const top = document.createElement('div'); 
-      top.className = 'top-strip';
-      top.innerHTML = `<div class="controls">
-        <span class="label-small" style="margin-right:6px;">Size</span>
-        <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
-        <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
-        <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}" style="min-width:180px;">
-          <option value="">View students</option>
-        </select>
-      </div>`;
-      card.appendChild(top);
-
-      const boardInnerWrap = document.createElement('div'); 
-      boardInnerWrap.className = 'board-inner';
-      const boardHolder = document.createElement('div'); 
-      boardHolder.className = 'board-holder';
-      
-      // Add arrow overlay
-      const arrowOverlay = document.createElement('div');
-      arrowOverlay.className = 'arrow-overlay';
-      arrowOverlay.id = 'arrows_' + student.id;
-      
-      const boardDiv = document.createElement('div'); 
-      boardDiv.id = 'board_' + student.id;
-      
-      boardHolder.appendChild(boardDiv);
-      boardHolder.appendChild(arrowOverlay);
-      boardInnerWrap.appendChild(boardHolder); 
-      card.appendChild(boardInnerWrap);
-
-      const notifArea = document.createElement('div'); 
-      notifArea.className = 'notif-area';
-      notifArea.innerHTML = `
-        <div class="notifications" id="notif_${student.id}"></div>
-        <div class="notation" id="notation_${student.id}">No moves.</div>
-      `;
-      card.appendChild(notifArea);
-
-      // Engine analysis panel
-      const enginePanel = document.createElement('div');
-      enginePanel.className = 'engine-panel';
-      enginePanel.innerHTML = `
-        <button id="engine-toggle-${student.id}" class="engine-btn">Engine: OFF</button>
-        <span id="engine-version-${student.id}" class="version-display">None</span>
-        <span style="font-size:12px;">Depth:</span>
-        <select id="depth-select-${student.id}" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid #ccc;">
-          <option value="10">10</option>
-          <option value="12">12</option>
-          <option value="15" selected>15</option>
-          <option value="18">18</option>
-          <option value="20">20</option>
-        </select>
-        <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
-        <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
-        <span id="variation-${student.id}" class="variation-moves"></span>
-        <span id="engine-status-${student.id}" class="engine-status">Engine off</span>
-      `;
-      card.appendChild(enginePanel);
-
-      // Real-time analysis grid
-      const analysisGrid = document.createElement('div');
-      analysisGrid.className = 'analysis-grid';
-      analysisGrid.id = `analysis-grid-${student.id}`;
-      
-      analysisGrid.innerHTML = `
-        <div class="white-analysis" style="padding: 8px; background: white; border-radius: 4px;">
-          <div style="font-weight: bold; margin-bottom: 6px; color: #374151;">White Analysis</div>
-          <div id="white-stats-${student.id}">
-            <div>Accuracy: --%</div>
-            <div>Avg CPL: --</div>
-            <div>Blunders: 0</div>
-            <div>Mistakes: 0</div>
-            <div>Inaccuracies: 0</div>
-          </div>
-        </div>
-        <div class="black-analysis" style="padding: 8px; background: #1f2937; border-radius: 4px; color: white;">
-          <div style="font-weight: bold; margin-bottom: 6px; color: #f3f4f6;">Black Analysis</div>
-          <div id="black-stats-${student.id}">
-            <div>Accuracy: --%</div>
-            <div>Avg CPL: --</div>
-            <div>Blunders: 0</div>
-            <div>Mistakes: 0</div>
-            <div>Inaccuracies: 0</div>
-          </div>
-        </div>
-        <div class="move-history" style="grid-column: span 2; padding: 8px; background: white; border-radius: 4px; border: 1px solid #e5e7eb;">
-          <div style="font-weight: bold; margin-bottom: 6px; color: #374151;">Move-by-Move Analysis</div>
-          <div id="move-history-${student.id}" style="max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 10px;">
-            <div style="display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6;">
-              <div>Move</div>
-              <div>Player</div>
-              <div>Move</div>
-              <div>CPL</div>
-              <div>Type</div>
-            </div>
-          </div>
-        </div>
-      `;
-      card.appendChild(analysisGrid);
-
-      // Add toggle button for analysis grid
-      const toggleAnalysisBtn = document.createElement('button');
-      toggleAnalysisBtn.textContent = 'Show Analysis';
-      toggleAnalysisBtn.className = 'engine-btn analysis-toggle-btn';
-      toggleAnalysisBtn.addEventListener('click', () => {
-        const grid = document.getElementById(`analysis-grid-${student.id}`);
-        if (grid.style.display === 'grid') {
-          grid.style.display = 'none';
-          toggleAnalysisBtn.textContent = 'Show Analysis';
-        } else {
-          grid.style.display = 'grid';
-          toggleAnalysisBtn.textContent = 'Hide Analysis';
-          updateAnalysisGrid(student.id);
-        }
-      });
-      enginePanel.appendChild(toggleAnalysisBtn);
-
-      const defaultSize = (index < 2) ? 570 : 360;
-      boardsState[student.id] = {
-        size: defaultSize,
-        flip: false,
-        watchedClientId: null,
-        listeners: {},
-        boardObj: null,
-        game: null,
-        pieceTheme,
-        // Engine properties
-        engineRunning: false,
-        analysisDepth: 15,
-        evalScore: 0,
-        bestMove: null,
-        bestMoveUCI: null,
-        pvMoves: [],
-        previousEvalScore: 0,
-        analysisInterval: null,
-        arrowSvg: null,
-        moveQualityHistory: []
-      };
-
-      // Event listeners
-      const sizeSlider = top.querySelector('.size-slider');
-      sizeSlider.value = defaultSize;
-      sizeSlider.addEventListener('input', e => {
-        const px = Number(e.target.value);
-        boardsState[student.id].size = px;
-        setBoardSize(student.id, px);
-      });
-      
-      top.querySelector('.flip-btn').addEventListener('click', () => {
-        const st = boardsState[student.id];
-        st.flip = !st.flip;
-        if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
-        if (st.bestMoveUCI) {
-          setTimeout(() => drawBestMoveArrow(student.id, st.bestMoveUCI), 100);
-        }
-      });
-
-      const playerSelect = top.querySelector('.player-select');
-      playerSelect.addEventListener('change', e => {
-        const client = e.target.value || null;
-        if(!client) {
-          stopWatching(student.id);
-        } else {
-          startWatching(student.id, client);
-        }
-      });
-
-      // Engine event listeners
-      const engineToggleBtn = enginePanel.querySelector(`#engine-toggle-${student.id}`);
-      const depthSelect = enginePanel.querySelector(`#depth-select-${student.id}`);
-
-      engineToggleBtn.addEventListener('click', () => {
-        toggleEngine(student.id);
-      });
-
-      depthSelect.addEventListener('change', (e) => {
-        const st = boardsState[student.id];
-        if(st) {
-          st.analysisDepth = parseInt(e.target.value);
-          if (st.engineRunning) {
-            setTimeout(() => {
-              if (st.game) {
-                const fen = st.game.fen();
-                StockfishManager.analyzePosition(student.id, fen, st.analysisDepth);
-              }
-            }, 200);
-          }
-        }
-      });
-
-      return card;
-    }
-
     function initEngineAndBoard(studentId){
       const st = boardsState[studentId];
       if(!st) return;
@@ -1595,6 +1816,7 @@ self.onmessage = function(e) {
       }
       setBoardSize(studentId, st.size);
       initArrowOverlay(studentId);
+      updateWatchModeButtons(studentId);
     }
 
     function setBoardSize(boardId, px){
@@ -1641,37 +1863,93 @@ self.onmessage = function(e) {
       if(!sel) return;
       const prev = sel.value;
       sel.innerHTML = '';
-      const title = document.createElement('option'); title.value=''; title.textContent='View students'; sel.appendChild(title);
+      const title = document.createElement('option'); title.value=''; title.textContent='Select student or game'; sel.appendChild(title);
 
       const onlineIds = Object.keys(onlineMap).filter(id => id !== MASTER_ID);
       if(onlineIds.length === 0){
-        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online'; sel.appendChild(none); sel.value=''; return;
+        const none = document.createElement('option'); none.value=''; none.disabled=true; none.textContent='No online students'; sel.appendChild(none); sel.value=''; return;
       }
       
+      // First, add individual students
       onlineIds.forEach(id => { 
         const opt = document.createElement('option'); 
         opt.value = id; 
         opt.textContent = `${onlineMap[id].email} (${id.slice(0,6)})`; 
         sel.appendChild(opt); 
       });
+      
+      // Add separator
+      const separator = document.createElement('option');
+      separator.disabled = true;
+      separator.textContent = '───────── GAMES ─────────';
+      sel.appendChild(separator);
+      
+      // Create game pairs (all possible combinations of online students)
+      for(let i = 0; i < onlineIds.length; i++) {
+        for(let j = i + 1; j < onlineIds.length; j++) {
+          const whiteId = onlineIds[i];
+          const blackId = onlineIds[j];
+          const whiteName = onlineMap[whiteId]?.email || whiteId;
+          const blackName = onlineMap[blackId]?.email || blackId;
+          
+          const gameOpt = document.createElement('option');
+          gameOpt.value = `${whiteId}|${blackId}`;
+          gameOpt.textContent = `🎲 ${whiteName} (W) vs ${blackName} (B)`;
+          sel.appendChild(gameOpt);
+        }
+      }
 
-      const prefer = st.watchedClientId || prev;
-      if(prefer && Array.from(sel.options).some(o => o.value === prefer)) sel.value = prefer; else sel.value = '';
+      // Try to preserve selection
+      if(prev && Array.from(sel.options).some(o => o.value === prev)) {
+        sel.value = prev;
+      } else {
+        sel.value = '';
+      }
+    }
+
+    function updateBoardLabel(boardId){
+      const st = boardsState[boardId];
+      if(!st) return;
+      
+      const label = document.getElementById(`label-${boardId}`);
+      const badgeHolder = label.querySelector('.badge-holder');
+      const gameInfo = document.getElementById(`game-info-${boardId}`);
+      
+      badgeHolder.innerHTML = '';
+      gameInfo.textContent = '';
+      
+      if(!st.watchedClientId) return;
+      
+      // Create online/offline badge
+      const span = document.createElement('span');
+      span.className = st.whitePlayer && onlineMap[st.whitePlayer] && st.blackPlayer && onlineMap[st.blackPlayer] 
+        ? 'online-badge' 
+        : 'offline-badge';
+      span.textContent = st.whitePlayer && onlineMap[st.whitePlayer] && st.blackPlayer && onlineMap[st.blackPlayer] 
+        ? 'online' 
+        : 'offline';
+      badgeHolder.appendChild(span);
+      
+      // Update game info
+      if(st.whitePlayer && st.blackPlayer) {
+        const whiteName = onlineMap[st.whitePlayer]?.email || st.whitePlayer;
+        const blackName = onlineMap[st.blackPlayer]?.email || st.blackPlayer;
+        gameInfo.innerHTML = `
+          <span class="player-badge white">${whiteName}</span> 
+          vs 
+          <span class="player-badge black">${blackName}</span>
+        `;
+      } else if(st.whitePlayer) {
+        const playerName = onlineMap[st.whitePlayer]?.email || st.whitePlayer;
+        gameInfo.innerHTML = `<span class="player-badge white">${playerName} (White)</span>`;
+      } else if(st.blackPlayer) {
+        const playerName = onlineMap[st.blackPlayer]?.email || st.blackPlayer;
+        gameInfo.innerHTML = `<span class="player-badge black">${playerName} (Black)</span>`;
+      }
     }
 
     function refreshBadge(boardId){
-      const st = boardsState[boardId];
-      const card = Array.from(document.getElementsByClassName('board-card')).find(c => c.dataset.studentId === boardId);
-      if(!card) return;
-      const badgeHolder = card.querySelector('.badge-holder');
-      const pathHolder = card.querySelector('.path-holder');
-      badgeHolder.innerHTML = '';
-      pathHolder.textContent = st.watchedClientId ? `moves/${st.watchedClientId}` : '';
-      if(!st.watchedClientId) return;
-      const span = document.createElement('span');
-      span.className = onlineMap[st.watchedClientId] ? 'online-badge' : 'offline-badge';
-      span.textContent = onlineMap[st.watchedClientId] ? 'online' : 'offline';
-      badgeHolder.appendChild(span);
+      updateBoardLabel(boardId);
     }
 
     function addNotification(boardId, msg){
