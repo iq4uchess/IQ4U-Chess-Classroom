@@ -5,117 +5,521 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>Master Dashboard - IQ 4U Academy</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/favicon-16x16.png">
+  
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     :root{ --card-gap:12px; --card-bg:#fff; --card-border:#ddd; --control-height:44px; font-family:Arial,Helvetica,sans-serif; color:#222;}
     html,body{ height:100%; margin:0; background:#f5f7fb; }
     .container{ margin:16px auto; max-width:1200px; padding-bottom:28px; }
-    h1{ margin:0 0 12px 0; font-size:20px; }
-    .boards-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(500px, 1fr)); gap:var(--card-gap); }
-    .board-card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px; min-height:260px; box-shadow:0 1px 3px rgba(20,30,40,0.05); }
-    .top-strip{ display:flex; align-items:center; justify-content:flex-start; gap:8px; height:var(--control-height); }
-    .student-label{ font-weight:600; text-align:center; display:flex; align-items:center; gap:8px; justify-content:center; }
-    .controls{ display:flex; gap:8px; align-items:center; width:100%; flex-wrap:wrap; }
-    .controls select, .controls button, .controls input[type=range]{ height:32px; padding:4px 8px; border-radius:6px; border:1px solid #ccc; background:#fff; }
-    .board-inner{ width:100%; display:flex; justify-content:center; }
-    .board-holder{ box-sizing:border-box; border-radius:6px; overflow:hidden; background:#fff; position: relative; }
-    .debug{ font-family:monospace; font-size:12px; background:#fbfcfd; border:1px solid #eef2f6; padding:6px; border-radius:6px; max-height:80px; overflow:auto; display:none; }
     
-    /* Arrow overlay */
-    .arrow-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+    /* Header styles */
+    .header-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding: 0 16px;
+    }
     
-    .notif-area{ display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; width:100%; }
-    .notifications { flex: 1 1 260px; min-width:160px; max-width:460px; background:#fff; border:1px solid #eef2f6; padding:8px; border-radius:6px; font-size:13px; color:#333; box-sizing:border-box; max-height:88px; overflow:auto; }
-    .notation { flex:1 1 200px; min-width:160px; max-width:999px; background:#fbfdff; border:1px solid #eef2ff; padding:8px; border-radius:6px; font-family:monospace; font-size:13px; white-space:normal; display:flex; flex-wrap:wrap; gap:8px; align-items:center; box-sizing:border-box; min-height:44px; }
-    .notation .move { padding:4px 8px; border-radius:6px; background:transparent; }
-    .footer-actions{ display:flex; justify-content:flex-end; margin-top:18px; gap:8px; }
-    .btn-logout{ background:#ef4444; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
     
-    /* Engine controls styling */
-    .engine-panel { margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; padding:8px; background:#f8f9fa; border-radius:6px; border:1px solid #eef2f6; }
-    .engine-btn { padding:6px 12px; border-radius:6px; background:#3b82f6; color:#fff; border:none; cursor:pointer; font-size:12px; }
-    .engine-btn-stop { background:#ef4444; }
-    .engine-btn-next { background:#10b981; }
-    .engine-status { font-size:12px; color:#666; padding:4px 8px; background:#fff; border-radius:4px; border:1px solid #eef2f6; min-width:120px; }
-    .eval-display { font-size:12px; font-weight:bold; padding:4px 8px; border-radius:4px; }
-    .eval-positive { background: #d1fae5; color: #065f46; }
-    .eval-negative { background: #fee2e2; color: #991b1b; }
-    .eval-neutral { background: #e5e7eb; color: #4b5563; }
+    h1{ margin:0; font-size:20px; display:flex; align-items:center; gap:8px; }
+    .logo-img { height: 32px; width: 32px; }
     
-    /* Best move display */
-    .best-move-display { font-size:13px; padding:4px 8px; background:#f0f9ff; border-radius:4px; border:1px solid #e0f2fe; margin-left:8px; }
-    .variation-moves { font-size:11px; color:#666; margin-left:8px; }
-    .move-san { display:inline-block; padding:2px 6px; margin:0 2px; background:#f3f4f6; border-radius:3px; }
+    /* Connection status in header */
+    .connection-status-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 20px;
+    }
     
-    /* Move quality display */
-    .move-quality-display { font-size:11px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-left:8px; }
+    .connection-status-text {
+      font-size: 12px;
+      font-weight: 600;
+    }
     
-    /* Analysis Grid Styles */
-    .analysis-grid { margin-top: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 11px; display: none; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .analysis-toggle-btn { margin-top: 8px; font-size: 11px; padding: 4px 8px; }
+    .connection-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
     
-    /* Connection status */
-    .connection-status {
-      position: fixed;
+    .connection-dot.connected {
+      background-color: #10b981; /* Green */
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+      animation: pulse 2s infinite;
+    }
+    
+    .connection-dot.disconnected {
+      background-color: #ef4444; /* Red */
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    }
+    
+    .connection-dot.connecting {
+      background-color: #f59e0b; /* Yellow */
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+    
+    /* Logout button at top right */
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    .btn-logout{ 
+      background:#ef4444; 
+      color:#fff; 
+      border:none; 
+      padding:8px 16px; 
+      border-radius:8px; 
+      cursor:pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background-color 0.2s;
+    }
+    .btn-logout:hover { background:#dc2626; }
+    
+    .boards-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(500px, 1fr)); gap:var(--card-gap); padding: 0 16px; }
+    .board-card{ 
+      background:var(--card-bg); 
+      border:1px solid var(--card-border); 
+      border-radius:8px; 
+      padding:10px; 
+      display:flex; 
+      flex-direction:column; 
+      gap:10px; 
+      min-height:260px; 
+      box-shadow:0 1px 3px rgba(20,30,40,0.05);
+      position: relative;
+    }
+    
+    /* Student label at top */
+    .student-label{ 
+      font-weight:600; 
+      text-align:center; 
+      display:flex; 
+      align-items:center; 
+      gap:8px; 
+      justify-content:center;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+    
+    /* Control strip - positioned at top right of board */
+    .control-strip {
+      position: absolute;
       top: 10px;
       right: 10px;
-      padding: 8px 12px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.95);
       border-radius: 6px;
+      padding: 6px 8px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 20;
+      max-width: 300px;
+      min-width: 200px;
+    }
+    
+    .control-strip label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #4b5563;
+      white-space: nowrap;
+    }
+    
+    .control-strip select {
+      height: 28px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #d1d5db;
+      background: #fff;
       font-size: 12px;
-      z-index: 1000;
-      background: #fef3c7;
-      border: 1px solid #fbbf24;
-      color: #92400e;
+      min-width: 160px;
+      max-width: 200px;
     }
-    .connection-status.connected {
-      background: #d1fae5;
-      border-color: #10b981;
-      color: #065f46;
+    
+    .top-strip{ 
+      display:flex; 
+      align-items:center; 
+      justify-content:flex-start; 
+      gap:8px; 
+      height:var(--control-height);
+      margin-top: 10px;
     }
-    .connection-status.disconnected {
-      background: #fee2e2;
-      border-color: #ef4444;
-      color: #991b1b;
+    
+    .controls{ 
+      display:flex; 
+      gap:8px; 
+      align-items:center; 
+      width:100%; 
+      flex-wrap:wrap;
+    }
+    
+    .controls button, .controls input[type=range]{ 
+      height:32px; 
+      padding:4px 8px; 
+      border-radius:6px; 
+      border:1px solid #ccc; 
+      background:#fff; 
+    }
+    
+    .board-inner{ 
+      width:100%; 
+      display:flex; 
+      justify-content:center;
+      margin-top: 40px; /* Add space for control strip */
+    }
+    
+    .board-holder{ 
+      box-sizing:border-box; 
+      border-radius:6px; 
+      overflow:hidden; 
+      background:#fff; 
+      position: relative;
+      border: 1px solid #ddd;
+    }
+    
+    /* Board visualization - temporary */
+    .board-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f8f9fa;
+      color: #6c757d;
+      font-size: 14px;
+    }
+    
+    .debug{ 
+      font-family:monospace; 
+      font-size:12px; 
+      background:#fbfcfd; 
+      border:1px solid #eef2f6; 
+      padding:6px; 
+      border-radius:6px; 
+      max-height:80px; 
+      overflow:auto; 
+      display:none; 
+    }
+    
+    /* Arrow overlay */
+    .arrow-overlay { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%; 
+      pointer-events: none; 
+      z-index: 10; 
+    }
+    
+    .notif-area{ 
+      display:flex; 
+      gap:12px; 
+      align-items:flex-start; 
+      flex-wrap:wrap; 
+      width:100%; 
+      margin-top: 10px;
+    }
+    
+    .notifications { 
+      flex: 1 1 260px; 
+      min-width:160px; 
+      max-width:460px; 
+      background:#fff; 
+      border:1px solid #eef2f6; 
+      padding:8px; 
+      border-radius:6px; 
+      font-size:13px; 
+      color:#333; 
+      box-sizing:border-box; 
+      max-height:88px; 
+      overflow:auto; 
+    }
+    
+    .notation { 
+      flex:1 1 200px; 
+      min-width:160px; 
+      max-width:999px; 
+      background:#fbfdff; 
+      border:1px solid #eef2ff; 
+      padding:8px; 
+      border-radius:6px; 
+      font-family:monospace; 
+      font-size:13px; 
+      white-space:normal; 
+      display:flex; 
+      flex-wrap:wrap; 
+      gap:8px; 
+      align-items:center; 
+      box-sizing:border-box; 
+      min-height:44px; 
+    }
+    
+    .notation .move { 
+      padding:4px 8px; 
+      border-radius:6px; 
+      background:transparent; 
+    }
+    
+    /* Engine controls styling */
+    .engine-panel { 
+      margin-top: 10px; 
+      display:flex; 
+      gap:8px; 
+      align-items:center; 
+      flex-wrap:wrap; 
+      justify-content:flex-start; 
+      padding:8px; 
+      background:#f8f9fa; 
+      border-radius:6px; 
+      border:1px solid #eef2f6; 
+    }
+    
+    .engine-btn { 
+      padding:6px 12px; 
+      border-radius:6px; 
+      background:#3b82f6; 
+      color:#fff; 
+      border:none; 
+      cursor:pointer; 
+      font-size:12px; 
+    }
+    
+    .engine-btn-stop { 
+      background:#ef4444; 
+    }
+    
+    .engine-btn-next { 
+      background:#10b981; 
+    }
+    
+    .engine-status { 
+      font-size:12px; 
+      color:#666; 
+      padding:4px 8px; 
+      background:#fff; 
+      border-radius:4px; 
+      border:1px solid #eef2f6; 
+      min-width:120px; 
+    }
+    
+    .eval-display { 
+      font-size:12px; 
+      font-weight:bold; 
+      padding:4px 8px; 
+      border-radius:4px; 
+    }
+    
+    .eval-positive { 
+      background: #d1fae5; 
+      color: #065f46; 
+    }
+    
+    .eval-negative { 
+      background: #fee2e2; 
+      color: #991b1b; 
+    }
+    
+    .eval-neutral { 
+      background: #e5e7eb; 
+      color: #4b5563; 
+    }
+    
+    /* Best move display */
+    .best-move-display { 
+      font-size:13px; 
+      padding:4px 8px; 
+      background:#f0f9ff; 
+      border-radius:4px; 
+      border:1px solid #e0f2fe; 
+      margin-left:8px; 
+    }
+    
+    .variation-moves { 
+      font-size:11px; 
+      color:#666; 
+      margin-left:8px; 
+    }
+    
+    .move-san { 
+      display:inline-block; 
+      padding:2px 6px; 
+      margin:0 2px; 
+      background:#f3f4f6; 
+      border-radius:3px; 
+    }
+    
+    /* Move quality display */
+    .move-quality-display { 
+      font-size:11px; 
+      font-weight:bold; 
+      padding:2px 6px; 
+      border-radius:4px; 
+      margin-left:8px; 
+    }
+    
+    /* Analysis Grid Styles */
+    .analysis-grid { 
+      margin-top: 12px; 
+      background: #f8fafc; 
+      border: 1px solid #e2e8f0; 
+      border-radius: 6px; 
+      padding: 10px; 
+      font-size: 11px; 
+      display: none; 
+      grid-template-columns: 1fr 1fr; 
+      gap: 8px; 
+    }
+    
+    .analysis-toggle-btn { 
+      margin-top: 8px; 
+      font-size: 11px; 
+      padding: 4px 8px; 
+    }
+    
+    /* Old connection status (removed from fixed position) */
+    .connection-status {
+      display: none; /* We'll use the header version instead */
     }
     
     /* Enhanced arrow styles */
     .arrow-svg line { stroke-linecap: round; }
     
     /* Multi-watch styling */
-    .multi-watch-controls { display:flex; gap:6px; align-items:center; margin-left:auto; }
-    .watch-mode-label { font-size:11px; color:#666; }
-    .watch-mode-btn { padding:4px 8px; font-size:11px; border-radius:4px; background:#f3f4f6; border:1px solid #d1d5db; cursor:pointer; }
-    .watch-mode-btn.active { background:#3b82f6; color:white; border-color:#2563eb; }
-    .player-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:4px; font-weight:bold; }
-    .player-badge.white { background:#f3f4f6; color:#111827; }
-    .player-badge.black { background:#1f2937; color:#f9fafb; }
-    .game-info { font-size:12px; color:#666; margin-left:12px; }
+    .multi-watch-controls { 
+      display:flex; 
+      gap:6px; 
+      align-items:center; 
+      margin-left:auto; 
+    }
+    
+    .watch-mode-label { 
+      font-size:11px; 
+      color:#666; 
+    }
+    
+    .watch-mode-btn { 
+      padding:4px 8px; 
+      font-size:11px; 
+      border-radius:4px; 
+      background:#f3f4f6; 
+      border:1px solid #d1d5db; 
+      cursor:pointer; 
+    }
+    
+    .watch-mode-btn.active { 
+      background:#3b82f6; 
+      color:white; 
+      border-color:#2563eb; 
+    }
+    
+    .player-badge { 
+      display:inline-block; 
+      padding:2px 6px; 
+      border-radius:4px; 
+      font-size:11px; 
+      margin-left:4px; 
+      font-weight:bold; 
+    }
+    
+    .player-badge.white { 
+      background:#f3f4f6; 
+      color:#111827; 
+    }
+    
+    .player-badge.black { 
+      background:#1f2937; 
+      color:#f9fafb; 
+    }
+    
+    .game-info { 
+      font-size:12px; 
+      color:#666; 
+      margin-left:12px; 
+    }
+    
+    /* Footer actions removed - logout is in header */
+    .footer-actions{ display:none; }
     
     @media(max-width:900px){ 
       .boards-grid{ grid-template-columns:1fr; padding:0 12px; } 
       .notif-area{ flex-direction:column; } 
       .analysis-grid { grid-template-columns: 1fr; } 
       .controls { flex-wrap: wrap; }
+      .control-strip {
+        position: relative;
+        top: auto;
+        right: auto;
+        margin: 10px auto;
+        max-width: 90%;
+      }
+      .board-inner {
+        margin-top: 10px;
+      }
+      .header-container {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .header-left {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .header-actions {
+        align-self: flex-end;
+        width: 100%;
+        justify-content: flex-end;
+      }
+      .connection-status-container {
+        margin-left: 0;
+      }
     }
   </style>
 </head>
 <body>
-  <!-- Connection Status Indicator -->
-  <div id="connectionStatus" class="connection-status">Connecting to Firebase...</div>
-
   <div class="container">
-    <h1>Master Dashboard - IQ 4U Academy</h1>
+    <!-- Header with logo, connection status, and logout -->
+    <div class="header-container">
+      <div class="header-left">
+        <img src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/android-chrome-192x192.png" alt="IQ4U Logo" class="logo-img">
+        <h1>Master Dashboard - IQ 4U Academy</h1>
+        
+        <!-- Firebase Connection Status in Header -->
+        <div class="connection-status-container">
+          <div class="connection-dot connecting" id="firebaseConnectionDot"></div>
+          <span class="connection-status-text" id="firebaseConnectionText">Connecting...</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="globalLogout" class="btn-logout">Logout</button>
+      </div>
+    </div>
 
     <div class="boards-grid" id="boardsGrid"></div>
 
-    <div class="footer-actions">
-      <button id="globalLogout" class="btn-logout">Logout</button>
-    </div>
+    <!-- Footer actions removed - logout is now in header -->
   </div>
 
   <!-- jQuery (required by chessboard.js) -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <!-- chessboard.js -->
+  <!-- FIXED: Correct chessboard.js URL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
   <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
@@ -137,8 +541,10 @@
     try{ 
       firebase.initializeApp(FIREBASE_CONFIG); 
       console.log('✅ Firebase initialized');
+      updateFirebaseConnectionStatus(true, 'Connected');
     } catch(e){ 
       console.error('❌ Firebase init failed:', e);
+      updateFirebaseConnectionStatus(false, 'Connection Failed');
     }
     
     const db = firebase.database();
@@ -168,6 +574,53 @@
       MULTI_WHITE: 'multi_white',
       MULTI_BLACK: 'multi_black'
     };
+
+    // ---------- FIREBASE CONNECTION STATUS FUNCTIONS ----------
+    function updateFirebaseConnectionStatus(isConnected, statusText) {
+      const dotElement = document.getElementById('firebaseConnectionDot');
+      const textElement = document.getElementById('firebaseConnectionText');
+      
+      if (!dotElement || !textElement) return;
+      
+      if (isConnected) {
+        // Connected - Green
+        dotElement.className = 'connection-dot connected';
+        textElement.textContent = statusText || 'Connected';
+        textElement.style.color = '#10b981';
+      } else {
+        if (statusText === 'Connecting...') {
+          // Connecting - Yellow
+          dotElement.className = 'connection-dot connecting';
+          textElement.textContent = statusText;
+          textElement.style.color = '#f59e0b';
+        } else {
+          // Disconnected - Red
+          dotElement.className = 'connection-dot disconnected';
+          textElement.textContent = statusText || 'Disconnected';
+          textElement.style.color = '#ef4444';
+        }
+      }
+    }
+
+    // ---------- CONNECTION STATUS LISTENER ----------
+    function setupFirebaseConnectionListener() {
+      const connectedRef = db.ref('.info/connected');
+      
+      connectedRef.on('value', function(snap) {
+        if (snap.val() === true) {
+          console.log('✅ Firebase connected');
+          updateFirebaseConnectionStatus(true, 'Connected');
+        } else {
+          console.log('❌ Firebase disconnected');
+          updateFirebaseConnectionStatus(false, 'Disconnected');
+        }
+      });
+      
+      // Also listen for connection errors
+      db.ref('.info/connected').onDisconnect().update({
+        status: 'offline'
+      });
+    }
 
     // ---------- ensure chess.js loaded ----------
     const CHESS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/libs/chess.min.js';
@@ -203,12 +656,25 @@
       card.className = 'board-card'; 
       card.dataset.studentId = student.id;
 
+      // Student label
       const label = document.createElement('div'); 
       label.className = 'student-label';
       label.id = `label-${student.id}`;
       label.innerHTML = `<span class="label-text">${student.name}</span><span class="badge-holder" style="margin-left:10px"></span><span class="game-info" id="game-info-${student.id}"></span>`;
       card.appendChild(label);
 
+      // Control strip at top right of board
+      const controlStrip = document.createElement('div');
+      controlStrip.className = 'control-strip';
+      controlStrip.innerHTML = `
+        <label for="player-select-${student.id}">Watch:</label>
+        <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}">
+          <option value="">Select student or game</option>
+        </select>
+      `;
+      card.appendChild(controlStrip);
+
+      // Original top strip (moved down)
       const top = document.createElement('div'); 
       top.className = 'top-strip';
       top.innerHTML = `
@@ -216,12 +682,9 @@
           <span class="label-small" style="margin-right:6px;">Size</span>
           <input id="size-slider-${student.id}" name="size-slider" type="range" min="200" max="800" value="" class="size-slider" data-sid="${student.id}">
           <button class="icon flip-btn" data-sid="${student.id}" title="Flip">Flip</button>
-          <select id="player-select-${student.id}" name="player-select" class="player-select" data-sid="${student.id}" style="min-width:180px;">
-            <option value="">Select student or game</option>
-          </select>
         </div>
         <div class="multi-watch-controls">
-          <span class="watch-mode-label">Watch:</span>
+          <span class="watch-mode-label">View:</span>
           <button class="watch-mode-btn watch-single" data-sid="${student.id}" title="Watch complete game">Full Game</button>
           <button class="watch-mode-btn watch-white" data-sid="${student.id}" title="Watch White only">White</button>
           <button class="watch-mode-btn watch-black" data-sid="${student.id}" title="Watch Black only">Black</button>
@@ -241,6 +704,12 @@
       
       const boardDiv = document.createElement('div'); 
       boardDiv.id = 'board_' + student.id;
+      
+      // Add temporary placeholder while chessboard loads
+      const placeholder = document.createElement('div');
+      placeholder.className = 'board-placeholder';
+      placeholder.textContent = 'Loading chessboard...';
+      boardDiv.appendChild(placeholder);
       
       boardHolder.appendChild(boardDiv);
       boardHolder.appendChild(arrowOverlay);
@@ -377,7 +846,7 @@
         }
       });
 
-      const playerSelect = top.querySelector('.player-select');
+      const playerSelect = controlStrip.querySelector('.player-select');
       playerSelect.addEventListener('change', e => {
         const selectedValue = e.target.value;
         if (!selectedValue) {
@@ -451,8 +920,33 @@
       grid.appendChild(card);
     }
 
+    // Wait for jQuery and chessboard.js to load
+    function waitForChessboard() {
+      return new Promise((resolve) => {
+        if (window.Chessboard && window.Chessboard !== 'undefined') {
+          resolve();
+        } else {
+          const checkInterval = setInterval(() => {
+            if (window.Chessboard && window.Chessboard !== 'undefined') {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 100);
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            console.warn('Chessboard.js failed to load, using fallback');
+            resolve();
+          }, 5000);
+        }
+      });
+    }
+
     // wait and then initialize engines & chessboards
     await ensureChess();
+    await waitForChessboard();
+    
     for(const s of STUDENTS){
       initEngineAndBoard(s.id);
     }
@@ -1806,13 +2300,26 @@ self.onmessage = function(e) {
         st.game = null;
       }
       try{
-        st.boardObj = Chessboard('board_' + studentId, {
-          draggable: false,
-          position: 'start',
-          pieceTheme: st.pieceTheme
-        });
+        if (window.Chessboard && window.Chessboard !== 'undefined') {
+          st.boardObj = Chessboard('board_' + studentId, {
+            draggable: false,
+            position: 'start',
+            pieceTheme: st.pieceTheme
+          });
+          console.log(`✅ Chessboard initialized for ${studentId}`);
+        } else {
+          console.error('❌ Chessboard.js not loaded for', studentId);
+          const boardDiv = document.getElementById('board_' + studentId);
+          if (boardDiv) {
+            boardDiv.innerHTML = '<div class="board-placeholder">Chessboard failed to load. Please refresh.</div>';
+          }
+        }
       }catch(e){ 
         console.error('Chessboard init failed', e);
+        const boardDiv = document.getElementById('board_' + studentId);
+        if (boardDiv) {
+          boardDiv.innerHTML = '<div class="board-placeholder">Chessboard error: ' + e.message + '</div>';
+        }
       }
       setBoardSize(studentId, st.size);
       initArrowOverlay(studentId);
@@ -1997,24 +2504,9 @@ self.onmessage = function(e) {
       return card.querySelector('.debug'); 
     }
 
-    // ---------- CONNECTION STATUS ----------
-    const connectedRef = db.ref('.info/connected');
-    connectedRef.on('value', function(snap) {
-      const statusElement = document.getElementById('connectionStatus');
-      if (snap.val() === true) {
-        console.log('✅ Firebase connected');
-        if (statusElement) {
-          statusElement.textContent = 'Connected to Firebase';
-          statusElement.className = 'connection-status connected';
-        }
-      } else {
-        console.log('❌ Firebase disconnected');
-        if (statusElement) {
-          statusElement.textContent = 'Disconnected from Firebase';
-          statusElement.className = 'connection-status disconnected';
-        }
-      }
-    });
+    // ---------- SETUP FIREBASE CONNECTION LISTENER ----------
+    // Call this after Firebase is initialized
+    setupFirebaseConnectionListener();
 
     // ---------- UTILITIES ----------
     document.getElementById('globalLogout').addEventListener('click', () => {
