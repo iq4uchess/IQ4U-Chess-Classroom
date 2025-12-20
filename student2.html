@@ -5,6 +5,63 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IQ4U — Student Puzzle (student2)</title>
+  
+  <!-- FIREBASE AUTH CHECK - ADDED AT THE TOP -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script>
+    // Firebase Configuration - MUST MATCH index.html
+    const firebaseConfig = {
+      apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+      authDomain: "iq4u-chess-classroom.firebaseapp.com",
+      projectId: "iq4u-chess-classroom",
+      storageBucket: "iq4u-chess-classroom.appspot.com",
+      messagingSenderId: "833620718306",
+      appId: "1:833620718306:web:b599bb693d0736fe0da4bb",
+      databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    };
+
+    // Initialize Firebase only if not already initialized
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const auth = firebase.auth();
+    
+    // Enable persistence
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    
+    // Special student UID that can access this page
+    const ALLOWED_STUDENT_UID = "mZBoxKMf5rclm88YAUQoGTnsuEo2";
+    
+    // Check authentication on page load
+    auth.onAuthStateChanged((user) => {
+      if (!user) {
+        // Not logged in, redirect to login
+        console.log("No user authenticated, redirecting to index.html");
+        window.location.href = "index.html";
+      } else {
+        // User is logged in, check if they have the specific UID
+        console.log("User authenticated:", user.uid);
+        
+        // ONLY allow the specific student UID
+        if (user.uid !== ALLOWED_STUDENT_UID) {
+          console.log("User not authorized for puzzle page, redirecting...");
+          window.location.href = "index.html";
+          return;
+        }
+        
+        // Store user info in localStorage for your existing role check
+        localStorage.setItem('role', 'student2');
+        localStorage.setItem('uid', user.uid);
+        
+        // Now continue with your existing page load
+        document.documentElement.style.visibility = 'visible';
+      }
+    });
+
+    // Hide page until authenticated
+    document.documentElement.style.visibility = 'hidden';
+  </script>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
@@ -60,16 +117,35 @@
 
 <body>
 
-<!-- ACCESS CHECK: strict for student2 only -->
+<!-- UPDATED ACCESS CHECK - KEEP EXISTING BUT ADD FIREBASE FALLBACK -->
 <script>
 (function(){
-  const allowedRoles = ['student2'];
-  const role = localStorage.getItem('role');
-  if(!role || allowedRoles.indexOf(role) === -1){
-    try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
-  }
+  // Check if we have Firebase auth first
+  setTimeout(() => {
+    const allowedRoles = ['student2'];
+    const role = localStorage.getItem('role');
+    
+    // Also check if we have the specific UID in localStorage
+    const uid = localStorage.getItem('uid');
+    const ALLOWED_STUDENT_UID = "mZBoxKMf5rclm88YAUQoGTnsuEo2";
+    
+    // Allow if user has proper role OR if they have the specific UID
+    if ((!role || allowedRoles.indexOf(role) === -1) && (!uid || uid !== ALLOWED_STUDENT_UID)) {
+      // Last resort: try to get current Firebase user
+      if (typeof auth !== 'undefined') {
+        auth.onAuthStateChanged((user) => {
+          if (!user || user.uid !== ALLOWED_STUDENT_UID) {
+            try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
+          }
+        });
+      } else {
+        try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
+      }
+    }
+  }, 1000); // Give Firebase auth time to check
 })();
 </script>
+
   <div class="panel">
     <div class="controls" aria-hidden="false">
       <button id="undoBtn">Undo</button>
@@ -181,9 +257,9 @@
   window.game = null;
 
   (function(){
-    // Config
-    const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
-    const LIST_URL = '/IQ4U-Chess-Classroom/assets/puzzles_list.json';
+    // Config - UPDATED PATHS TO USE FULL GITHUB PAGES URL
+    const PIECES_BASE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+    const LIST_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/puzzles_list.json';
 
     // DOM
     const boardEl = document.getElementById('board');
@@ -639,7 +715,7 @@
         const manifest = { entries: [], tactics: {} };
         files.forEach(fn => {
           const key = fn.replace(/\.csv$/i, '').toLowerCase();
-          const fileUrl = '/IQ4U-Chess-Classroom/assets/puzzle/' + fn;
+          const fileUrl = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/puzzle/' + fn;
           manifest.entries.push({ filename: fn, fileUrl, tactic: key });
           manifest.tactics[key] = manifest.tactics[key] || [];
           manifest.tactics[key].push({ filename: fn, fileUrl });
@@ -841,16 +917,33 @@
       }
     }
 
-    undoBtn.addEventListener('click', ()=>{ 
-      if(!window.game) return; 
-      const mv = window.game.undo(); 
-      if(mv){ 
-        if(board) board.position(window.game.fen()); 
-        solutionDisplayed = false;
-        refreshNotation(); 
-        setMsg('Undid move',900); 
-        window.emitFenToMaster();
-      } 
+    // UPDATED LOGOUT FUNCTION WITH FIREBASE SUPPORT
+    logoutBtn.addEventListener('click', ()=>{
+      // Use Firebase logout if available
+      if (typeof auth !== 'undefined') {
+        auth.signOut().then(() => {
+          try{ 
+            localStorage.removeItem('role'); 
+            localStorage.removeItem('username'); 
+            localStorage.removeItem('email');
+            localStorage.removeItem('uid');
+            localStorage.removeItem('selected_mode');
+          }catch(e){}
+          try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) window.firebaseMultiplayer.goOffline(); }catch(e){}
+          window.location.href = "index.html";
+        }).catch((error) => {
+          console.error("Logout error:", error);
+          window.location.href = "index.html";
+        });
+      } else {
+        try{ 
+          localStorage.clear(); 
+          if (window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) {
+            window.firebaseMultiplayer.goOffline();
+          }
+        }catch(e){}
+        window.location.href = "index.html";
+      }
     });
     
     flipBtn.addEventListener('click', ()=>{ if(board) board.flip(); setTimeout(updateOverlaySize,30); });
@@ -868,13 +961,17 @@
       window.emitFenToMaster();
     });
     
-    logoutBtn.onclick=()=>{ 
-      localStorage.clear(); 
-      if (window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) {
-        window.firebaseMultiplayer.goOffline();
-      }
-      location.href='index.html'; 
-    };
+    undoBtn.addEventListener('click', ()=>{ 
+      if(!window.game) return; 
+      const mv = window.game.undo(); 
+      if(mv){ 
+        if(board) board.position(window.game.fen()); 
+        solutionDisplayed = false;
+        refreshNotation(); 
+        setMsg('Undid move',900); 
+        window.emitFenToMaster();
+      } 
+    });
 
     boardSizeRange.addEventListener('input', (e)=> setBoardSize(e.target.value));
     
@@ -950,11 +1047,10 @@
   })();
   </script>
 
-  <!-- FIREBASE - IDENTICAL TO student1.html -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <!-- FIREBASE REALTIME DATABASE INITIALIZATION (for multiplayer functionality) -->
   <script>
   (function(){
+    // Firebase Realtime Database configuration - same as your original
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
@@ -964,9 +1060,17 @@
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb6936fe0da4bb"
     };
-    try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
-
-    (function(){
+    
+    // Load Firebase Database SDK
+    const databaseScript = document.createElement('script');
+    databaseScript.src = 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js';
+    databaseScript.async = true;
+    databaseScript.onload = function() {
+      // Initialize Firebase Realtime Database
+      if (!firebase.apps.length) {
+        firebase.initializeApp(FIREBASE_CONFIG);
+      }
+      
       const db = firebase.database();
       const onlineRef = db.ref('online');
       const gamesRef = db.ref('games');
@@ -991,6 +1095,9 @@
         );
         document.getElementById('multiplayStatus').textContent =
           'Connected as ' + myEmail;
+          
+        // Setup onDisconnect
+        node.onDisconnect().remove();
       }
 
       function goOffline(){
@@ -1000,6 +1107,7 @@
         isSpectated = false;
       }
 
+      // Add event listener for "Join Online" button
       document.getElementById('joinBtnBottom').addEventListener('click', ()=>{
         const email = (document.getElementById('emailInputBottom').value||'').trim();
         if(!email) return alert('Enter username');
@@ -1007,7 +1115,7 @@
       });
 
       /* =========================================================
-         SPECTATE INVITE HANDLER (IDENTICAL TO student1.html)
+         SPECTATE INVITE HANDLER
          ========================================================= */
       db.ref('spectateInvites/'+myId).on('child_added', snap=>{
         const invite = snap.val();
@@ -1020,7 +1128,7 @@
         const currentFen = window.game ? window.game.fen() : 
           'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-        // Send response - IDENTICAL TO student1.html
+        // Send response
         if(invite.fromId){
           const respPath = `spectateResponses/${invite.fromId}/${myId}`;
           
@@ -1046,7 +1154,7 @@
       });
 
       /* =========================================================
-         FIREBASE MULTIPLAYER OBJECT (IDENTICAL TO student1.html)
+         FIREBASE MULTIPLAYER OBJECT
          ========================================================= */
       window.firebaseMultiplayer = {
         emitMove: function(arg){
@@ -1058,7 +1166,7 @@
           });
         },
         emitFen: function(arg){
-          // Write to moves/<myId> path - exactly like student1.html
+          // Write to moves/<myId> path for master spectating
           db.ref('moves/'+myId).push({
             payload: arg,
             by: myId,
@@ -1078,8 +1186,9 @@
           goOnline(saved);
         }
       }, 500);
-
-    })();
+    };
+    
+    document.head.appendChild(databaseScript);
   })();
   </script>
 
