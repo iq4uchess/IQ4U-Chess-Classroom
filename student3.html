@@ -155,16 +155,29 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
-<!-- Stockfish Engine -->
-<script src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js"></script>
+<!-- Stockfish 17.1 with multi-part WASM -->
+<script>
+// Define the Stockfish WASM URLs
+const STOCKFISH_WASM_PARTS = [
+  'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048-part-0.wasm',
+  'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048-part-1.wasm',
+  'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048-part-2.wasm',
+  'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048-part-3.wasm',
+  'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048-part-4.wasm',
+  'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048-part-5.wasm'
+];
+
+// Stockfish 17.1 Worker URL
+const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048.js';
+</script>
 
 <script>
 // GLOBAL GAME INSTANCE - REQUIRED FOR MASTER SPECTATING
 window.game = null;
 
 (function(){
-  // Config
-  const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+  // Config - CORRECTED PIECE PATHS
+  const PIECES_BASE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
   
   // DOM
   const boardEl = document.getElementById('board');
@@ -228,6 +241,9 @@ window.game = null;
 
   // Helpers
   function pieceTheme(piece){ 
+    // Convert piece notation to correct filename
+    // chessboard-js uses format like 'wK', 'bQ', etc.
+    // Our files are named like wK.svg, bQ.svg
     return PIECES_BASE + piece + '.svg'; 
   }
   
@@ -405,8 +421,8 @@ window.game = null;
 
   // Stockfish Engine Functions
   function createStockfishEngine() {
-    // Use the provided Stockfish version
-    const stockfish = new Worker('https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js');
+    // Create Stockfish Worker with the new version
+    const stockfish = new Worker(STOCKFISH_JS_URL);
     
     let onMessageCallback = null;
     
@@ -448,6 +464,10 @@ window.game = null;
     
     // Set skill level (0-20, where 20 is strongest)
     engineObj.postMessage(`setoption name Skill Level value ${engineLevel}`);
+    
+    // Configure WASM loading for better performance
+    engineObj.postMessage('setoption name Use NNUE value true');
+    engineObj.postMessage('setoption name Threads value 2');
     
     // Reduce strength for lower levels
     if (engineLevel < 10) {
@@ -534,9 +554,10 @@ window.game = null;
       
       // Calculate thinking time based on level
       const thinkTime = Math.min(5000, 500 + (engineLevel * 200));
+      const depth = Math.min(22, 12 + Math.floor(engineLevel/2));
       
       // Ask for move with time constraints
-      engine.postMessage(`go depth ${Math.min(20, 10 + Math.floor(engineLevel/2))} movetime ${thinkTime}`);
+      engine.postMessage(`go depth ${depth} movetime ${thinkTime}`);
     }
   }
 
@@ -547,7 +568,7 @@ window.game = null;
       engine = null;
     }
     
-    // Create Stockfish engine
+    // Create Stockfish engine with new version
     engine = createStockfishEngine();
     
     // Set up message handler
@@ -564,7 +585,7 @@ window.game = null;
     
     // Update multiplayer status
     if (multiplayStatus) {
-      multiplayStatus.textContent = 'Playing vs Stockfish';
+      multiplayStatus.textContent = 'Playing vs Stockfish 17.1';
     }
     
     // If engine should move first
@@ -591,7 +612,7 @@ window.game = null;
     engineOffBtn.style.display = 'none';
     
     // Update multiplayer status
-    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish') {
+    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish 17.1') {
       multiplayStatus.textContent = 'Stockfish stopped';
     }
   }
@@ -777,7 +798,7 @@ window.game = null;
     authDomain: "iq4u-chess-classroom.firebaseapp.com",
     databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "iq4u-chess-classroom",
-    storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+    storageBucket: "iq4uchess-classroom.firebasestorage.app",
     messagingSenderId: "833620718306",
     appId: "1:833620718306:web:b599bb6936fe0da4bb"
   };
