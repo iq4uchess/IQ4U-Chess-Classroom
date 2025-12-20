@@ -70,9 +70,21 @@
 
   <script>
     (function(){
+      // Updated login flow - only allow specific UID
+      const allowedUID = 'mZBoxKMf5rclm88YAUQoGTnsuEo2';
+      
+      // Check if we have a valid UID in localStorage
+      const storedUID = localStorage.getItem('userUID');
+      const storedRole = localStorage.getItem('role');
       const allowedRoles = ['student1','student2','student3','student4'];
-      const role = localStorage.getItem('role');
-      if(!role || allowedRoles.indexOf(role) === -1){
+      
+      // If no UID stored or UID doesn't match, redirect to login
+      if(!storedUID || storedUID !== allowedUID) {
+        try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
+      }
+      
+      // Also check role if it exists (backward compatibility)
+      if(storedRole && allowedRoles.indexOf(storedRole) === -1){
         try{ window.location.replace('index.html'); }catch(e){ window.location.href='index.html'; }
       }
     })();
@@ -452,7 +464,12 @@
     });
 
     logoutBtn.addEventListener('click', ()=>{
-      try{ localStorage.removeItem('role'); localStorage.removeItem('username'); localStorage.removeItem('email'); }catch(e){}
+      try{ 
+        localStorage.removeItem('role'); 
+        localStorage.removeItem('username'); 
+        localStorage.removeItem('email');
+        localStorage.removeItem('userUID'); // Clear the UID on logout
+      }catch(e){}
       try{ if(window.firebaseMultiplayer && window.firebaseMultiplayer.goOffline) window.firebaseMultiplayer.goOffline(); }catch(e){}
       window.location.href = 'index.html';
     });
@@ -572,7 +589,7 @@
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
       databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "iq4u-chess-classroom",
-      storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+      storageBucket: "iq4uchess-classroom.firebasestorage.app",
       messagingSenderId: "833620718306",
       appId: "1:833620718306:web:b599bb693d0736fe0da4bb"
     };
