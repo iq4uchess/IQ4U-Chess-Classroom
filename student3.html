@@ -155,6 +155,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
+<!-- Stockfish 17.1 with multi-part WASM -->
+<script>
+// Stockfish 17.1 Worker URL
+const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048.js';
+</script>
+
 <script>
 // GLOBAL GAME INSTANCE - REQUIRED FOR MASTER SPECTATING
 window.game = null;
@@ -403,10 +409,10 @@ window.game = null;
     return 'snap';
   }
 
-  // Stockfish Engine Functions - Using your local Stockfish
+  // Stockfish Engine Functions
   function createStockfishEngine() {
-    // Create Stockfish Worker from your local file
-    const stockfish = new Worker('https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048.js');
+    // Create Stockfish Worker with the new version
+    const stockfish = new Worker(STOCKFISH_JS_URL);
     
     let onMessageCallback = null;
     
@@ -441,17 +447,13 @@ window.game = null;
     };
   }
 
-  // Initialize Stockfish engine
+  // Initialize Stockfish engine - CORRECTED VERSION
   function initStockfish(engineObj) {
     engineObj.postMessage('uci');
     engineObj.postMessage('isready');
     
     // Set skill level (0-20, where 20 is strongest)
     engineObj.postMessage(`setoption name Skill Level value ${engineLevel}`);
-    
-    // For the 17.1 version, we need to configure it properly
-    engineObj.postMessage('setoption name Use NNUE value true');
-    engineObj.postMessage('setoption name Threads value 1'); // Use 1 thread to avoid SharedArrayBuffer issues
     
     // Reduce strength for lower levels
     if (engineLevel < 10) {
@@ -538,7 +540,7 @@ window.game = null;
       
       // Calculate thinking time based on level
       const thinkTime = Math.min(5000, 500 + (engineLevel * 200));
-      const depth = Math.min(18, 8 + Math.floor(engineLevel/2));
+      const depth = Math.min(22, 12 + Math.floor(engineLevel/2));
       
       // Ask for move with time constraints
       engine.postMessage(`go depth ${depth} movetime ${thinkTime}`);
@@ -552,37 +554,29 @@ window.game = null;
       engine = null;
     }
     
-    try {
-      // Create Stockfish engine with your local version
-      engine = createStockfishEngine();
-      
-      // Set up message handler
-      engine.setOnMessage(function(line) {
-        processBestMove(line);
-      });
-      
-      // Initialize engine
-      initStockfish(engine);
-      
-      engineEnabled = true;
-      engineOnBtn.style.display = 'none';
-      engineOffBtn.style.display = 'inline-block';
-      
-      // Update multiplayer status
-      if (multiplayStatus) {
-        multiplayStatus.textContent = 'Playing vs Stockfish 17.1';
-      }
-      
-      // If engine should move first
-      if (!game.game_over() && !isHumanTurn()) {
-        setTimeout(askEngineToMove, 1000);
-      }
-    } catch (error) {
-      console.error('Failed to start Stockfish:', error);
-      alert('Could not start Stockfish engine. The page may need to be served with proper security headers.');
-      engineEnabled = false;
-      engineOnBtn.style.display = 'inline-block';
-      engineOffBtn.style.display = 'none';
+    // Create Stockfish engine with new version
+    engine = createStockfishEngine();
+    
+    // Set up message handler
+    engine.setOnMessage(function(line) {
+      processBestMove(line);
+    });
+    
+    // Initialize engine
+    initStockfish(engine);
+    
+    engineEnabled = true;
+    engineOnBtn.style.display = 'none';
+    engineOffBtn.style.display = 'inline-block';
+    
+    // Update multiplayer status
+    if (multiplayStatus) {
+      multiplayStatus.textContent = 'Playing vs Stockfish 17.1';
+    }
+    
+    // If engine should move first
+    if (!game.game_over() && !isHumanTurn()) {
+      setTimeout(askEngineToMove, 1000);
     }
   }
 
