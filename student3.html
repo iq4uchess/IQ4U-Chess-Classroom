@@ -31,7 +31,7 @@
     .solution-controls .small { margin-left:6px; margin-right:2px; }
     @media (max-width:900px){
       #board{ height:80vw; width:100%; aspect-ratio: auto; max-height:620px; min-width:300px; min-height:300px; }
-      .resizer .range{ width:200px; }
+      .resizer .range{ width=200px; }
     }
     .status-bubble { padding:8px 10px; border-radius:8px; background:#f3f6ff; border:1px solid #e6eeff; color:#0b2; font-weight:600; }
     .promote-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border-radius:10px; padding:12px; box-shadow:0 10px 30px rgba(2,6,23,0.2); z-index:9999; display:none; }
@@ -403,10 +403,10 @@ window.game = null;
     return 'snap';
   }
 
-  // Stockfish Engine Functions - Using your local Stockfish
+  // Stockfish Engine Functions - Using Stockfish.js that works without SharedArrayBuffer
   function createStockfishEngine() {
-    // Create Stockfish Worker from your local file
-    const stockfish = new Worker('https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-8e4d048.js');
+    // Use Stockfish 16.1.0 which works without SharedArrayBuffer
+    const stockfish = new Worker('https://cdn.jsdelivr.net/npm/stockfish@16.1.0/src/stockfish.js');
     
     let onMessageCallback = null;
     
@@ -441,24 +441,11 @@ window.game = null;
     };
   }
 
-  // Initialize Stockfish engine - FIXED VERSION
+  // Initialize Stockfish engine - SIMPLIFIED VERSION
   function initStockfish(engineObj) {
-    // First send UCI command
+    // Simple initialization that works with Stockfish.js
     engineObj.postMessage('uci');
-    
-    // Set single-threaded mode BEFORE isready to avoid SharedArrayBuffer error
-    engineObj.postMessage('setoption name Threads value 1');
-    
-    // Set skill level (0-20, where 20 is strongest)
     engineObj.postMessage(`setoption name Skill Level value ${engineLevel}`);
-    
-    // Reduce strength for lower levels
-    if (engineLevel < 10) {
-      engineObj.postMessage('setoption name Skill Level Maximum Error value 100');
-      engineObj.postMessage('setoption name Skill Level Probability value 50');
-    }
-    
-    // Now send isready
     engineObj.postMessage('isready');
   }
 
@@ -555,7 +542,7 @@ window.game = null;
     }
     
     try {
-      // Create Stockfish engine with your local version
+      // Create Stockfish engine that works without SharedArrayBuffer
       engine = createStockfishEngine();
       
       // Set up message handler
@@ -563,7 +550,7 @@ window.game = null;
         processBestMove(line);
       });
       
-      // Initialize engine - with error handling
+      // Initialize engine
       initStockfish(engine);
       
       engineEnabled = true;
@@ -572,7 +559,7 @@ window.game = null;
       
       // Update multiplayer status
       if (multiplayStatus) {
-        multiplayStatus.textContent = 'Playing vs Stockfish 17.1';
+        multiplayStatus.textContent = 'Playing vs Stockfish';
       }
       
       // If engine should move first
@@ -581,7 +568,7 @@ window.game = null;
       }
     } catch (error) {
       console.error('Failed to start Stockfish:', error);
-      alert('Could not start Stockfish engine. The page may need to be served with proper security headers.');
+      alert('Could not start Stockfish engine. Please check your connection.');
       engineEnabled = false;
       engineOnBtn.style.display = 'inline-block';
       engineOffBtn.style.display = 'none';
@@ -606,7 +593,7 @@ window.game = null;
     engineOffBtn.style.display = 'none';
     
     // Update multiplayer status
-    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish 17.1') {
+    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish') {
       multiplayStatus.textContent = 'Stockfish stopped';
     }
   }
@@ -730,11 +717,6 @@ window.game = null;
       // Update Stockfish skill level if engine is running
       if (engineEnabled && engine) {
         engine.postMessage(`setoption name Skill Level value ${engineLevel}`);
-        
-        if (engineLevel < 10) {
-          engine.postMessage('setoption name Skill Level Maximum Error value 100');
-          engine.postMessage('setoption name Skill Level Probability value 50');
-        }
       }
     });
 
