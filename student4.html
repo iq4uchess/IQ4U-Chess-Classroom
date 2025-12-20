@@ -1,1 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IQ4U Academy - Online Test</title>
+    <link rel="icon" type="image/png" href="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/favicon-16x16.png" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #2d4059;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 img {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-badge {
+            background: linear-gradient(45deg, #06d6a0, #118ab2);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: #b91c1c;
+            transform: translateY(-2px);
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        /* Welcome Card */
+        .welcome-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .welcome-card h2 {
+            color: #2d4059;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .welcome-card p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* Test Sections */
+        .test-sections {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .test-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .test-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .test-card h3 {
+            color: #2d4059;
+            margin-bottom: 15px;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .test-icon {
+            font-size: 28px;
+        }
+
+        .test-desc {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .test-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #06d6a0;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(45deg, #06d6a0, #118ab2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .start-btn:hover {
+            background: linear-gradient(45deg, #05c590, #0e7a9d);
+            transform: translateY(-2px);
+        }
+
+        /* Test History */
+        .history-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .history-section h3 {
+            color: #2d4059;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .history-table th {
+            background: #f8f9fa;
+            color: #2d4059;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .history-table td {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .history-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .score-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .score-excellent {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .score-good {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .score-average {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .no-history {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-top: 30px;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .progress-container h3 {
+            color: #2d4059;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+
+        .progress-bar {
+            height: 12px;
+            background: #e9ecef;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #06d6a0, #118ab2);
+            border-radius: 6px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Login Required Overlay */
+        .login-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .login-box h2 {
+            color: #2d4059;
+            margin-bottom: 15px;
+        }
+
+        .login-box p {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .login-btn {
+            background: linear-gradient(45deg, #06d6a0, #118ab2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .login-btn:hover {
+            background: linear-gradient(45deg, #05c590, #0e7a9d);
+            transform: translateY(-2px);
+        }
+
+        /* Messages */
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: center;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 15px 20px;
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+
+            .user-info {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .container {
+                padding: 0 15px;
+            }
+
+            .test-sections {
+                grid-template-columns: 1fr;
+            }
+
+            .welcome-card, .test-card, .history-section, .progress-container {
+                padding: 20px;
+            }
+
+            .history-table {
+                display: block;
+                overflow-x: auto;
+            }
+
+            .test-stats {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Required Overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <h2>Login Required</h2>
+            <p>Please login to access the Online Test platform. You will be redirected to the login page.</p>
+            <button class="login-btn" onclick="redirectToLogin()">Go to Login</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>
+            <img src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/apple-touch-icon.png" alt="IQ4U Logo">
+            IQ4U Academy - Online Test
+        </h1>
+        <div class="user-info">
+            <div class="user-badge" id="userBadge">Student</div>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Welcome Message -->
+        <div class="welcome-card">
+            <h2>Welcome to Online Chess Tests</h2>
+            <p>Test your chess knowledge with our comprehensive online tests. Each test is designed to improve your understanding of chess concepts, strategies, and tactics. Track your progress and see how you rank against other students!</p>
+        </div>
+
+        <!-- Messages -->
+        <div class="message" id="message"></div>
+
+        <!-- Test Sections -->
+        <div class="test-sections">
+            <div class="test-card">
+                <h3><span class="test-icon">♟️</span> Beginner Test</h3>
+                <p class="test-desc">Test your basic chess knowledge with 15 questions on chess rules, piece movements, and basic tactics.</p>
+                <div class="test-stats">
+                    <div class="stat">
+                        <div class="stat-value">15</div>
+                        <div class="stat-label">Questions</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">30</div>
+                        <div class="stat-label">Minutes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">70%</div>
+                        <div class="stat-label">Passing</div>
+                    </div>
+                </div>
+                <button class="start-btn" onclick="startTest('beginner')">Start Beginner Test</button>
+            </div>
+
+            <div class="test-card">
+                <h3><span class="test-icon">♛</span> Intermediate Test</h3>
+                <p class="test-desc">Challenge yourself with 20 questions on chess strategies, openings, and mid-game tactics.</p>
+                <div class="test-stats">
+                    <div class="stat">
+                        <div class="stat-value">20</div>
+                        <div class="stat-label">Questions</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">45</div>
+                        <div class="stat-label">Minutes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">75%</div>
+                        <div class="stat-label">Passing</div>
+                    </div>
+                </div>
+                <button class="start-btn" onclick="startTest('intermediate')">Start Intermediate Test</button>
+            </div>
+
+            <div class="test-card">
+                <h3><span class="test-icon">♚</span> Advanced Test</h3>
+                <p class="test-desc">Prove your mastery with 25 complex questions on advanced strategies, endgames, and professional tactics.</p>
+                <div class="test-stats">
+                    <div class="stat">
+                        <div class="stat-value">25</div>
+                        <div class="stat-label">Questions</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">60</div>
+                        <div class="stat-label">Minutes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">80%</div>
+                        <div class="stat-label">Passing</div>
+                    </div>
+                </div>
+                <button class="start-btn" onclick="startTest('advanced')">Start Advanced Test</button>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="progress-container">
+            <h3>Your Learning Progress</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 35%"></div>
+            </div>
+            <div class="progress-text">
+                <span>Beginner Level</span>
+                <span id="progressPercent">35% Complete</span>
+            </div>
+        </div>
+
+        <!-- Test History -->
+        <div class="history-section">
+            <h3>Your Test History</h3>
+            <table class="history-table" id="historyTable">
+                <thead>
+                    <tr>
+                        <th>Test Name</th>
+                        <th>Date</th>
+                        <th>Score</th>
+                        <th>Status</th>
+                        <th>Time Taken</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <!-- History will be loaded dynamically -->
+                </tbody>
+            </table>
+            <div class="no-history" id="noHistory" style="display: none;">
+                No test history yet. Start your first test!
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+            authDomain: "iq4u-chess-classroom.firebaseapp.com",
+            projectId: "iq4u-chess-classroom",
+            storageBucket: "iq4u-chess-classroom.appspot.com",
+            messagingSenderId: "833620718306",
+            appId: "1:833620718306:web:b599bb693d0736fe0da4bb",
+            databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        // Special student UID
+        const ALLOWED_STUDENT_UID = "mZBoxKMf5rclm88YAUQoGTnsuEo2";
+
+        // User state
+        let currentUser = null;
+        let userRole = null;
+
+        // Show message
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // Redirect to login page
+        function redirectToLogin() {
+            window.location.href = 'index.html';
+        }
+
+        // Logout function
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                auth.signOut().then(() => {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.href = 'index.html';
+                }).catch((error) => {
+                    console.error('Logout error:', error);
+                    showMessage('Logout failed. Please try again.', 'error');
+                });
+            }
+        }
+
+        // Check login status and UID
+        function checkLogin() {
+            const storedUID = localStorage.getItem('userUID');
+            const storedRole = localStorage.getItem('role');
+            
+            console.log('Checking login...');
+            console.log('Stored UID:', storedUID);
+            console.log('Allowed UID:', ALLOWED_STUDENT_UID);
+            console.log('Stored Role:', storedRole);
+
+            // Check if user is logged in with Firebase
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    const uid = user.uid;
+                    console.log('Firebase UID:', uid);
+                    
+                    // Check if this is the allowed student
+                    if (uid === ALLOWED_STUDENT_UID) {
+                        currentUser = user;
+                        userRole = storedRole || 'student4';
+                        
+                        // Update UI
+                        document.getElementById('userBadge').textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        
+                        // Load user data
+                        loadUserData();
+                        
+                        showMessage('Welcome to Online Test Platform!', 'success');
+                    } else {
+                        // Not the allowed student
+                        console.log('User not authorized for student4.html');
+                        document.getElementById('loginOverlay').style.display = 'flex';
+                    }
+                } else {
+                    // No Firebase user
+                    console.log('No Firebase user');
+                    
+                    // Check localStorage for stored credentials
+                    if (storedUID && storedUID === ALLOWED_STUDENT_UID && storedRole === 'student4') {
+                        // Try to auto-login with stored credentials
+                        attemptAutoLogin();
+                    } else {
+                        // Show login overlay
+                        document.getElementById('loginOverlay').style.display = 'flex';
+                    }
+                }
+            });
+        }
+
+        // Attempt auto-login with stored credentials
+        function attemptAutoLogin() {
+            console.log('Attempting auto-login...');
+            
+            // Use the quick login credentials for student
+            const email = "student@iq4uchess.com";
+            const password = "student123";
+            
+            auth.signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    const uid = userCredential.user.uid;
+                    if (uid === ALLOWED_STUDENT_UID) {
+                        console.log('Auto-login successful');
+                        localStorage.setItem('userUID', uid);
+                        localStorage.setItem('role', 'student4');
+                        checkLogin(); // Re-check login
+                    } else {
+                        console.log('Auto-login failed: UID mismatch');
+                        document.getElementById('loginOverlay').style.display = 'flex';
+                    }
+                })
+                .catch((error) => {
+                    console.error('Auto-login error:', error);
+                    document.getElementById('loginOverlay').style.display = 'flex';
+                });
+        }
+
+        // Load user data from Firebase
+        function loadUserData() {
+            if (!currentUser) return;
+
+            const userId = currentUser.uid;
+            
+            // Load test history
+            const historyRef = database.ref(`test_history/${userId}`);
+            historyRef.once('value').then((snapshot) => {
+                const historyData = snapshot.val();
+                const historyBody = document.getElementById('historyBody');
+                const noHistory = document.getElementById('noHistory');
+                const historyTable = document.getElementById('historyTable');
+                
+                historyBody.innerHTML = '';
+                
+                if (historyData) {
+                    let totalScore = 0;
+                    let testCount = 0;
+                    
+                    Object.keys(historyData).forEach(key => {
+                        const test = historyData[key];
+                        const row = document.createElement('tr');
+                        
+                        // Determine score badge class
+                        let badgeClass = 'score-average';
+                        if (test.score >= 80) badgeClass = 'score-excellent';
+                        else if (test.score >= 70) badgeClass = 'score-good';
+                        
+                        row.innerHTML = `
+                            <td>${test.testName || 'Unnamed Test'}</td>
+                            <td>${test.date || 'N/A'}</td>
+                            <td><span class="score-badge ${badgeClass}">${test.score || 0}%</span></td>
+                            <td>${test.passed ? 'Passed' : 'Failed'}</td>
+                            <td>${test.timeTaken || 'N/A'}</td>
+                        `;
+                        historyBody.appendChild(row);
+                        
+                        totalScore += test.score || 0;
+                        testCount++;
+                    });
+                    
+                    // Calculate average score and update progress
+                    if (testCount > 0) {
+                        const averageScore = Math.round(totalScore / testCount);
+                        const progressPercent = Math.min(100, Math.round(averageScore));
+                        
+                        document.getElementById('progressFill').style.width = `${progressPercent}%`;
+                        document.getElementById('progressPercent').textContent = `${progressPercent}% Complete`;
+                        
+                        // Update user badge with average score
+                        document.getElementById('userBadge').textContent = 
+                            `Student · Avg: ${averageScore}%`;
+                    }
+                    
+                    noHistory.style.display = 'none';
+                    historyTable.style.display = 'table';
+                } else {
+                    noHistory.style.display = 'block';
+                    historyTable.style.display = 'none';
+                }
+            }).catch((error) => {
+                console.error('Error loading history:', error);
+            });
+        }
+
+        // Start a test
+        function startTest(testType) {
+            if (!currentUser) {
+                showMessage('Please login first to start a test.', 'error');
+                return;
+            }
+
+            // For now, show a message (you can implement actual test logic here)
+            let testName = '';
+            switch(testType) {
+                case 'beginner':
+                    testName = 'Beginner Chess Test';
+                    break;
+                case 'intermediate':
+                    testName = 'Intermediate Chess Test';
+                    break;
+                case 'advanced':
+                    testName = 'Advanced Chess Test';
+                    break;
+                default:
+                    testName = 'Chess Test';
+            }
+            
+            showMessage(`Starting ${testName}... This feature will be implemented soon!`, 'success');
+            
+            // Simulate test completion and save result
+            setTimeout(() => {
+                simulateTestCompletion(testType, testName);
+            }, 1500);
+        }
+
+        // Simulate test completion (for demo)
+        function simulateTestCompletion(testType, testName) {
+            if (!currentUser) return;
+            
+            const userId = currentUser.uid;
+            const score = Math.floor(Math.random() * 30) + 70; // Random score 70-100%
+            const passed = score >= 70;
+            const timeTaken = Math.floor(Math.random() * 30) + 15; // Random time 15-45 minutes
+            
+            const testResult = {
+                testName: testName,
+                testType: testType,
+                score: score,
+                passed: passed,
+                timeTaken: `${timeTaken} mins`,
+                date: new Date().toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }),
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            };
+            
+            // Save to Firebase
+            const testRef = database.ref(`test_history/${userId}`).push();
+            testRef.set(testResult)
+                .then(() => {
+                    showMessage(`Test completed! Score: ${score}% - ${passed ? 'Passed' : 'Failed'}`, 'success');
+                    // Reload history
+                    loadUserData();
+                })
+                .catch((error) => {
+                    console.error('Error saving test result:', error);
+                    showMessage('Error saving test result. Please try again.', 'error');
+                });
+        }
+
+        // Initialize the page
+        function init() {
+            console.log('Initializing Online Test page...');
+            checkLogin();
+            
+            // Add event listener for page visibility change
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    checkLogin();
+                }
+            });
+        }
+
+        // Start initialization when page loads
+        window.addEventListener('load', init);
+
+        // Export functions for global access
+        window.logout = logout;
+        window.redirectToLogin = redirectToLogin;
+        window.startTest = startTest;
+    </script>
+</body>
+</html>
