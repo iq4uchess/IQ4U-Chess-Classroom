@@ -177,7 +177,8 @@
       console.log('[Stockfish] Creating worker: engine.js');
       
       try {
-        stockfishEngine = new Worker('./js/stockfish/engine.js');
+        stockfishEngine = new Worker('/IQ4U-Chess-Classroom/js/stockfish/engine.js');
+
       } catch (e) {
         console.error('[Stockfish] Failed to create worker:', e);
         return;
