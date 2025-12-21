@@ -166,11 +166,81 @@
       margin-left: 8px;
     }
     
+    /* Move evaluation styles */
+    .move-eval-card {
+      background: white;
+      padding: 8px;
+      border-radius: 6px;
+      border: 2px solid #e5e7eb;
+      transition: transform 0.2s;
+    }
+    .move-eval-card.main {
+      border-color: #10b981;
+      background: #f0fdf4;
+      transform: scale(1.02);
+    }
+    .move-eval-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .eval-badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .eval-good { background: #d1fae5; color: #065f46; }
+    .eval-ok { background: #fef3c7; color: #92400e; }
+    .eval-poor { background: #fee2e2; color: #991b1b; }
+    
+    /* Move quality display */
+    .move-quality-panel {
+      margin-top: 8px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #eef2f6;
+    }
+    .move-quality-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .move-quality-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .move-quality-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      background: white;
+      border-radius: 4px;
+      border: 1px solid #eef2f6;
+    }
+    .move-quality-label {
+      font-size: 12px;
+      color: #666;
+    }
+    .move-quality-value {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
     @media(max-width:900px){ 
       .boards-grid{ grid-template-columns:1fr; padding:0 12px; } 
       .notif-area{ flex-direction:column; }
       .best-moves-container {
         gap: 8px;
+      }
+      .move-quality-grid {
+        grid-template-columns: 1fr;
       }
       .header-container {
         flex-direction: column;
@@ -252,6 +322,7 @@
 
     // Stockfish paths
     const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
+    const STOCKFISH_WASM = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232/stockfish-17.1-lite-single-03e3232.wasm';
 
     const STUDENTS = [
       { id: 'student1', name: 'Student 1' },
@@ -302,40 +373,27 @@
       initBoard(s.id);
     }
 
-    // ---------- FIXED: STOCKFISH ENGINE WITH ERROR HANDLING ----------
-    let stockfishModule = null;
-    let stockfishReady = false;
+    // ---------- STOCKFISH ENGINE IMPLEMENTATION ----------
+    let stockfishWorkers = {};
+    let stockfishLoaded = false;
 
-    async function loadStockfishModule() {
-      if (stockfishReady && stockfishModule) return true;
+    async function loadStockfish() {
+      if (stockfishLoaded) return true;
       
-      try {
-        // Create a script element to load Stockfish
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = STOCKFISH_JS;
-          script.onload = () => {
-            // Stockfish loads as a global module
-            if (typeof Stockfish !== 'undefined') {
-              stockfishModule = Stockfish;
-              stockfishReady = true;
-              console.log('✅ Stockfish loaded successfully');
-              resolve(true);
-            } else {
-              console.error('❌ Stockfish not found after loading');
-              resolve(false);
-            }
-          };
-          script.onerror = (error) => {
-            console.error('❌ Failed to load Stockfish:', error);
-            resolve(false);
-          };
-          document.head.appendChild(script);
-        });
-      } catch (error) {
-        console.error('Error loading Stockfish:', error);
-        return false;
-      }
+      return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = STOCKFISH_JS;
+        script.onload = () => {
+          stockfishLoaded = true;
+          console.log('✅ Stockfish loaded successfully');
+          resolve(true);
+        };
+        script.onerror = () => {
+          console.error('❌ Failed to load Stockfish');
+          resolve(false);
+        };
+        document.head.appendChild(script);
+      });
     }
 
     function createStockfishWorker(boardId) {
@@ -343,57 +401,251 @@
       if (!st) return null;
       
       try {
-        if (!stockfishReady || !stockfishModule) {
-          console.warn(`Stockfish not ready for board ${boardId}`);
+        // Check if Stockfish is available
+        if (typeof Stockfish === 'undefined') {
+          console.warn('Stockfish not loaded yet');
           return null;
         }
         
-        // Create worker using Stockfish module
-        const worker = stockfishModule();
+        // Create worker
+        const worker = Stockfish();
         
+        // Configure engine
         worker.onmessage = function(event) {
-          if (!st.engineRunning || !st.engineWorker) return;
-          
-          const line = event.data;
-          
-          if (line === 'uciok') {
-            st.engineReady = true;
-            worker.postMessage('setoption name MultiPV value 6');
-            worker.postMessage('isready');
-          } else if (line === 'readyok') {
-            updateEngineStatus(boardId, 'Ready');
-            if (st.pendingAnalysis) {
-              analyzePosition(boardId);
-              st.pendingAnalysis = false;
-            }
-          } else if (line.startsWith('info')) {
-            parseStockfishInfo(boardId, line);
-          } else if (line.startsWith('bestmove')) {
-            parseBestMove(boardId, line);
-          }
+          handleStockfishMessage(boardId, event.data);
         };
         
-        worker.onerror = function(error) {
-          console.warn(`Stockfish worker error for ${boardId}:`, error);
-          // Don't retry on error - just mark as not ready
-          st.engineReady = false;
-          updateEngineStatus(boardId, 'Error');
-          
-          // Clean up
-          if (st.engineWorker === worker) {
-            st.engineWorker = null;
-          }
-        };
-        
-        // Initialize
+        // Initialize engine
         worker.postMessage('uci');
-        updateEngineStatus(boardId, 'Starting...');
+        worker.postMessage('setoption name MultiPV value 6');
+        worker.postMessage('setoption name Threads value 2');
+        worker.postMessage('setoption name Hash value 64');
+        worker.postMessage('isready');
         
         return worker;
       } catch (error) {
         console.error(`Failed to create Stockfish worker for ${boardId}:`, error);
         return null;
       }
+    }
+
+    function handleStockfishMessage(boardId, message) {
+      const st = boardsState[boardId];
+      if (!st || !st.engineRunning) return;
+      
+      // Update engine status
+      if (message === 'uciok') {
+        updateEngineStatus(boardId, 'Engine ready');
+      } else if (message === 'readyok') {
+        updateEngineStatus(boardId, 'Ready');
+        // Start analysis if pending
+        if (st.pendingAnalysis) {
+          analyzePosition(boardId);
+          st.pendingAnalysis = false;
+        }
+      } else if (message.startsWith('info')) {
+        parseAnalysisInfo(boardId, message);
+      } else if (message.startsWith('bestmove')) {
+        parseBestMove(boardId, message);
+      }
+    }
+
+    function parseAnalysisInfo(boardId, info) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      // Extract depth
+      const depthMatch = info.match(/depth\s+(\d+)/);
+      if (depthMatch) {
+        st.currentDepth = parseInt(depthMatch[1]);
+        const progressEl = document.getElementById(`engine-progress-${boardId}`);
+        if (progressEl) {
+          progressEl.textContent = `Depth: ${st.currentDepth}`;
+        }
+      }
+      
+      // Parse MultiPV lines
+      if (info.includes('multipv') && info.includes('pv')) {
+        const multipvMatch = info.match(/multipv\s+(\d+)/);
+        const pvMatch = info.match(/pv\s+([\w\s]+)/);
+        const evalMatch = info.match(/cp\s+(-?\d+)/);
+        const mateMatch = info.match(/mate\s+(-?\d+)/);
+        
+        if (multipvMatch && pvMatch) {
+          const pvIndex = parseInt(multipvMatch[1]) - 1;
+          const moves = pvMatch[1].trim().split(/\s+/);
+          
+          if (!st.bestMoves) st.bestMoves = [];
+          
+          // Get evaluation
+          let evaluation = 0;
+          if (mateMatch) {
+            evaluation = parseInt(mateMatch[1]) > 0 ? 10000 : -10000;
+          } else if (evalMatch) {
+            evaluation = parseInt(evalMatch[1]) / 100; // Convert to pawn units
+          }
+          
+          // Store top 3 moves
+          if (pvIndex < 3 && moves.length > 0) {
+            st.bestMoves[pvIndex] = {
+              move: moves[0],
+              san: uciToSan(boardId, moves[0]) || moves[0],
+              evaluation: evaluation,
+              fullLine: moves.slice(0, 6) // First 6 moves (3 for each side)
+            };
+            
+            // Update UI if we have top moves
+            if (pvIndex === 2 || (pvIndex === st.bestMoves.length - 1 && st.bestMoves.length > 0)) {
+              updateBestMovesDisplay(boardId);
+              drawTopMoveArrows(boardId);
+            }
+          }
+        }
+      }
+    }
+
+    function parseBestMove(boardId, message) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const match = message.match(/bestmove\s+(\w+)/);
+      if (match) {
+        const bestMove = match[1];
+        const sanMove = uciToSan(boardId, bestMove) || bestMove;
+        
+        st.bestMove = bestMove;
+        st.bestMoveSan = sanMove;
+        
+        // Update best move display
+        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+        if (bestMoveEl) {
+          bestMoveEl.textContent = `Best: ${sanMove}`;
+        }
+        
+        // Analyze move quality
+        analyzeMoveQuality(boardId);
+        
+        // Schedule next analysis if still running
+        if (st.engineRunning) {
+          clearTimeout(st.analysisTimeout);
+          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
+        }
+      }
+    }
+
+    function analyzeMoveQuality(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.bestMoves || st.bestMoves.length === 0) return;
+      
+      // Calculate move quality based on centipawn loss
+      if (st.moveHistory && st.moveHistory.length > 0) {
+        const lastMove = st.moveHistory[st.moveHistory.length - 1];
+        
+        // Find engine's top move for previous position
+        if (lastMove.previousEval !== undefined && st.bestMoves[0]) {
+          const bestEval = st.bestMoves[0].evaluation || 0;
+          const playedEval = st.currentEval || 0;
+          const centipawnLoss = Math.abs(bestEval - playedEval) * 100;
+          
+          // Update move quality display
+          updateMoveQualityDisplay(boardId, centipawnLoss, bestEval, playedEval);
+        }
+      }
+    }
+
+    function updateMoveQualityDisplay(boardId, centipawnLoss, bestEval, playedEval) {
+      const qualityPanel = document.getElementById(`move-quality-${boardId}`);
+      if (!qualityPanel) return;
+      
+      // Determine move quality
+      let quality = 'Excellent';
+      let qualityClass = 'eval-good';
+      
+      if (centipawnLoss > 200) {
+        quality = 'Blunder';
+        qualityClass = 'eval-poor';
+      } else if (centipawnLoss > 100) {
+        quality = 'Mistake';
+        qualityClass = 'eval-poor';
+      } else if (centipawnLoss > 50) {
+        quality = 'Inaccuracy';
+        qualityClass = 'eval-ok';
+      } else if (centipawnLoss > 20) {
+        quality = 'Good';
+        qualityClass = 'eval-ok';
+      }
+      
+      // Calculate accuracy percentage
+      const accuracy = Math.max(0, 100 - (centipawnLoss / 5));
+      
+      // Update display
+      qualityPanel.innerHTML = `
+        <div class="move-quality-header">
+          <span>Move Analysis</span>
+          <span class="eval-badge ${qualityClass}">${quality}</span>
+        </div>
+        <div class="move-quality-grid">
+          <div class="move-quality-item">
+            <span class="move-quality-label">Accuracy:</span>
+            <span class="move-quality-value">${accuracy.toFixed(1)}%</span>
+          </div>
+          <div class="move-quality-item">
+            <span class="move-quality-label">Centipawn Loss:</span>
+            <span class="move-quality-value">${centipawnLoss.toFixed(0)}</span>
+          </div>
+          <div class="move-quality-item">
+            <span class="move-quality-label">Best Eval:</span>
+            <span class="move-quality-value">${bestEval > 0 ? '+' : ''}${bestEval.toFixed(2)}</span>
+          </div>
+          <div class="move-quality-item">
+            <span class="move-quality-label">Current Eval:</span>
+            <span class="move-quality-value">${playedEval > 0 ? '+' : ''}${playedEval.toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+      
+      qualityPanel.style.display = 'block';
+    }
+
+    async function startEngine(boardId) {
+      const st = boardsState[boardId];
+      if (!st || st.engineRunning) return;
+      
+      // Load Stockfish if needed
+      if (!stockfishLoaded) {
+        const loaded = await loadStockfish();
+        if (!loaded) {
+          addNotification(boardId, 'Failed to load engine');
+          return;
+        }
+      }
+      
+      // Create worker
+      const worker = createStockfishWorker(boardId);
+      if (!worker) {
+        addNotification(boardId, 'Failed to start engine');
+        return;
+      }
+      
+      st.engineWorker = worker;
+      st.engineRunning = true;
+      st.engineReady = false;
+      st.pendingAnalysis = false;
+      st.bestMoves = [];
+      st.moveHistory = [];
+      st.currentEval = 0;
+      
+      // Update UI
+      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
+      if (toggleBtn) {
+        toggleBtn.textContent = 'Engine: ON';
+        toggleBtn.className = 'engine-btn engine-btn-stop';
+      }
+      
+      addNotification(boardId, 'Engine started with multi-PV analysis');
+      
+      // Start analysis after engine is ready
+      st.pendingAnalysis = true;
     }
 
     function stopEngine(boardId) {
@@ -406,8 +658,8 @@
         st.analysisTimeout = null;
       }
       
-      // Safely terminate worker
-      if (st.engineWorker && typeof st.engineWorker.terminate === 'function') {
+      // Terminate worker
+      if (st.engineWorker) {
         try {
           st.engineWorker.terminate();
         } catch (e) {
@@ -419,9 +671,18 @@
       st.engineRunning = false;
       st.engineReady = false;
       st.pendingAnalysis = false;
+      st.bestMoves = [];
+      st.currentEval = 0;
+      
       updateEngineStatus(boardId, 'Engine off');
       clearArrow(boardId);
       hideBestMoves(boardId);
+      
+      // Hide move quality panel
+      const qualityPanel = document.getElementById(`move-quality-${boardId}`);
+      if (qualityPanel) {
+        qualityPanel.style.display = 'none';
+      }
       
       // Update UI
       const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
@@ -431,6 +692,339 @@
       }
     }
 
+    async function toggleEngine(boardId) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      if (!st.engineRunning) {
+        await startEngine(boardId);
+      } else {
+        stopEngine(boardId);
+        addNotification(boardId, 'Engine stopped');
+      }
+    }
+
+    function analyzePosition(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.engineRunning || !st.engineWorker) return;
+      
+      // Clear previous timeout
+      if (st.analysisTimeout) {
+        clearTimeout(st.analysisTimeout);
+        st.analysisTimeout = null;
+      }
+      
+      // Don't analyze if not ready
+      if (!st.engineReady) {
+        st.pendingAnalysis = true;
+        return;
+      }
+      
+      // Get current position
+      let fen;
+      try {
+        fen = st.game.fen ? st.game.fen() : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        
+        // Don't analyze starting position
+        if (fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+          updateEngineStatus(boardId, 'Start position');
+          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 3000);
+          return;
+        }
+        
+        // Send position to engine
+        st.engineWorker.postMessage(`position fen ${fen}`);
+        st.engineWorker.postMessage(`go depth ${st.analysisDepth}`);
+        
+        updateEngineStatus(boardId, 'Analyzing...');
+        
+        // Store current position for move quality analysis
+        if (st.game && st.game.history) {
+          const moves = st.game.history();
+          if (moves.length > 0) {
+            if (!st.moveHistory) st.moveHistory = [];
+            const lastMove = moves[moves.length - 1];
+            if (!st.moveHistory.some(m => m.move === lastMove)) {
+              st.moveHistory.push({
+                move: lastMove,
+                fen: fen,
+                timestamp: Date.now()
+              });
+            }
+          }
+        }
+        
+      } catch (error) {
+        console.error('Analysis error:', error);
+        updateEngineStatus(boardId, 'Error');
+        // Retry after error
+        st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 3000);
+      }
+    }
+
+    function uciToSan(boardId, uciMove) {
+      const st = boardsState[boardId];
+      if (!st || !st.game || !uciMove || uciMove.length < 4) return uciMove;
+      
+      try {
+        const from = uciMove.substring(0, 2);
+        const to = uciMove.substring(2, 4);
+        const promotion = uciMove.length > 4 ? uciMove.substring(4) : null;
+        
+        const moveObj = {
+          from: from,
+          to: to,
+          promotion: promotion || undefined
+        };
+        
+        const move = st.game.move(moveObj);
+        if (move && move.san) {
+          // Undo the move
+          st.game.undo();
+          return move.san;
+        }
+      } catch(e) {
+        console.error('Failed to convert UCI to SAN:', e);
+      }
+      
+      return uciMove;
+    }
+
+    // ---------- BEST MOVES DISPLAY ----------
+    function updateBestMovesDisplay(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.bestMoves || st.bestMoves.length === 0) return;
+      
+      const bestMovesStrip = document.getElementById(`best-moves-${boardId}`);
+      if (!bestMovesStrip) return;
+      
+      const container = bestMovesStrip.querySelector('.best-moves-container');
+      if (!container) return;
+      
+      // Clear existing content
+      container.innerHTML = '';
+      
+      // Add header
+      const header = document.createElement('div');
+      header.className = 'best-moves-header';
+      header.innerHTML = '<span>Top 3 Moves Analysis</span><span style="font-size:10px; margin-left:8px; color:#666;">(White-3, Black-3 continuation)</span>';
+      container.appendChild(header);
+      
+      // Create moves grid
+      const movesGrid = document.createElement('div');
+      movesGrid.style.cssText = 'display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; width:100%;';
+      
+      // Show top 3 moves
+      st.bestMoves.slice(0, 3).forEach((moveData, index) => {
+        if (!moveData) return;
+        
+        const moveCard = document.createElement('div');
+        moveCard.className = 'move-eval-card' + (index === 0 ? ' main' : '');
+        
+        // Move header with evaluation
+        const moveHeader = document.createElement('div');
+        moveHeader.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
+        
+        const moveNumber = document.createElement('div');
+        moveNumber.className = 'best-move-number';
+        moveNumber.textContent = `#${index + 1}`;
+        moveNumber.style.fontWeight = 'bold';
+        
+        const evalSpan = document.createElement('div');
+        evalSpan.style.cssText = 'font-size:11px; color:' + 
+          (moveData.evaluation > 1 ? '#059669' : 
+           moveData.evaluation < -1 ? '#dc2626' : '#666');
+        let evalText = '';
+        if (Math.abs(moveData.evaluation) > 1000) {
+          evalText = moveData.evaluation > 0 ? 'M+' : 'M-';
+        } else {
+          evalText = moveData.evaluation > 0 ? '+' + moveData.evaluation.toFixed(1) : moveData.evaluation.toFixed(1);
+        }
+        evalSpan.textContent = evalText;
+        
+        moveHeader.appendChild(moveNumber);
+        moveHeader.appendChild(evalSpan);
+        
+        // Best move
+        const moveSan = document.createElement('div');
+        moveSan.className = 'best-move-san';
+        moveSan.textContent = moveData.san || moveData.move;
+        moveSan.style.cssText = 'font-size:14px; font-weight:bold; text-align:center; margin:4px 0;';
+        
+        // Continuation line
+        const continuation = document.createElement('div');
+        continuation.style.cssText = 'font-size:10px; color:#666; margin-top:4px;';
+        
+        if (moveData.fullLine && moveData.fullLine.length > 1) {
+          let lineText = '';
+          for (let i = 0; i < Math.min(moveData.fullLine.length, 6); i++) {
+            if (i === 0) continue; // Skip first move (already shown)
+            const sanMove = uciToSan(boardId, moveData.fullLine[i]) || moveData.fullLine[i];
+            if (i % 2 === 1) lineText += ` ${Math.floor(i/2) + 1}.`;
+            lineText += ` ${sanMove}`;
+          }
+          continuation.textContent = lineText.trim() || 'No continuation';
+        } else {
+          continuation.textContent = 'No continuation';
+        }
+        
+        moveCard.appendChild(moveHeader);
+        moveCard.appendChild(moveSan);
+        moveCard.appendChild(continuation);
+        
+        movesGrid.appendChild(moveCard);
+      });
+      
+      container.appendChild(movesGrid);
+      bestMovesStrip.classList.add('active');
+      
+      // Store current evaluation for move quality analysis
+      if (st.bestMoves[0]) {
+        st.currentEval = st.bestMoves[0].evaluation || 0;
+      }
+    }
+
+    function hideBestMoves(boardId) {
+      const bestMovesStrip = document.getElementById(`best-moves-${boardId}`);
+      if (bestMovesStrip) {
+        bestMovesStrip.classList.remove('active');
+      }
+    }
+
+    // ---------- ARROW FUNCTIONS ----------
+    function initArrowOverlay(boardId) {
+      const st = boardsState[boardId];
+      if (!st) return;
+      
+      const arrowOverlay = document.getElementById(`arrows_${boardId}`);
+      if (!arrowOverlay) return;
+      
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.className = 'arrow-svg';
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '100%');
+      svg.style.position = 'absolute';
+      svg.style.top = '0';
+      svg.style.left = '0';
+      svg.style.pointerEvents = 'none';
+      svg.style.zIndex = '10';
+      
+      arrowOverlay.innerHTML = '';
+      arrowOverlay.appendChild(svg);
+      st.arrowSvg = svg;
+    }
+
+    function drawTopMoveArrows(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.bestMoves || !st.arrowSvg) return;
+      
+      clearArrow(boardId);
+      
+      // Define colors for top 3 moves
+      const arrowColors = ['#10b981', '#3b82f6', '#8b5cf6'];
+      const arrowWidths = [3, 2.5, 2];
+      const arrowOpacities = [0.9, 0.7, 0.6];
+      
+      // Draw arrows for top 3 moves
+      st.bestMoves.slice(0, 3).forEach((moveData, index) => {
+        if (!moveData || !moveData.move || moveData.move.length < 4) return;
+        
+        const arrow = {
+          from: moveData.move.substring(0, 2),
+          to: moveData.move.substring(2, 4),
+          color: arrowColors[index] || '#666666',
+          width: arrowWidths[index] || 2,
+          opacity: arrowOpacities[index] || 0.5,
+          headSize: 0.2 + (0.1 * (3 - index))
+        };
+        drawArrow(boardId, arrow);
+      });
+    }
+
+    function drawArrow(boardId, arrow) {
+      const st = boardsState[boardId];
+      if (!st || !st.arrowSvg) return;
+      
+      const boardEl = document.getElementById(`board_${boardId}`);
+      if (!boardEl) return;
+      
+      const boardRect = boardEl.getBoundingClientRect();
+      const squareSize = boardRect.width / 8;
+      
+      const fromSquare = arrow.from.toLowerCase();
+      const toSquare = arrow.to.toLowerCase();
+      
+      if (fromSquare.length !== 2 || toSquare.length !== 2) return;
+      
+      const fromFile = fromSquare.charCodeAt(0) - 97;
+      const fromRank = parseInt(fromSquare.charAt(1)) - 1;
+      const toFile = toSquare.charCodeAt(0) - 97;
+      const toRank = parseInt(toSquare.charAt(1)) - 1;
+      
+      let x1, y1, x2, y2;
+      if (st.flip) {
+        x1 = (7 - fromFile) * squareSize + squareSize / 2;
+        y1 = fromRank * squareSize + squareSize / 2;
+        x2 = (7 - toFile) * squareSize + squareSize / 2;
+        y2 = toRank * squareSize + squareSize / 2;
+      } else {
+        x1 = fromFile * squareSize + squareSize / 2;
+        y1 = (7 - fromRank) * squareSize + squareSize / 2;
+        x2 = toFile * squareSize + squareSize / 2;
+        y2 = (7 - toRank) * squareSize + squareSize / 2;
+      }
+      
+      // Calculate arrow length and angle
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+      
+      // Adjust endpoint
+      const adjust = squareSize * 0.2;
+      const x2_adj = x2 - Math.cos(angle) * adjust;
+      const y2_adj = y2 - Math.sin(angle) * adjust;
+      
+      // Draw arrow line
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2_adj);
+      line.setAttribute('y2', y2_adj);
+      line.setAttribute('stroke', arrow.color);
+      line.setAttribute('stroke-width', arrow.width);
+      line.setAttribute('stroke-opacity', arrow.opacity);
+      line.setAttribute('stroke-linecap', 'round');
+      st.arrowSvg.appendChild(line);
+      
+      // Draw arrowhead
+      const headLength = squareSize * arrow.headSize;
+      const headAngle = Math.PI / 6;
+      
+      const x3 = x2_adj - headLength * Math.cos(angle - headAngle);
+      const y3 = y2_adj - headLength * Math.sin(angle - headAngle);
+      const x4 = x2_adj - headLength * Math.cos(angle + headAngle);
+      const y4 = y2_adj - headLength * Math.sin(angle + headAngle);
+      
+      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      polygon.setAttribute('points', `${x2_adj},${y2_adj} ${x3},${y3} ${x4},${y4}`);
+      polygon.setAttribute('fill', arrow.color);
+      polygon.setAttribute('fill-opacity', arrow.opacity);
+      st.arrowSvg.appendChild(polygon);
+    }
+
+    function clearArrow(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.arrowSvg) return;
+      st.arrowSvg.innerHTML = '';
+    }
+
+    function updateEngineStatus(boardId, status) {
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      if (statusEl) statusEl.textContent = status;
+    }
+
+    // ---------- WATCHING FUNCTIONS ----------
     function startWatching(boardId, clientId){
       const st = boardsState[boardId];
       if(!st) return;
@@ -458,6 +1052,12 @@
       updateNotation(boardId);
       clearArrow(boardId);
       hideBestMoves(boardId);
+      
+      // Hide move quality panel
+      const qualityPanel = document.getElementById(`move-quality-${boardId}`);
+      if (qualityPanel) {
+        qualityPanel.style.display = 'none';
+      }
 
       // Attach Firebase listeners
       st.listeners = {};
@@ -474,6 +1074,10 @@
           const candidate = m.payload || m;
           if(candidate && (candidate.move || candidate.fen)){
             normalizeAndApply(boardId, candidate);
+            // Trigger engine analysis if running
+            if(st.engineRunning) {
+              setTimeout(() => analyzePosition(boardId), 300);
+            }
           }
         };
         
@@ -492,6 +1096,10 @@
           const v = snap.val();
           if(!v) return;
           normalizeAndApply(boardId, v);
+          // Trigger engine analysis if running
+          if(st.engineRunning) {
+            setTimeout(() => analyzePosition(boardId), 300);
+          }
         };
         
         gamesRef.on('value', onGameValue);
@@ -533,6 +1141,12 @@
       addNotification(boardId, 'Stopped watching');
       clearNotation(boardId);
       hideBestMoves(boardId);
+      
+      // Hide move quality panel
+      const qualityPanel = document.getElementById(`move-quality-${boardId}`);
+      if (qualityPanel) {
+        qualityPanel.style.display = 'none';
+      }
       
       // Reset board
       try{ 
@@ -737,369 +1351,6 @@
       }
     }
 
-    // ---------- STOCKFISH ANALYSIS ----------
-    function parseStockfishInfo(boardId, line) {
-      const st = boardsState[boardId];
-      if (!st || !st.engineRunning) return;
-      
-      // Extract depth
-      const depthMatch = line.match(/depth\s+(\d+)/);
-      if (depthMatch) {
-        st.currentDepth = parseInt(depthMatch[1]);
-        const progressEl = document.getElementById(`engine-progress-${boardId}`);
-        if (progressEl) {
-          progressEl.textContent = `Depth: ${st.currentDepth}`;
-        }
-      }
-      
-      // Parse top moves
-      const pvMatch = line.match(/multipv\s+(\d+)/);
-      if (pvMatch && line.includes('pv')) {
-        const pvIndex = parseInt(pvMatch[1]) - 1;
-        const moveMatch = line.match(/pv\s+([\w\s]+)/);
-        if (moveMatch) {
-          const moves = moveMatch[1].trim().split(/\s+/);
-          const bestMove = moves[0];
-          
-          if (!st.bestMoves) st.bestMoves = [];
-          st.bestMoves[pvIndex] = {
-            move: bestMove,
-            san: uciToSan(boardId, bestMove) || bestMove
-          };
-        }
-      }
-    }
-
-    function parseBestMove(boardId, line) {
-      const st = boardsState[boardId];
-      if (!st || !st.engineRunning) return;
-      
-      const bestMoveMatch = line.match(/bestmove\s+(\w+)/);
-      if (bestMoveMatch) {
-        const bestMove = bestMoveMatch[1];
-        const sanMove = uciToSan(boardId, bestMove) || bestMove;
-        
-        st.bestMove = bestMove;
-        st.bestMoveSan = sanMove;
-        
-        // Update best move display
-        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-        if (bestMoveEl) {
-          bestMoveEl.textContent = `Best: ${sanMove}`;
-        }
-        
-        // Draw arrow for best move
-        if (bestMove && bestMove.length >= 4) {
-          drawBestMoveArrow(boardId, bestMove);
-        }
-        
-        // Show best moves strip
-        showBestMoves(boardId);
-        
-        // Schedule next analysis
-        if (st.engineRunning) {
-          clearTimeout(st.analysisTimeout);
-          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 3000);
-        }
-        
-        updateEngineStatus(boardId, 'Ready');
-      }
-    }
-
-    function uciToSan(boardId, uciMove) {
-      const st = boardsState[boardId];
-      if (!st || !st.game || !uciMove || uciMove.length < 4) return uciMove;
-      
-      try {
-        const from = uciMove.substring(0, 2);
-        const to = uciMove.substring(2, 4);
-        const promotion = uciMove.length > 4 ? uciMove.substring(4) : null;
-        
-        const moveObj = {
-          from: from,
-          to: to,
-          promotion: promotion || undefined
-        };
-        
-        const move = st.game.move(moveObj);
-        if (move && move.san) {
-          // Undo the move
-          st.game.undo();
-          return move.san;
-        }
-      } catch(e) {
-        console.error('Failed to convert UCI to SAN:', e);
-      }
-      
-      return uciMove;
-    }
-
-    function analyzePosition(boardId) {
-      const st = boardsState[boardId];
-      if (!st || !st.engineRunning || !st.game || !st.engineWorker) return;
-      
-      // Clear previous timeout
-      if (st.analysisTimeout) {
-        clearTimeout(st.analysisTimeout);
-        st.analysisTimeout = null;
-      }
-      
-      // Reset best moves
-      st.bestMoves = [];
-      hideBestMoves(boardId);
-      clearArrow(boardId);
-      
-      try {
-        const fen = st.game.fen ? st.game.fen() : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-        
-        // Don't analyze starting position
-        if (fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
-          updateEngineStatus(boardId, 'Start position');
-          st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
-          return;
-        }
-        
-        if (!st.engineReady) {
-          st.pendingAnalysis = true;
-          return;
-        }
-        
-        // Set position and analyze
-        st.engineWorker.postMessage(`position fen ${fen}`);
-        st.engineWorker.postMessage(`go depth ${st.analysisDepth}`);
-        
-        updateEngineStatus(boardId, 'Analyzing...');
-      } catch (e) {
-        console.error('Analysis error:', e);
-        updateEngineStatus(boardId, 'Error');
-        // Retry after error
-        st.analysisTimeout = setTimeout(() => analyzePosition(boardId), 2000);
-      }
-    }
-
-    async function toggleEngine(boardId) {
-      const st = boardsState[boardId];
-      if (!st) return;
-      
-      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
-      
-      if (!st.engineRunning) {
-        // Load Stockfish module first
-        const loaded = await loadStockfishModule();
-        if (!loaded) {
-          addNotification(boardId, 'Failed to load engine');
-          return;
-        }
-        
-        // Create worker
-        const worker = createStockfishWorker(boardId);
-        if (!worker) {
-          addNotification(boardId, 'Failed to start engine');
-          return;
-        }
-        
-        st.engineWorker = worker;
-        st.engineRunning = true;
-        
-        if (toggleBtn) {
-          toggleBtn.textContent = 'Engine: ON';
-          toggleBtn.className = 'engine-btn engine-btn-stop';
-        }
-        
-        addNotification(boardId, 'Engine started');
-        
-        // Start analysis after a delay
-        setTimeout(() => analyzePosition(boardId), 500);
-      } else {
-        // Stop engine
-        stopEngine(boardId);
-        addNotification(boardId, 'Engine stopped');
-      }
-    }
-
-    function updateEngineStatus(boardId, status) {
-      const statusEl = document.getElementById(`engine-status-${boardId}`);
-      if (statusEl) statusEl.textContent = status;
-    }
-
-    // ---------- BEST MOVES DISPLAY ----------
-    function showBestMoves(boardId) {
-      const st = boardsState[boardId];
-      if (!st || !st.bestMoves || st.bestMoves.length === 0) return;
-      
-      const bestMovesStrip = document.getElementById(`best-moves-${boardId}`);
-      if (!bestMovesStrip) return;
-      
-      // Clear existing moves
-      const container = bestMovesStrip.querySelector('.best-moves-container');
-      if (container) {
-        container.innerHTML = '';
-        
-        // Show only top 6 moves
-        const movesToShow = st.bestMoves.filter(Boolean).slice(0, 6);
-        
-        // Add header
-        const header = document.createElement('div');
-        header.className = 'best-moves-header';
-        header.textContent = 'Best Moves:';
-        container.appendChild(header);
-        
-        // Add best moves
-        movesToShow.forEach((moveData, index) => {
-          const moveItem = document.createElement('div');
-          moveItem.className = 'best-move-item';
-          if (index === 0) {
-            moveItem.classList.add('main');
-          }
-          
-          const moveNumber = document.createElement('div');
-          moveNumber.className = 'best-move-number';
-          moveNumber.textContent = index + 1;
-          
-          const moveSan = document.createElement('div');
-          moveSan.className = 'best-move-san';
-          moveSan.textContent = moveData.san || moveData.move;
-          
-          moveItem.appendChild(moveNumber);
-          moveItem.appendChild(moveSan);
-          container.appendChild(moveItem);
-        });
-      }
-      
-      bestMovesStrip.classList.add('active');
-    }
-
-    function hideBestMoves(boardId) {
-      const bestMovesStrip = document.getElementById(`best-moves-${boardId}`);
-      if (bestMovesStrip) {
-        bestMovesStrip.classList.remove('active');
-      }
-    }
-
-    // ---------- ARROW FUNCTIONS ----------
-    function initArrowOverlay(boardId) {
-      const st = boardsState[boardId];
-      if (!st) return;
-      
-      const arrowOverlay = document.getElementById(`arrows_${boardId}`);
-      if (!arrowOverlay) return;
-      
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.className = 'arrow-svg';
-      svg.setAttribute('width', '100%');
-      svg.setAttribute('height', '100%');
-      svg.style.position = 'absolute';
-      svg.style.top = '0';
-      svg.style.left = '0';
-      svg.style.pointerEvents = 'none';
-      svg.style.zIndex = '10';
-      
-      arrowOverlay.innerHTML = '';
-      arrowOverlay.appendChild(svg);
-      st.arrowSvg = svg;
-    }
-
-    function drawBestMoveArrow(boardId, uciMove) {
-      const st = boardsState[boardId];
-      if (!st || !st.arrowSvg || !uciMove || uciMove.length < 4) return;
-      
-      clearArrow(boardId);
-      
-      const from = uciMove.substring(0, 2);
-      const to = uciMove.substring(2, 4);
-      
-      const arrow = {
-        from: from,
-        to: to,
-        color: '#10b981',
-        width: 3,
-        opacity: 0.8,
-        headSize: 0.25
-      };
-      
-      drawArrow(boardId, arrow);
-    }
-
-    function drawArrow(boardId, arrow) {
-      const st = boardsState[boardId];
-      if (!st || !st.arrowSvg) return;
-      
-      st.arrowSvg.innerHTML = '';
-      
-      const boardEl = document.getElementById(`board_${boardId}`);
-      if (!boardEl) return;
-      
-      const boardRect = boardEl.getBoundingClientRect();
-      const squareSize = boardRect.width / 8;
-      
-      const fromSquare = arrow.from.toLowerCase();
-      const toSquare = arrow.to.toLowerCase();
-      
-      if (fromSquare.length !== 2 || toSquare.length !== 2) return;
-      
-      const fromFile = fromSquare.charCodeAt(0) - 97;
-      const fromRank = parseInt(fromSquare.charAt(1)) - 1;
-      const toFile = toSquare.charCodeAt(0) - 97;
-      const toRank = parseInt(toSquare.charAt(1)) - 1;
-      
-      let x1, y1, x2, y2;
-      if (st.flip) {
-        x1 = (7 - fromFile) * squareSize + squareSize / 2;
-        y1 = fromRank * squareSize + squareSize / 2;
-        x2 = (7 - toFile) * squareSize + squareSize / 2;
-        y2 = toRank * squareSize + squareSize / 2;
-      } else {
-        x1 = fromFile * squareSize + squareSize / 2;
-        y1 = (7 - fromRank) * squareSize + squareSize / 2;
-        x2 = toFile * squareSize + squareSize / 2;
-        y2 = (7 - toRank) * squareSize + squareSize / 2;
-      }
-      
-      // Calculate arrow length and angle
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dy, dx);
-      
-      // Adjust endpoint
-      const adjust = squareSize * 0.2;
-      const x2_adj = x2 - Math.cos(angle) * adjust;
-      const y2_adj = y2 - Math.sin(angle) * adjust;
-      
-      // Draw arrow line
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute('x1', x1);
-      line.setAttribute('y1', y1);
-      line.setAttribute('x2', x2_adj);
-      line.setAttribute('y2', y2_adj);
-      line.setAttribute('stroke', arrow.color);
-      line.setAttribute('stroke-width', arrow.width);
-      line.setAttribute('stroke-opacity', arrow.opacity);
-      line.setAttribute('stroke-linecap', 'round');
-      st.arrowSvg.appendChild(line);
-      
-      // Draw arrowhead
-      const headLength = squareSize * arrow.headSize;
-      const headAngle = Math.PI / 6;
-      
-      const x3 = x2_adj - headLength * Math.cos(angle - headAngle);
-      const y3 = y2_adj - headLength * Math.sin(angle - headAngle);
-      const x4 = x2_adj - headLength * Math.cos(angle + headAngle);
-      const y4 = y2_adj - headLength * Math.sin(angle + headAngle);
-      
-      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      polygon.setAttribute('points', `${x2_adj},${y2_adj} ${x3},${y3} ${x4},${y4}`);
-      polygon.setAttribute('fill', arrow.color);
-      polygon.setAttribute('fill-opacity', arrow.opacity);
-      st.arrowSvg.appendChild(polygon);
-    }
-
-    function clearArrow(boardId) {
-      const st = boardsState[boardId];
-      if (!st || !st.arrowSvg) return;
-      st.arrowSvg.innerHTML = '';
-    }
-
     // ---------- UI HELPER FUNCTIONS ----------
     function createCard(student, pieceTheme, index){
       const card = document.createElement('div'); 
@@ -1179,6 +1430,13 @@
         <div class="best-moves-container"></div>
       `;
       card.appendChild(bestMovesStrip);
+      
+      // Move quality panel
+      const moveQualityPanel = document.createElement('div');
+      moveQualityPanel.className = 'move-quality-panel';
+      moveQualityPanel.id = `move-quality-${student.id}`;
+      moveQualityPanel.style.display = 'none';
+      card.appendChild(moveQualityPanel);
 
       const defaultSize = (index < 2) ? 570 : 360;
       boardsState[student.id] = {
@@ -1199,6 +1457,8 @@
         bestMoveSan: null,
         bestMoves: [],
         currentDepth: 0,
+        currentEval: 0,
+        moveHistory: [],
         analysisTimeout: null,
         arrowSvg: null
       };
@@ -1216,8 +1476,9 @@
         const st = boardsState[student.id];
         st.flip = !st.flip;
         if(st.boardObj && typeof st.boardObj.flip === 'function') st.boardObj.flip();
-        if (st.bestMove) {
-          setTimeout(() => drawBestMoveArrow(student.id, st.bestMove), 100);
+        // Redraw arrows
+        if (st.bestMoves && st.bestMoves.length > 0) {
+          setTimeout(() => drawTopMoveArrows(student.id), 100);
         }
       });
 
@@ -1409,7 +1670,7 @@
       }
     });
 
-    // ---------- FIXED LOGOUT FUNCTION ----------
+    // ---------- LOGOUT FUNCTION ----------
     async function performLogout() {
       console.log('Logging out...');
       
@@ -1429,16 +1690,13 @@
         });
         
         // 2. Terminate all Stockfish workers
-        if (stockfishModule) {
-          // Clean up any remaining workers
-          for (const boardId in boardsState) {
-            const st = boardsState[boardId];
-            if (st && st.engineWorker) {
-              try {
-                st.engineWorker.terminate();
-              } catch(e) {
-                console.warn(`Error terminating Stockfish worker for ${boardId}:`, e);
-              }
+        for (const boardId in boardsState) {
+          const st = boardsState[boardId];
+          if (st && st.engineWorker) {
+            try {
+              st.engineWorker.terminate();
+            } catch(e) {
+              console.warn(`Error terminating Stockfish worker for ${boardId}:`, e);
             }
           }
         }
