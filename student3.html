@@ -48,6 +48,7 @@
     #engineThinking { display: none; color: #059669; font-weight: 600; }
     .engine-strength { display: flex; align-items: center; gap: 8px; }
     .engine-strength input[type="range"] { width: 180px; }
+    .engine-starting { background: #f59e0b !important; }
   </style>
 </head>
 
@@ -163,7 +164,7 @@
   // Export functions to global scope
   window.StockfishManager = {
     start: function(callback) {
-      // FIXED ISSUE 4: Only create if not already running
+      // Only create if not already running
       if (stockfishEngine) {
         if (!stockfishReady) {
           console.log('[Stockfish] Engine already starting, please wait...');
@@ -193,7 +194,7 @@
           console.log('✅ Stockfish ready (NNUE loaded)');
         }
 
-        // FIXED ISSUE 2: Correct depth parsing
+        // Correct depth parsing
         if (msg.startsWith('info') && msg.includes(' depth ')) {
           const depthMatch = msg.match(/depth (\d+)/);
           if (depthMatch) {
@@ -204,7 +205,7 @@
           }
         }
 
-        // FIXED ISSUE 2: Clean bestmove handling
+        // Clean bestmove handling
         if (msg.startsWith('bestmove')) {
           const parts = msg.split(' ');
           if (parts.length >= 2) {
@@ -220,7 +221,7 @@
     },
 
     askMove: function(fen, movetime = 2000) {
-      // FIXED ISSUE 3: Use movetime only (valid UCI)
+      // Use movetime only (valid UCI)
       if (!stockfishEngine || !stockfishReady) {
         console.warn('[Stockfish] Engine not ready');
         return;
@@ -318,6 +319,7 @@ window.game = null;
   let game = new Chess(); // Local game instance
   window.game = game; // EXPOSED GLOBALLY FOR SPECTATING
   let engineEnabled = false;
+  let engineStarting = false; // NEW: Startup guard flag
   let engineColor = 'black';
   let engineLevel = 10;
   let engineThinkTime = 1000;
@@ -411,7 +413,7 @@ window.game = null;
       }
       
       movesList.innerHTML = '';
-      for (let i = 0; i < hist.length; i += 2) {
+      for (let i = 0; i <hist.length; i += 2) {
         const moveNum = Math.floor(i / 2) + 1;
         const whiteMove = hist[i] || '';
         const blackMove = hist[i + 1] || '';
@@ -611,69 +613,93 @@ window.game = null;
       engineThinking.style.display = 'inline';
       engineDepth.textContent = 'Depth: -';
       
-      // Ask Stockfish for move (using movetime only - FIXED ISSUE 3)
+      // Ask Stockfish for move (using movetime only)
       window.StockfishManager.askMove(game.fen(), engineThinkTime);
       console.log(`[Stockfish] Asking for move with ${engineThinkTime}ms thinking time`);
     }
   }
 
-  // Start engine
+  // Start engine - FIXED with startup guard
   function startEngine() {
     console.log('[Engine] Starting Stockfish...');
     
-    // FIXED ISSUE 4: Don't destroy/recreate unnecessarily
+    // CRITICAL FIX: Prevent multiple startups
+    if (engineEnabled || engineStarting) {
+      console.log('[Engine] Engine already starting or running');
+      return;
+    }
+
+    engineStarting = true;
+    engineOnBtn.disabled = true;
+    engineOnBtn.classList.add('engine-starting');
+    engineOnBtn.textContent = 'Starting...';
+
     if (!window.StockfishManager.isRunning()) {
       window.StockfishManager.start(processBestMove);
     }
-    
+
     engineEnabled = true;
     engineOnBtn.style.display = 'none';
     engineOffBtn.style.display = 'inline-block';
-    
+
+    // Wait for engine to be fully ready
+    const waitReady = setInterval(() => {
+      if (window.StockfishManager.isReady()) {
+        clearInterval(waitReady);
+        engineStarting = false;
+        engineOnBtn.disabled = false;
+        engineOnBtn.classList.remove('engine-starting');
+        engineOnBtn.textContent = 'Start Stockfish';
+        console.log('[Engine] Stockfish fully ready');
+        
+        // Set skill level now that engine is ready
+        window.StockfishManager.setSkillLevel(engineLevel);
+
+        // If engine should move first
+        if (!game.game_over() && !isHumanTurn()) {
+          console.log('[Engine] Engine moves first');
+          setTimeout(askEngineToMove, 300);
+        }
+      }
+    }, 100);
+
+    // Safety timeout
+    setTimeout(() => {
+      clearInterval(waitReady);
+      if (engineStarting) {
+        console.warn('[Engine] Startup timeout - engine may have failed');
+        engineStarting = false;
+        engineOnBtn.disabled = false;
+        engineOnBtn.classList.remove('engine-starting');
+        engineOnBtn.textContent = 'Start Stockfish';
+      }
+    }, 10000);
+
     // Update multiplayer status
     if (multiplayStatus) {
       multiplayStatus.textContent = 'Playing vs Stockfish';
     }
-    
-    // Set skill level after a short delay to ensure engine is ready
-    setTimeout(() => {
-      if (window.StockfishManager.isReady()) {
-        window.StockfishManager.setSkillLevel(engineLevel);
-      }
-    }, 800);
-    
-    // If engine should move first
-    if (!game.game_over() && !isHumanTurn()) {
-      console.log('[Engine] Engine moves first, waiting for ready state...');
-      
-      const checkReady = setInterval(() => {
-        if (window.StockfishManager.isReady()) {
-          clearInterval(checkReady);
-          setTimeout(askEngineToMove, 300);
-        }
-      }, 200);
-      
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        clearInterval(checkReady);
-      }, 5000);
-    }
   }
 
-  // Stop engine
+  // Stop engine - FIXED with startup guard
   function stopEngine() {
+    // CRITICAL FIX: Don't stop during startup
+    if (engineStarting) {
+      console.warn('[Engine] Stop ignored — engine is starting');
+      return;
+    }
+
     console.log('[Engine] Stopping Stockfish...');
     
     engineEnabled = false;
     isThinking = false;
     engineThinking.style.display = 'none';
     engineDepth.textContent = 'Depth: -';
-    
-    // Only destroy if engine is running
+
     if (window.StockfishManager.isRunning()) {
       window.StockfishManager.destroy();
     }
-    
+
     engineOnBtn.style.display = 'inline-block';
     engineOffBtn.style.display = 'none';
     
@@ -683,7 +709,7 @@ window.game = null;
     }
   }
 
-  // Reset game
+  // Reset game - FIXED: Don't interfere with engine startup
   function resetGame() {
     game = new Chess();
     window.game = game; // Update global reference
@@ -703,7 +729,8 @@ window.game = null;
     engineThinking.style.display = 'none';
     engineDepth.textContent = 'Depth: -';
     
-    if (engineEnabled && !game.game_over() && !isHumanTurn()) {
+    // Only trigger engine move if engine is fully ready (not starting)
+    if (engineEnabled && !game.game_over() && !isHumanTurn() && !engineStarting) {
       setTimeout(() => {
         if (window.StockfishManager.isReady()) {
           askEngineToMove();
@@ -715,7 +742,7 @@ window.game = null;
     window.emitFenToMaster();
   }
 
-  // Undo move
+  // Undo move - FIXED: Don't interfere with engine startup
   function undoMove() {
     if (!game || game.history().length === 0) {
       return;
@@ -725,7 +752,7 @@ window.game = null;
     game.undo();
     
     // If engine vs human and we just undid engine's move, also undo human's move
-    if (engineEnabled && engineColor !== 'both' && game.history().length > 0) {
+    if (engineEnabled && engineColor !== 'both' && game.history().length > 0 && !engineStarting) {
       game.undo();
     }
     
@@ -791,11 +818,11 @@ window.game = null;
       location.href = 'index.html'; 
     };
     
-    // Engine settings
+    // Engine settings - FIXED: Don't trigger engine during startup
     engineColorSelect.addEventListener('change', () => {
       engineColor = engineColorSelect.value;
       
-      if (engineEnabled && !game.game_over() && !isHumanTurn()) {
+      if (engineEnabled && !game.game_over() && !isHumanTurn() && !engineStarting) {
         setTimeout(() => {
           if (window.StockfishManager.isReady()) {
             askEngineToMove();
@@ -808,8 +835,8 @@ window.game = null;
       engineLevel = Number(engineLevelRange.value);
       engineLevelDisplay.textContent = engineLevel;
       
-      // Update Stockfish skill level if engine is running
-      if (engineEnabled && window.StockfishManager.isReady()) {
+      // Update Stockfish skill level if engine is running and ready (not starting)
+      if (engineEnabled && window.StockfishManager.isReady() && !engineStarting) {
         window.StockfishManager.setSkillLevel(engineLevel);
       }
     });
