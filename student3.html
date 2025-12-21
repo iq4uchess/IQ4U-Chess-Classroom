@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Puzzle (student3)</title>
+  <title>IQ4U — Student Puzzle (student3) - Stockfish 17.1 NNUE</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
@@ -48,12 +48,13 @@
     #engineThinking { display: none; color: #059669; font-weight: 600; }
     .wasm-loading { color: #8b5cf6; font-weight: 600; font-size: 12px; }
     #engineLoadStatus { display: none; }
+    .error-message { color: #dc2626; font-weight: 600; font-size: 12px; }
   </style>
 </head>
 
 <body>
 
-<h1>Student3 - Play vs Stockfish Engine (NNUE)</h1>
+<h1>Student3 - Play vs Stockfish 17.1 NNUE</h1>
 
 <div class="panel">
   <div class="controls">
@@ -118,7 +119,8 @@
     </div>
     
     <div>
-      <span id="engineLoadStatus" class="wasm-loading">🔄 Loading Stockfish...</span>
+      <span id="engineLoadStatus" class="wasm-loading" style="display:none;">🔄 Loading Stockfish...</span>
+      <span id="engineError" class="error-message" style="display:none;"></span>
       <span id="engineThinking" style="display:none;">🤔 Thinking...</span>
       <span id="engineDepth" class="engine-status">Depth: -</span>
     </div>
@@ -163,8 +165,12 @@
 window.game = null;
 
 (function(){
-  // Config
+  // Config - USING ONLY YOUR SPECIFIED FILES
   const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
+  
+  // Stockfish files - ONLY YOUR SPECIFIED PATHS
+  const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
+  const STOCKFISH_WASM = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.wasm';
   
   // DOM
   const boardEl = document.getElementById('board');
@@ -179,6 +185,7 @@ window.game = null;
   const engineOffBtn = document.getElementById('engineOffBtn');
   const engineThinking = document.getElementById('engineThinking');
   const engineLoadStatus = document.getElementById('engineLoadStatus');
+  const engineError = document.getElementById('engineError');
   const engineDepth = document.getElementById('engineDepth');
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
@@ -200,7 +207,7 @@ window.game = null;
   let isThinking = false;
   let lastMoveSquares = [];
   let pendingPromo = null;
-  let stockfishModule = null;
+  let isEngineReady = false;
 
   // Promotion Modal
   const promoteModal = document.getElementById('promoteModal');
@@ -405,165 +412,135 @@ window.game = null;
     return 'snap';
   }
 
-  // Load Stockfish 17.1 with WASM and NNUE
-  async function loadStockfishWASM() {
-    try {
-      engineLoadStatus.style.display = 'inline';
-      engineLoadStatus.textContent = '🔄 Loading Stockfish...';
-      
-      // Stockfish 17.1 with WASM and NNUE
-      const scriptUrl = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
-      const wasmUrl = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.wasm';
-      
-      // Configure Stockfish
-      const stockfishConfig = {
-        locateFile: (path) => {
-          if (path.endsWith('.wasm')) {
-            return wasmUrl;
-          }
-          return scriptUrl;
+  // Create Stockfish 17.1 with WASM and NNUE - ONLY USING YOUR FILES
+  function createStockfishEngine() {
+    engineLoadStatus.style.display = 'inline';
+    engineLoadStatus.textContent = '🔄 Loading Stockfish 17.1...';
+    engineError.style.display = 'none';
+    
+    // Create Worker with your specific Stockfish JS file
+    const stockfish = new Worker(STOCKFISH_JS);
+
+    let onMessageCallback = null;
+    let isUciOk = false;
+    let isReadyOk = false;
+    let hasNNUE = false;
+
+    stockfish.onmessage = function (e) {
+      const line = e.data;
+      if (typeof line !== 'string') return;
+
+      console.log('Stockfish:', line);
+
+      // Handle UCI protocol responses
+      if (line === 'uciok') {
+        isUciOk = true;
+        console.log('Stockfish: UCI OK received');
+      } else if (line === 'readyok') {
+        isReadyOk = true;
+        isEngineReady = true;
+        engineLoadStatus.style.display = 'none';
+        console.log('Stockfish: Ready OK received');
+      } else if (line.includes('NNUE evaluated')) {
+        hasNNUE = true;
+        console.log('Stockfish: NNUE evaluation is active');
+      } else if (line.startsWith('bestmove')) {
+        if (onMessageCallback) onMessageCallback(line);
+      } 
+      else if (line.startsWith('info') && line.includes(' depth ')) {
+        const match = line.match(/depth (\d+)/);
+        if (match) {
+          engineDepth.textContent = `Depth: ${match[1]}`;
         }
-      };
-      
-      // Load Stockfish as a module
-      return new Promise((resolve, reject) => {
-        // Remove any existing Stockfish script
-        const existingScript = document.querySelector('script[src*="stockfish-17.1.js"]');
-        if (existingScript) {
-          existingScript.remove();
-        }
-        
-        const script = document.createElement('script');
-        script.src = scriptUrl;
-        script.onload = () => {
-          // The Stockfish script should expose Stockfish as a global
-          setTimeout(() => {
-            if (typeof window.Stockfish !== 'undefined') {
-              engineLoadStatus.style.display = 'none';
-              resolve(window.Stockfish);
-            } else if (typeof window.StockfishWasm !== 'undefined') {
-              engineLoadStatus.style.display = 'none';
-              resolve(window.StockfishWasm);
-            } else if (typeof window.Module !== 'undefined' && window.Module.exports) {
-              engineLoadStatus.style.display = 'none';
-              resolve(window.Module);
-            } else {
-              reject(new Error('Stockfish not found after loading'));
-            }
-          }, 1500);
-        };
-        script.onerror = (error) => {
-          engineLoadStatus.style.display = 'none';
-          reject(new Error('Failed to load Stockfish script: ' + error));
-        };
-        document.head.appendChild(script);
-      });
-    } catch (error) {
-      console.error('Failed to load Stockfish WASM:', error);
+      }
+      // Handle errors
+      else if (line.includes('error') || line.includes('failed') || line.includes('Error')) {
+        console.error('Stockfish error:', line);
+        engineError.textContent = 'Engine error: ' + line;
+        engineError.style.display = 'inline';
+      }
+    };
+
+    stockfish.onerror = function (error) {
+      console.error('Stockfish Worker error:', error);
       engineLoadStatus.style.display = 'none';
-      throw error;
-    }
-  }
-
-  // Create Stockfish Worker with WASM
-  function createStockfishWASM() {
-    // Create a Worker from the Stockfish module
-    const stockfish = new Worker(
-      'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js'
-    );
-
-    let onMessageCallback = null;
-
-    stockfish.onmessage = function (e) {
-      const line = e.data;
-      if (typeof line !== 'string') return;
-
-      if (line.startsWith('bestmove')) {
-        if (onMessageCallback) onMessageCallback(line);
-      } 
-      else if (line.startsWith('info') && line.includes(' depth ')) {
-        const match = line.match(/depth (\d+)/);
-        if (match) {
-          engineDepth.textContent = `Depth: ${match[1]}`;
-        }
-      }
+      engineError.textContent = 'Failed to load Stockfish. Check console for details.';
+      engineError.style.display = 'inline';
     };
 
     return {
       postMessage(cmd) {
-        stockfish.postMessage(cmd);
+        if (stockfish) {
+          stockfish.postMessage(cmd);
+        }
       },
       setOnMessage(cb) {
         onMessageCallback = cb;
       },
       terminate() {
-        stockfish.terminate();
-      }
-    };
-  }
-
-  // Fallback to Worker-only Stockfish
-  function createStockfishLite() {
-    engineLoadStatus.textContent = '⚠️ Using lighter engine';
-    setTimeout(() => { engineLoadStatus.style.display = 'none'; }, 2000);
-    
-    const stockfish = new Worker(
-      'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js'
-    );
-
-    let onMessageCallback = null;
-
-    stockfish.onmessage = function (e) {
-      const line = e.data;
-      if (typeof line !== 'string') return;
-
-      if (line.startsWith('bestmove')) {
-        if (onMessageCallback) onMessageCallback(line);
-      } 
-      else if (line.startsWith('info') && line.includes(' depth ')) {
-        const match = line.match(/depth (\d+)/);
-        if (match) {
-          engineDepth.textContent = `Depth: ${match[1]}`;
+        if (stockfish) {
+          stockfish.terminate();
         }
-      }
-    };
-
-    return {
-      postMessage(cmd) {
-        stockfish.postMessage(cmd);
+        isEngineReady = false;
+        isUciOk = false;
+        isReadyOk = false;
+        hasNNUE = false;
       },
-      setOnMessage(cb) {
-        onMessageCallback = cb;
+      isReady() {
+        return isEngineReady;
       },
-      terminate() {
-        stockfish.terminate();
+      hasNNUE() {
+        return hasNNUE;
       }
     };
   }
 
-  // Initialize Stockfish engine
-  function initStockfish(engineObj) {
-    if (!engineObj) return;
-    
-    engineObj.postMessage('uci');
-    engineObj.postMessage('isready');
-    
-    // Set skill level (0-20, where 20 is strongest)
-    engineObj.postMessage(`setoption name Skill Level value ${engineLevel}`);
-    
-    // Set additional options for better play
-    engineObj.postMessage('setoption name Contempt value 0');
-    engineObj.postMessage('setoption name Threads value 2');
-    engineObj.postMessage('setoption name Hash value 256');
-    
-    // Enable NNUE (if supported)
-    engineObj.postMessage('setoption name Use NNUE value true');
-    
-    // Reduce strength for lower levels
-    if (engineLevel < 10) {
-      engineObj.postMessage('setoption name Skill Level Maximum Error value 100');
-      engineObj.postMessage('setoption name Skill Level Probability value 50');
+  // Initialize Stockfish engine with proper UCI sequence
+  function initStockfish(engineObj, callback) {
+    if (!engineObj) {
+      if (callback) callback(false);
+      return;
     }
+    
+    // Reset ready flags
+    isEngineReady = false;
+    
+    // Proper UCI initialization sequence
+    setTimeout(() => {
+      engineObj.postMessage('uci');
+      
+      // Wait for uciok, then send isready
+      setTimeout(() => {
+        engineObj.postMessage('isready');
+        
+        // Set up engine options after it's ready
+        setTimeout(() => {
+          // Set skill level (0-20, where 20 is strongest)
+          engineObj.postMessage(`setoption name Skill Level value ${engineLevel}`);
+          
+          // Set additional options for better play
+          engineObj.postMessage('setoption name Contempt value 0');
+          engineObj.postMessage('setoption name Threads value 2');
+          engineObj.postMessage('setoption name Hash value 256');
+          
+          // Note: Stockfish 17.1 automatically uses NNUE if available
+          // The NNUE file should be in the same directory as the WASM file
+          
+          // Reduce strength for lower levels
+          if (engineLevel < 10) {
+            engineObj.postMessage('setoption name Skill Level Maximum Error value 100');
+            engineObj.postMessage('setoption name Skill Level Probability value 50');
+          }
+          
+          // Verify NNUE is working
+          setTimeout(() => {
+            engineObj.postMessage('eval');
+          }, 100);
+          
+          if (callback) callback(true);
+        }, 200);
+      }, 200);
+    }, 100);
   }
 
   // Process engine's best move
@@ -628,7 +605,7 @@ window.game = null;
 
   // Ask engine to make a move
   function askEngineToMove() {
-    if (!engine || game.game_over() || isThinking) return;
+    if (!engine || game.game_over() || isThinking || !isEngineReady) return;
     
     const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
     if (engineColor === 'both' || 
@@ -639,8 +616,7 @@ window.game = null;
       engineThinking.style.display = 'inline';
       engineDepth.textContent = 'Depth: -';
       
-      // Send position to engine with ucinewgame for stability
-      engine.postMessage('ucinewgame');
+      // Send position to engine
       engine.postMessage('position fen ' + game.fen());
       
       // Calculate thinking time based on level
@@ -652,45 +628,46 @@ window.game = null;
   }
 
   // Start engine
-  async function startEngine() {
+  function startEngine() {
     if (engine && engine.terminate) {
       try { engine.terminate(); } catch (e) {}
       engine = null;
     }
 
-    try {
-      // Try to create WASM engine first
-      engine = createStockfishWASM();
-    } catch (wasmError) {
-      console.warn('WASM engine failed, falling back to lighter version:', wasmError);
-      // Fall back to lighter engine
-      engine = createStockfishLite();
-    }
+    engine = createStockfishEngine();
+    engine.setOnMessage(processBestMove);
     
-    // Initialize engine
-    initStockfish(engine);
-    engine.setOnMessage(processBestMove); // ✅ REQUIRED
+    initStockfish(engine, function(success) {
+      if (success) {
+        engineEnabled = true;
+        engineOnBtn.style.display = 'none';
+        engineOffBtn.style.display = 'inline-block';
 
-    engineEnabled = true;
-    engineOnBtn.style.display = 'none';
-    engineOffBtn.style.display = 'inline-block';
+        if (multiplayStatus) {
+          multiplayStatus.textContent = 'Playing vs Stockfish 17.1 NNUE';
+        }
 
-    if (multiplayStatus) {
-      multiplayStatus.textContent = 'Playing vs Stockfish';
-    }
-
-    if (!game.game_over() && !isHumanTurn()) {
-      setTimeout(askEngineToMove, 500);
-    }
+        if (!game.game_over() && !isHumanTurn()) {
+          setTimeout(askEngineToMove, 500);
+        }
+      } else {
+        engineError.textContent = 'Failed to initialize Stockfish';
+        engineError.style.display = 'inline';
+        engineLoadStatus.style.display = 'none';
+      }
+    });
   }
 
   // Stop engine
   function stopEngine() {
     engineEnabled = false;
     isThinking = false;
+    isEngineReady = false;
 
     engineThinking.style.display = 'none';
     engineDepth.textContent = 'Depth: -';
+    engineLoadStatus.style.display = 'none';
+    engineError.style.display = 'none';
 
     if (engine && engine.postMessage) {
       engine.postMessage('stop');
@@ -704,7 +681,7 @@ window.game = null;
     engineOnBtn.style.display = 'inline-block';
     engineOffBtn.style.display = 'none';
 
-    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish') {
+    if (multiplayStatus && multiplayStatus.textContent.includes('Stockfish')) {
       multiplayStatus.textContent = 'Stockfish stopped';
     }
   }
@@ -725,7 +702,7 @@ window.game = null;
     isThinking = false;
     engineThinking.style.display = 'none';
     
-    // ✅ FIXED - Use reset() instead of reassigning
+    // Use reset() instead of reassigning
     game.reset();
     
     board.position('start');
@@ -844,7 +821,7 @@ window.game = null;
     
     // Engine settings
     engineColorSelect.addEventListener('change', () => {
-      // ✅ Stop engine before changing side
+      // Stop engine before changing side
       if (engine && engine.postMessage) {
         engine.postMessage('stop');
       }
