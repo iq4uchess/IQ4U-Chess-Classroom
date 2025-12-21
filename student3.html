@@ -190,10 +190,15 @@
         return;
       }
 stockfishEngine.onmessage = (e) => {
-  const msg =
+  let msg =
     typeof e.data === 'string'
       ? e.data
-      : (e.data && e.data.data) ? e.data.data : '';
+      : (e.data && typeof e.data.data === 'string')
+        ? e.data.data
+        : '';
+
+  msg = msg.trim();
+  if (!msg) return;
 
   console.log('[Stockfish]', msg);
 
@@ -203,17 +208,29 @@ stockfishEngine.onmessage = (e) => {
       `setoption name EvalFile value ${STOCKFISH_NNUE_URL}`
     );
     stockfishEngine.postMessage('isready');
+    return;
   }
 
   if (msg === 'readyok') {
     stockfishReady = true;
     console.log('✅ Stockfish ready (NNUE loaded)');
+    return;
   }
 
   if (msg.startsWith('bestmove')) {
     const move = msg.split(' ')[1];
     if (move && stockfishOnBestMove) {
       stockfishOnBestMove(move);
+    }
+    return;
+  }
+
+  // Optional: depth info
+  if (msg.startsWith('info') && msg.includes(' depth ')) {
+    const m = msg.match(/depth (\d+)/);
+    if (m) {
+      const el = document.getElementById('engineDepth');
+      if (el) el.textContent = `Depth: ${m[1]}`;
     }
   }
 };
