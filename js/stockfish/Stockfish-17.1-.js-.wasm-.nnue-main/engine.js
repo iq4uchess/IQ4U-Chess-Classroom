@@ -1,18 +1,11 @@
-// Tell Stockfish where the WASM file lives
-self.Module = {
-  locateFile: (path) => {
-    if (path.endsWith('.wasm')) {
-      return './stockfish-17.1.wasm';
-    }
-    return path;
-  }
-};
+// engine.js — Stockfish 17.1 worker bootstrap
 
-importScripts('./stockfish-17.1.js');
+// IMPORTANT: path is RELATIVE TO engine.js
+importScripts('stockfish-17.1.js');
 
+// DO NOT define onmessage yourself
+// DO NOT override postMessage
+// Stockfish will attach them internally
 
-self.onmessage = (e) => {
-  if (typeof onmessage === 'function') {
-    onmessage(e);
-  }
-};
+// Optional: debug ping
+postMessage('engine.js loaded');
