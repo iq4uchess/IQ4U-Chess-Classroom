@@ -46,12 +46,14 @@
     #engineOffBtn { background: #ef4444; display: none; }
     .engine-status { padding: 4px 8px; border-radius: 4px; background: #f3f4f6; font-size: 12px; color: #666; }
     #engineThinking { display: none; color: #059669; font-weight: 600; }
+    .wasm-loading { color: #8b5cf6; font-weight: 600; font-size: 12px; }
+    #engineLoadStatus { display: none; }
   </style>
 </head>
 
 <body>
 
-<h1>Student3 - Play vs Stockfish Engine</h1>
+<h1>Student3 - Play vs Stockfish Engine (NNUE)</h1>
 
 <div class="panel">
   <div class="controls">
@@ -116,6 +118,7 @@
     </div>
     
     <div>
+      <span id="engineLoadStatus" class="wasm-loading">🔄 Loading Stockfish...</span>
       <span id="engineThinking" style="display:none;">🤔 Thinking...</span>
       <span id="engineDepth" class="engine-status">Depth: -</span>
     </div>
@@ -175,6 +178,7 @@ window.game = null;
   const engineOnBtn = document.getElementById('engineOnBtn');
   const engineOffBtn = document.getElementById('engineOffBtn');
   const engineThinking = document.getElementById('engineThinking');
+  const engineLoadStatus = document.getElementById('engineLoadStatus');
   const engineDepth = document.getElementById('engineDepth');
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
@@ -196,6 +200,7 @@ window.game = null;
   let isThinking = false;
   let lastMoveSquares = [];
   let pendingPromo = null;
+  let stockfishModule = null;
 
   // Promotion Modal
   const promoteModal = document.getElementById('promoteModal');
@@ -400,8 +405,108 @@ window.game = null;
     return 'snap';
   }
 
-  // Create Stockfish Worker Engine
+  // Load Stockfish 17.1 with WASM and NNUE
+  async function loadStockfishWASM() {
+    try {
+      engineLoadStatus.style.display = 'inline';
+      engineLoadStatus.textContent = '🔄 Loading Stockfish...';
+      
+      // Stockfish 17.1 with WASM and NNUE
+      const scriptUrl = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
+      const wasmUrl = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.wasm';
+      
+      // Configure Stockfish
+      const stockfishConfig = {
+        locateFile: (path) => {
+          if (path.endsWith('.wasm')) {
+            return wasmUrl;
+          }
+          return scriptUrl;
+        }
+      };
+      
+      // Load Stockfish as a module
+      return new Promise((resolve, reject) => {
+        // Remove any existing Stockfish script
+        const existingScript = document.querySelector('script[src*="stockfish-17.1.js"]');
+        if (existingScript) {
+          existingScript.remove();
+        }
+        
+        const script = document.createElement('script');
+        script.src = scriptUrl;
+        script.onload = () => {
+          // The Stockfish script should expose Stockfish as a global
+          setTimeout(() => {
+            if (typeof window.Stockfish !== 'undefined') {
+              engineLoadStatus.style.display = 'none';
+              resolve(window.Stockfish);
+            } else if (typeof window.StockfishWasm !== 'undefined') {
+              engineLoadStatus.style.display = 'none';
+              resolve(window.StockfishWasm);
+            } else if (typeof window.Module !== 'undefined' && window.Module.exports) {
+              engineLoadStatus.style.display = 'none';
+              resolve(window.Module);
+            } else {
+              reject(new Error('Stockfish not found after loading'));
+            }
+          }, 1500);
+        };
+        script.onerror = (error) => {
+          engineLoadStatus.style.display = 'none';
+          reject(new Error('Failed to load Stockfish script: ' + error));
+        };
+        document.head.appendChild(script);
+      });
+    } catch (error) {
+      console.error('Failed to load Stockfish WASM:', error);
+      engineLoadStatus.style.display = 'none';
+      throw error;
+    }
+  }
+
+  // Create Stockfish Worker with WASM
+  function createStockfishWASM() {
+    // Create a Worker from the Stockfish module
+    const stockfish = new Worker(
+      'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js'
+    );
+
+    let onMessageCallback = null;
+
+    stockfish.onmessage = function (e) {
+      const line = e.data;
+      if (typeof line !== 'string') return;
+
+      if (line.startsWith('bestmove')) {
+        if (onMessageCallback) onMessageCallback(line);
+      } 
+      else if (line.startsWith('info') && line.includes(' depth ')) {
+        const match = line.match(/depth (\d+)/);
+        if (match) {
+          engineDepth.textContent = `Depth: ${match[1]}`;
+        }
+      }
+    };
+
+    return {
+      postMessage(cmd) {
+        stockfish.postMessage(cmd);
+      },
+      setOnMessage(cb) {
+        onMessageCallback = cb;
+      },
+      terminate() {
+        stockfish.terminate();
+      }
+    };
+  }
+
+  // Fallback to Worker-only Stockfish
   function createStockfishLite() {
+    engineLoadStatus.textContent = '⚠️ Using lighter engine';
+    setTimeout(() => { engineLoadStatus.style.display = 'none'; }, 2000);
+    
     const stockfish = new Worker(
       'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js'
     );
@@ -449,7 +554,10 @@ window.game = null;
     // Set additional options for better play
     engineObj.postMessage('setoption name Contempt value 0');
     engineObj.postMessage('setoption name Threads value 2');
-    engineObj.postMessage('setoption name Hash value 128');
+    engineObj.postMessage('setoption name Hash value 256');
+    
+    // Enable NNUE (if supported)
+    engineObj.postMessage('setoption name Use NNUE value true');
     
     // Reduce strength for lower levels
     if (engineLevel < 10) {
@@ -550,9 +658,18 @@ window.game = null;
       engine = null;
     }
 
-    engine = createStockfishLite();
+    try {
+      // Try to create WASM engine first
+      engine = createStockfishWASM();
+    } catch (wasmError) {
+      console.warn('WASM engine failed, falling back to lighter version:', wasmError);
+      // Fall back to lighter engine
+      engine = createStockfishLite();
+    }
+    
+    // Initialize engine
     initStockfish(engine);
-    engine.setOnMessage(processBestMove); // ✅ REQUIRED - FIXED ISSUE 1
+    engine.setOnMessage(processBestMove); // ✅ REQUIRED
 
     engineEnabled = true;
     engineOnBtn.style.display = 'none';
@@ -608,7 +725,7 @@ window.game = null;
     isThinking = false;
     engineThinking.style.display = 'none';
     
-    // ✅ FIXED ISSUE 2 - Use reset() instead of reassigning
+    // ✅ FIXED - Use reset() instead of reassigning
     game.reset();
     
     board.position('start');
@@ -727,7 +844,7 @@ window.game = null;
     
     // Engine settings
     engineColorSelect.addEventListener('change', () => {
-      // ✅ IMPROVEMENT 1: Stop engine before changing side
+      // ✅ Stop engine before changing side
       if (engine && engine.postMessage) {
         engine.postMessage('stop');
       }
