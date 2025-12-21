@@ -1,7 +1,7 @@
-// engine.js — Web Worker for Stockfish 17.1
+// engine.js (Web Worker)
 
-// CRITICAL: Tell Emscripten where the WASM file is
-self.Module = {
+// Tell Stockfish exactly where the wasm file lives
+var Module = {
   locateFile: function (path) {
     if (path.endsWith('.wasm')) {
       return './stockfish-17.1.wasm';
@@ -10,15 +10,15 @@ self.Module = {
   }
 };
 
-// Load Stockfish engine
+// Load Stockfish
 importScripts('./stockfish-17.1.js');
 
-// Forward messages between main thread and Stockfish
+// Forward messages correctly
 self.onmessage = function (e) {
-  if (typeof self.onmessage === 'function') {
-    self.onmessage(e);
+  if (typeof onmessage === 'function') {
+    onmessage(e);
   }
 };
 
-// Debug confirmation
+// Optional debug
 postMessage('engine.js loaded');
