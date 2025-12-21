@@ -1,12 +1,14 @@
-// engine.js — Stockfish worker bootstrap
-
 var Module = {
   locateFile: function (path) {
     if (path.endsWith('.wasm')) {
-      return 'stockfish-17.1.wasm';
+      return self.location.origin +
+        '/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1.wasm';
     }
     return path;
   }
 };
 
-importScripts('stockfish-17.1.js');
+importScripts(
+  self.location.origin +
+  '/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1.js'
+);
