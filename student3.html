@@ -158,9 +158,7 @@
   let stockfishOnBestMove = null;
   
   // FIXED: Only need NNUE path, engine.js loads stockfish internally
-  const STOCKFISH_NNUE_URL =
-  '/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.nnue';
-
+  const STOCKFISH_NNUE_URL = '/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.nnue';
 
   // Export functions to global scope
   window.StockfishManager = {
@@ -176,98 +174,59 @@
       }
 
       stockfishOnBestMove = callback;
-      console.log('[Stockfish] Creating worker: engine.js');
+      console.log('[Stockfish] Creating worker: stockfish-17.1.js');
       
       try {
         stockfishEngine = new Worker(
-  '/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js'
-);
-
-
-
+          '/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js'
+        );
       } catch (e) {
         console.error('[Stockfish] Failed to create worker:', e);
         return;
       }
-stockfishEngine.onmessage = (e) => {
-  let msg =
-    typeof e.data === 'string'
-      ? e.data
-      : (e.data && typeof e.data.data === 'string')
-        ? e.data.data
-        : '';
 
-  msg = msg.trim();
-  if (!msg) return;
+      stockfishEngine.onmessage = (e) => {
+        let msg =
+          typeof e.data === 'string'
+            ? e.data
+            : (e.data && typeof e.data.data === 'string')
+              ? e.data.data
+              : '';
 
-  console.log('[Stockfish]', msg);
+        msg = msg.trim();
+        if (!msg) return;
 
-  if (msg === 'uciok') {
-    console.log('[Stockfish] uciok received');
-    stockfishEngine.postMessage(
-      `setoption name EvalFile value ${STOCKFISH_NNUE_URL}`
-    );
-    stockfishEngine.postMessage('isready');
-    return;
-  }
+        console.log('[Stockfish]', msg);
 
-  if (msg === 'readyok') {
-    stockfishReady = true;
-    console.log('✅ Stockfish ready (NNUE loaded)');
-    return;
-  }
-
-  if (msg.startsWith('bestmove')) {
-    const move = msg.split(' ')[1];
-    if (move && stockfishOnBestMove) {
-      stockfishOnBestMove(move);
-    }
-    return;
-  }
-
-  // Optional: depth info
-  if (msg.startsWith('info') && msg.includes(' depth ')) {
-    const m = msg.match(/depth (\d+)/);
-    if (m) {
-      const el = document.getElementById('engineDepth');
-      if (el) el.textContent = `Depth: ${m[1]}`;
-    }
-  }
-};
-
-      
-
-         {
-          // Load NNUE evaluation file
-          console.log('[Stockfish] Setting NNUE file:', STOCKFISH_NNUE_URL);
-          stockfishEngine.postMessage(`setoption name EvalFile value ${STOCKFISH_NNUE_URL}`);
+        if (msg === 'uciok') {
+          console.log('[Stockfish] uciok received');
+          stockfishEngine.postMessage(
+            `setoption name EvalFile value ${STOCKFISH_NNUE_URL}`
+          );
           stockfishEngine.postMessage('isready');
+          return;
         }
 
         if (msg === 'readyok') {
           stockfishReady = true;
           console.log('✅ Stockfish ready (NNUE loaded)');
+          return;
         }
 
-        // Correct depth parsing
-        if (msg.startsWith('info') && msg.includes(' depth ')) {
-          const depthMatch = msg.match(/depth (\d+)/);
-          if (depthMatch) {
-            const depthElement = document.getElementById('engineDepth');
-            if (depthElement) {
-              depthElement.textContent = `Depth: ${depthMatch[1]}`;
-            }
-          }
-        }
-
-        // Clean bestmove handling
         if (msg.startsWith('bestmove')) {
-          const parts = msg.split(' ');
-          if (parts.length >= 2) {
-            const move = parts[1];
-            if (move && move !== '(none)' && move !== 'none' && move !== 'null') {
-              if (stockfishOnBestMove) stockfishOnBestMove(move);
-            }
+          const move = msg.split(' ')[1];
+          if (move && stockfishOnBestMove) {
+            stockfishOnBestMove(move);
+          }
+          return;
+        }
+
+        // Optional: depth info
+        if (msg.startsWith('info') && msg.includes(' depth ')) {
+          const m = msg.match(/depth (\d+)/);
+          if (m) {
+            const el = document.getElementById('engineDepth');
+            if (el) el.textContent = `Depth: ${m[1]}`;
           }
         }
       };
