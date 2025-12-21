@@ -1,11 +1,18 @@
-// engine.js — Stockfish 17.1 worker bootstrap
+// engine.js — Stockfish Web Worker bridge
 
-// IMPORTANT: path is RELATIVE TO engine.js
-importScripts('stockfish-17.1.js');
+importScripts('./stockfish-17.1.js');
 
-// DO NOT define onmessage yourself
-// DO NOT override postMessage
-// Stockfish will attach them internally
+// Forward messages FROM Stockfish → main thread
+self.postMessage = self.postMessage.bind(self);
 
-// Optional: debug ping
-postMessage('engine.js loaded');
+// Forward messages FROM main thread → Stockfish
+self.onmessage = function (e) {
+  if (typeof self.stockfish === 'function') {
+    self.stockfish(e.data);
+  } else if (typeof onmessage === 'function') {
+    onmessage(e);
+  }
+};
+
+// Notify UI that worker booted
+self.postMessage('engine.js loaded');
