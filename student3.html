@@ -189,12 +189,38 @@
         console.error('[Stockfish] Failed to create worker:', e);
         return;
       }
+stockfishEngine.onmessage = (e) => {
+  const msg =
+    typeof e.data === 'string'
+      ? e.data
+      : (e.data && e.data.data) ? e.data.data : '';
 
-      stockfishEngine.onmessage = (e) => {
-        const msg = e.data;
-        console.log('[Stockfish]', msg);
+  console.log('[Stockfish]', msg);
 
-        if (msg === 'uciok') {
+  if (msg === 'uciok') {
+    console.log('[Stockfish] uciok received');
+    stockfishEngine.postMessage(
+      `setoption name EvalFile value ${STOCKFISH_NNUE_URL}`
+    );
+    stockfishEngine.postMessage('isready');
+  }
+
+  if (msg === 'readyok') {
+    stockfishReady = true;
+    console.log('✅ Stockfish ready (NNUE loaded)');
+  }
+
+  if (msg.startsWith('bestmove')) {
+    const move = msg.split(' ')[1];
+    if (move && stockfishOnBestMove) {
+      stockfishOnBestMove(move);
+    }
+  }
+};
+
+      
+
+         {
           // Load NNUE evaluation file
           console.log('[Stockfish] Setting NNUE file:', STOCKFISH_NNUE_URL);
           stockfishEngine.postMessage(`setoption name EvalFile value ${STOCKFISH_NNUE_URL}`);
