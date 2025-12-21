@@ -187,27 +187,26 @@
         return;
       }
 
-      stockfishEngine.onmessage = (e) => {
-        let msg =
-          typeof e.data === 'string'
-            ? e.data
-            : (e.data && typeof e.data.data === 'string')
-              ? e.data.data
-              : '';
+     stockfishEngine.onmessage = (e) => {
+  const msg = typeof e.data === 'string' ? e.data : '';
+  console.log('[Stockfish]', msg);
 
-        msg = msg.trim();
-        if (!msg) return;
+  if (msg === 'uciok') {
+    stockfishEngine.postMessage('isready');
+  }
 
-        console.log('[Stockfish]', msg);
+  if (msg === 'readyok') {
+    stockfishReady = true;
+    console.log('✅ Stockfish ready');
+  }
 
-        if (msg === 'uciok') {
-          console.log('[Stockfish] uciok received');
-          stockfishEngine.postMessage(
-            `setoption name EvalFile value ${STOCKFISH_NNUE_URL}`
-          );
-          stockfishEngine.postMessage('isready');
-          return;
-        }
+  if (msg.startsWith('bestmove')) {
+    stockfishOnBestMove(msg.split(' ')[1]);
+  }
+};
+
+stockfishEngine.postMessage('uci');
+
 
         if (msg === 'readyok') {
           stockfishReady = true;
