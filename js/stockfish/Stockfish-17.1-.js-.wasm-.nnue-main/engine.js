@@ -1,5 +1,4 @@
-// engine.js
-// This file MUST exist to bootstrap Stockfish WASM in a Web Worker
+// engine.js — standalone Stockfish worker bootstrap
 
 var Module = {
   locateFile: function (path) {
@@ -10,5 +9,5 @@ var Module = {
   }
 };
 
-// Load Stockfish engine
+// Load Stockfish WASM engine
 importScripts('./stockfish-17.1.js');
