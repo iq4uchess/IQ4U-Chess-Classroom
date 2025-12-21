@@ -176,9 +176,8 @@
 
       stockfishOnBestMove = callback;
       console.log('[Stockfish] Creating worker from:', STOCKFISH_JS_URL);
-      stockfishEngine = new Worker(
-  './js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-worker.js'
-);
+      new Worker('./js/stockfish/engine.js', { type: 'module' })
+
 
 
       stockfishEngine.onmessage = (e) => {
