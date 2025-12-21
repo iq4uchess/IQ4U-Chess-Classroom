@@ -157,9 +157,8 @@
   let stockfishReady = false;
   let stockfishOnBestMove = null;
   
-  // FIXED ISSUE 1: Use relative paths for same-origin compliance
-  const STOCKFISH_JS_URL = './js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
-  const STOCKFISH_NNUE_URL = './js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.nnue';
+  // FIXED: Only need NNUE path, engine.js loads stockfish internally
+  const STOCKFISH_NNUE_URL = './js/stockfish/stockfish-17.1.nnue';
 
   // Export functions to global scope
   window.StockfishManager = {
@@ -175,10 +174,14 @@
       }
 
       stockfishOnBestMove = callback;
-      console.log('[Stockfish] Creating worker from:', STOCKFISH_JS_URL);
-      new Worker('./js/stockfish/engine.js', { type: 'module' })
-
-
+      console.log('[Stockfish] Creating worker: engine.js');
+      
+      try {
+        stockfishEngine = new Worker('./js/stockfish/engine.js');
+      } catch (e) {
+        console.error('[Stockfish] Failed to create worker:', e);
+        return;
+      }
 
       stockfishEngine.onmessage = (e) => {
         const msg = e.data;
@@ -636,16 +639,21 @@ window.game = null;
     engineOnBtn.classList.add('engine-starting');
     engineOnBtn.textContent = 'Starting...';
 
-    if (!window.StockfishManager.isRunning()) {
-      window.StockfishManager.start(processBestMove);
+    // Clear any existing engine first
+    if (window.StockfishManager.isRunning()) {
+      window.StockfishManager.destroy();
     }
+
+    window.StockfishManager.start(processBestMove);
 
     engineEnabled = true;
     engineOnBtn.style.display = 'none';
     engineOffBtn.style.display = 'inline-block';
 
     // Wait for engine to be fully ready
+    let attempts = 0;
     const waitReady = setInterval(() => {
+      attempts++;
       if (window.StockfishManager.isReady()) {
         clearInterval(waitReady);
         engineStarting = false;
@@ -656,31 +664,38 @@ window.game = null;
         
         // Set skill level now that engine is ready
         window.StockfishManager.setSkillLevel(engineLevel);
-
+        
+        // Update status
+        if (multiplayStatus) {
+          multiplayStatus.textContent = 'Playing vs Stockfish';
+        }
+        
         // If engine should move first
         if (!game.game_over() && !isHumanTurn()) {
           console.log('[Engine] Engine moves first');
-          setTimeout(askEngineToMove, 300);
+          setTimeout(() => {
+            if (window.StockfishManager.isReady()) {
+              askEngineToMove();
+            }
+          }, 300);
         }
       }
-    }, 100);
-
-    // Safety timeout
-    setTimeout(() => {
-      clearInterval(waitReady);
-      if (engineStarting) {
-        console.warn('[Engine] Startup timeout - engine may have failed');
+      
+      // Timeout after 5 seconds
+      if (attempts > 50) { // 50 * 100ms = 5 seconds
+        clearInterval(waitReady);
+        console.error('[Engine] Startup failed after 5 seconds');
         engineStarting = false;
         engineOnBtn.disabled = false;
         engineOnBtn.classList.remove('engine-starting');
-        engineOnBtn.textContent = 'Start Stockfish';
+        engineOnBtn.textContent = 'Start Stockfish (Failed)';
+        engineOnBtn.style.display = 'inline-block';
+        engineOffBtn.style.display = 'none';
+        
+        // Show error to user
+        alert('Stockfish failed to start. Please refresh and try again.');
       }
-    }, 10000);
-
-    // Update multiplayer status
-    if (multiplayStatus) {
-      multiplayStatus.textContent = 'Playing vs Stockfish';
-    }
+    }, 100);
   }
 
   // Stop engine - FIXED with startup guard
