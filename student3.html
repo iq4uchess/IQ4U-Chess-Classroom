@@ -46,8 +46,6 @@
     #engineOffBtn { background: #ef4444; display: none; }
     .engine-status { padding: 4px 8px; border-radius: 4px; background: #f3f4f6; font-size: 12px; color: #666; }
     #engineThinking { display: none; color: #059669; font-weight: 600; }
-    .wasm-loading { color: #8b5cf6; font-weight: 600; font-size: 12px; }
-    #engineLoadStatus { display: none; }
   </style>
 </head>
 
@@ -118,7 +116,6 @@
     </div>
     
     <div>
-      <span id="engineLoadStatus" class="wasm-loading">🔄 Loading Stockfish...</span>
       <span id="engineThinking" style="display:none;">🤔 Thinking...</span>
       <span id="engineDepth" class="engine-status">Depth: -</span>
     </div>
@@ -158,9 +155,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
-<!-- Stockfish Engine with WASM -->
-<!-- We'll load Stockfish dynamically -->
-
 <script>
 // GLOBAL GAME INSTANCE - REQUIRED FOR MASTER SPECTATING
 window.game = null;
@@ -181,7 +175,6 @@ window.game = null;
   const engineOnBtn = document.getElementById('engineOnBtn');
   const engineOffBtn = document.getElementById('engineOffBtn');
   const engineThinking = document.getElementById('engineThinking');
-  const engineLoadStatus = document.getElementById('engineLoadStatus');
   const engineDepth = document.getElementById('engineDepth');
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
@@ -203,7 +196,6 @@ window.game = null;
   let isThinking = false;
   let lastMoveSquares = [];
   let pendingPromo = null;
-  let stockfishModule = null;
 
   // Promotion Modal
   const promoteModal = document.getElementById('promoteModal');
@@ -408,173 +400,37 @@ window.game = null;
     return 'snap';
   }
 
-  // Load Stockfish with WASM
-  async function loadStockfishWASM() {
-    try {
-      engineLoadStatus.style.display = 'inline';
-      engineLoadStatus.textContent = '🔄 Loading Stockfish...';
-      
-      // Configure Stockfish to load WASM from the correct location
-      const stockfishConfig = {
-        locateFile: (path, prefix) => {
-          // Handle both the main JS file and WASM parts
-          if (path.includes('stockfish-17.1-single-a496a04')) {
-            return `https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/${path}`;
-          }
-          return prefix + path;
-        }
-      };
-      
-      // Dynamically import Stockfish
-      // Note: We need to load it as a module. Since it's a .js file that exports Stockfish as a module,
-      // we'll create a script element and load it
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-single-a496a04.js';
-        script.onload = () => {
-          // The script should expose Stockfish globally or as a module
-          // We'll check if it's available globally
-          setTimeout(() => {
-            if (typeof window.Stockfish !== 'undefined') {
-              engineLoadStatus.style.display = 'none';
-              resolve(window.Stockfish);
-            } else {
-              // Try to find it another way
-              const Stockfish = window.Stockfish || window.Module;
-              if (Stockfish) {
-                engineLoadStatus.style.display = 'none';
-                resolve(Stockfish);
-              } else {
-                reject(new Error('Stockfish not found after loading'));
-              }
-            }
-          }, 1000);
-        };
-        script.onerror = () => {
-          engineLoadStatus.style.display = 'none';
-          reject(new Error('Failed to load Stockfish script'));
-        };
-        document.head.appendChild(script);
-      });
-    } catch (error) {
-      console.error('Failed to load Stockfish WASM:', error);
-      engineLoadStatus.style.display = 'none';
-      throw error;
-    }
-  }
-
-  // Create Stockfish Engine with WASM
-  async function createStockfishWASM() {
-    try {
-      // Load Stockfish module if not already loaded
-      if (!stockfishModule) {
-        stockfishModule = await loadStockfishWASM();
-      }
-      
-      // Create a Worker from the Stockfish module
-      // Since Stockfish 17.1 with WASM is typically loaded as a module,
-      // we need to create it differently than the standard Worker
-      
-      let onMessageCallback = null;
-      let stockfishInstance = null;
-      
-      // Initialize Stockfish
-      if (typeof stockfishModule === 'function') {
-        // If it's a constructor function
-        stockfishInstance = stockfishModule();
-      } else if (stockfishModule && typeof stockfishModule.then === 'function') {
-        // If it's a promise
-        stockfishInstance = await stockfishModule;
-      } else {
-        // Use as-is
-        stockfishInstance = stockfishModule;
-      }
-      
-      // Configure message handling
-      if (stockfishInstance && stockfishInstance.onmessage) {
-        const originalOnMessage = stockfishInstance.onmessage;
-        stockfishInstance.onmessage = function(e) {
-          const line = e.data;
-          
-          if (line && typeof line === 'string') {
-            if (line.startsWith('bestmove')) {
-              if (onMessageCallback) {
-                onMessageCallback(line);
-              }
-            } else if (line.includes('depth')) {
-              // Extract depth information
-              const depthMatch = line.match(/depth (\d+)/);
-              if (depthMatch) {
-                engineDepth.textContent = `Depth: ${depthMatch[1]}`;
-              }
-            }
-          }
-          
-          // Call original if it exists
-          if (originalOnMessage) {
-            originalOnMessage.call(this, e);
-          }
-        };
-      }
-      
-      return {
-        postMessage: function(cmd) {
-          if (stockfishInstance && stockfishInstance.postMessage) {
-            stockfishInstance.postMessage(cmd);
-          }
-        },
-        
-        setOnMessage: function(callback) {
-          onMessageCallback = callback;
-        },
-        
-        terminate: function() {
-          if (stockfishInstance && stockfishInstance.terminate) {
-            stockfishInstance.terminate();
-          }
-          stockfishInstance = null;
-        }
-      };
-    } catch (error) {
-      console.error('Failed to create Stockfish WASM instance:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to lighter Stockfish if WASM fails
+  // Create Stockfish Worker Engine
   function createStockfishLite() {
-    engineLoadStatus.textContent = '⚠️ Using lighter engine';
-    setTimeout(() => { engineLoadStatus.style.display = 'none'; }, 2000);
-    
-    const stockfish = new Worker('https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js');
-    
+    const stockfish = new Worker(
+      'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js'
+    );
+
     let onMessageCallback = null;
-    
-    stockfish.onmessage = function(e) {
+
+    stockfish.onmessage = function (e) {
       const line = e.data;
-      
+      if (typeof line !== 'string') return;
+
       if (line.startsWith('bestmove')) {
-        if (onMessageCallback) {
-          onMessageCallback(line);
-        }
-      } else if (line.includes('depth')) {
-        const depthMatch = line.match(/depth (\d+)/);
-        if (depthMatch) {
-          engineDepth.textContent = `Depth: ${depthMatch[1]}`;
+        if (onMessageCallback) onMessageCallback(line);
+      } 
+      else if (line.startsWith('info') && line.includes(' depth ')) {
+        const match = line.match(/depth (\d+)/);
+        if (match) {
+          engineDepth.textContent = `Depth: ${match[1]}`;
         }
       }
     };
-    
+
     return {
-      postMessage: function(cmd) {
+      postMessage(cmd) {
         stockfish.postMessage(cmd);
       },
-      
-      setOnMessage: function(callback) {
-        onMessageCallback = callback;
+      setOnMessage(cb) {
+        onMessageCallback = cb;
       },
-      
-      terminate: function() {
+      terminate() {
         stockfish.terminate();
       }
     };
@@ -682,41 +538,30 @@ window.game = null;
       const thinkTime = Math.min(5000, 500 + (engineLevel * 200));
       
       // Ask for move with time constraints
-      engine.postMessage(`go depth ${Math.min(22, 12 + Math.floor(engineLevel/2))} movetime ${thinkTime}`);
+      engine.postMessage(`go movetime ${thinkTime}`);
     }
   }
 
   // Start engine
   async function startEngine() {
     if (engine && engine.terminate) {
-      try { engine.terminate(); } catch(e) {}
+      try { engine.terminate(); } catch (e) {}
       engine = null;
     }
-    
-    try {
-      // Try to create WASM engine first
-      engine = await createStockfishWASM();
-    } catch (wasmError) {
-      console.warn('WASM engine failed, falling back to lighter version:', wasmError);
-      // Fall back to lighter engine
-      engine = createStockfishLite();
-    }
-    
-    // Initialize engine
+
+    engine = createStockfishLite();
     initStockfish(engine);
-    
+
     engineEnabled = true;
     engineOnBtn.style.display = 'none';
     engineOffBtn.style.display = 'inline-block';
-    
-    // Update multiplayer status
+
     if (multiplayStatus) {
       multiplayStatus.textContent = 'Playing vs Stockfish';
     }
-    
-    // If engine should move first
+
     if (!game.game_over() && !isHumanTurn()) {
-      setTimeout(askEngineToMove, 1000);
+      setTimeout(askEngineToMove, 500);
     }
   }
 
@@ -724,20 +569,22 @@ window.game = null;
   function stopEngine() {
     engineEnabled = false;
     isThinking = false;
+
     engineThinking.style.display = 'none';
     engineDepth.textContent = 'Depth: -';
-    
+
+    if (engine && engine.postMessage) {
+      engine.postMessage('stop');
+    }
+
     if (engine && engine.terminate) {
-      try { 
-        engine.terminate(); 
-      } catch(e) {}
+      try { engine.terminate(); } catch (e) {}
       engine = null;
     }
-    
+
     engineOnBtn.style.display = 'inline-block';
     engineOffBtn.style.display = 'none';
-    
-    // Update multiplayer status
+
     if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish') {
       multiplayStatus.textContent = 'Stockfish stopped';
     }
@@ -745,6 +592,13 @@ window.game = null;
 
   // Reset game
   function resetGame() {
+    // Stop engine thinking
+    if (engine && engine.postMessage) {
+      engine.postMessage('stop');
+    }
+    isThinking = false;
+    engineThinking.style.display = 'none';
+    
     game = new Chess();
     window.game = game; // Update global reference
     board.position('start');
@@ -773,6 +627,13 @@ window.game = null;
 
   // Undo move
   function undoMove() {
+    // Stop engine thinking
+    if (engine && engine.postMessage) {
+      engine.postMessage('stop');
+    }
+    isThinking = false;
+    engineThinking.style.display = 'none';
+    
     if (!game || game.history().length === 0) {
       return;
     }
