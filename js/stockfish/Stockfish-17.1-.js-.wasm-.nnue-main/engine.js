@@ -1,4 +1,4 @@
-// engine.js — FINAL, CORRECT
+// engine.js — FINAL FIX
 
 var Module = {
   locateFile: function (path) {
@@ -9,20 +9,15 @@ var Module = {
   }
 };
 
-// Load Stockfish
+// Load Stockfish WASM engine
 importScripts('./stockfish-17.1.js');
 
-// 🔴 CRITICAL: forward messages TO Stockfish
+// Forward messages FROM UI → Stockfish
 self.onmessage = function (e) {
   if (typeof onmessage === 'function') {
     onmessage(e);
   }
 };
 
-// 🔴 CRITICAL: forward messages FROM Stockfish
-if (typeof postMessage === 'function') {
-  var originalPostMessage = postMessage;
-  postMessage = function (msg) {
-    self.postMessage(msg);
-  };
-}
+// ❌ DO NOT override postMessage
+// Stockfish already posts messages correctly
