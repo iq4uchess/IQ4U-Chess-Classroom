@@ -1,18 +1,24 @@
-// engine.js — Stockfish Web Worker bridge
+// engine.js — Web Worker for Stockfish 17.1
 
-importScripts('./stockfish-17.1.js');
-
-// Forward messages FROM Stockfish → main thread
-self.postMessage = self.postMessage.bind(self);
-
-// Forward messages FROM main thread → Stockfish
-self.onmessage = function (e) {
-  if (typeof self.stockfish === 'function') {
-    self.stockfish(e.data);
-  } else if (typeof onmessage === 'function') {
-    onmessage(e);
+// CRITICAL: Tell Emscripten where the WASM file is
+self.Module = {
+  locateFile: function (path) {
+    if (path.endsWith('.wasm')) {
+      return './stockfish-17.1.wasm';
+    }
+    return path;
   }
 };
 
-// Notify UI that worker booted
-self.postMessage('engine.js loaded');
+// Load Stockfish engine
+importScripts('./stockfish-17.1.js');
+
+// Forward messages between main thread and Stockfish
+self.onmessage = function (e) {
+  if (typeof self.onmessage === 'function') {
+    self.onmessage(e);
+  }
+};
+
+// Debug confirmation
+postMessage('engine.js loaded');
