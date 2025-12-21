@@ -5,7 +5,3 @@ self.onmessage = (e) => {
     onmessage(e);
   }
 };
-
-if (typeof postMessage === 'function') {
-  postMessage('engine.js loaded');
-}
