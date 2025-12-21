@@ -531,7 +531,8 @@ window.game = null;
       engineThinking.style.display = 'inline';
       engineDepth.textContent = 'Depth: -';
       
-      // Send position to engine
+      // Send position to engine with ucinewgame for stability
+      engine.postMessage('ucinewgame');
       engine.postMessage('position fen ' + game.fen());
       
       // Calculate thinking time based on level
@@ -551,6 +552,7 @@ window.game = null;
 
     engine = createStockfishLite();
     initStockfish(engine);
+    engine.setOnMessage(processBestMove); // ✅ REQUIRED - FIXED ISSUE 1
 
     engineEnabled = true;
     engineOnBtn.style.display = 'none';
@@ -592,6 +594,13 @@ window.game = null;
 
   // Reset game
   function resetGame() {
+    // Clear pending promotion
+    if (pendingPromo && pendingPromo.resolve) {
+      pendingPromo.resolve('q');
+    }
+    pendingPromo = null;
+    hidePromotionDialog();
+    
     // Stop engine thinking
     if (engine && engine.postMessage) {
       engine.postMessage('stop');
@@ -599,8 +608,9 @@ window.game = null;
     isThinking = false;
     engineThinking.style.display = 'none';
     
-    game = new Chess();
-    window.game = game; // Update global reference
+    // ✅ FIXED ISSUE 2 - Use reset() instead of reassigning
+    game.reset();
+    
     board.position('start');
     updateStatus();
     refreshNotation();
@@ -627,6 +637,13 @@ window.game = null;
 
   // Undo move
   function undoMove() {
+    // Clear pending promotion
+    if (pendingPromo && pendingPromo.resolve) {
+      pendingPromo.resolve('q');
+    }
+    pendingPromo = null;
+    hidePromotionDialog();
+    
     // Stop engine thinking
     if (engine && engine.postMessage) {
       engine.postMessage('stop');
@@ -710,6 +727,13 @@ window.game = null;
     
     // Engine settings
     engineColorSelect.addEventListener('change', () => {
+      // ✅ IMPROVEMENT 1: Stop engine before changing side
+      if (engine && engine.postMessage) {
+        engine.postMessage('stop');
+      }
+      isThinking = false;
+      engineThinking.style.display = 'none';
+      
       engineColor = engineColorSelect.value;
       
       if (engineEnabled && !game.game_over() && !isHumanTurn()) {
