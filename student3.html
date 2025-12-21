@@ -149,108 +149,135 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
 <!-- Custom Stockfish Engine Module -->
-<script type="module">
+<script>
 // Stockfish Engine Manager Module
-let stockfishEngine = null;
-let stockfishReady = false;
-let stockfishOnBestMove = null;
+(function() {
+  let stockfishEngine = null;
+  let stockfishReady = false;
+  let stockfishOnBestMove = null;
+  
+  // FIXED ISSUE 1: Use relative paths for same-origin compliance
+  const STOCKFISH_JS_URL = './js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
+  const STOCKFISH_NNUE_URL = './js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.nnue';
 
-// Paths to Stockfish files
-const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
-const STOCKFISH_NNUE_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.nnue';
-
-// Export functions to global scope
-window.StockfishManager = {
-  start: function(callback) {
-    if (stockfishEngine) return;
-
-    stockfishOnBestMove = callback;
-    stockfishEngine = new Worker(STOCKFISH_JS_URL);
-
-    stockfishEngine.onmessage = (e) => {
-      const msg = e.data;
-      console.log('[Stockfish]', msg);
-
-      if (msg === 'uciok') {
-        // Load NNUE evaluation file
-        stockfishEngine.postMessage(`setoption name EvalFile value ${STOCKFISH_NNUE_URL}`);
-        stockfishEngine.postMessage('isready');
+  // Export functions to global scope
+  window.StockfishManager = {
+    start: function(callback) {
+      // FIXED ISSUE 4: Only create if not already running
+      if (stockfishEngine) {
+        if (!stockfishReady) {
+          console.log('[Stockfish] Engine already starting, please wait...');
+          return;
+        }
+        console.log('[Stockfish] Engine already running');
+        return;
       }
 
-      if (msg === 'readyok') {
-        stockfishReady = true;
-        console.log('✅ Stockfish ready (NNUE loaded)');
-      }
+      stockfishOnBestMove = callback;
+      console.log('[Stockfish] Creating worker from:', STOCKFISH_JS_URL);
+      stockfishEngine = new Worker(STOCKFISH_JS_URL);
 
-      if (msg.startsWith('bestmove')) {
-        const move = msg.split(' ')[1];
-        if (stockfishOnBestMove) stockfishOnBestMove(move);
-        
-        // Also extract depth info for display
-        const lines = e.data.split('\n');
-        for (const line of lines) {
-          if (line.includes('depth')) {
-            const depthMatch = line.match(/depth (\d+)/);
-            if (depthMatch) {
-              document.getElementById('engineDepth').textContent = `Depth: ${depthMatch[1]}`;
+      stockfishEngine.onmessage = (e) => {
+        const msg = e.data;
+        console.log('[Stockfish]', msg);
+
+        if (msg === 'uciok') {
+          // Load NNUE evaluation file
+          console.log('[Stockfish] Setting NNUE file:', STOCKFISH_NNUE_URL);
+          stockfishEngine.postMessage(`setoption name EvalFile value ${STOCKFISH_NNUE_URL}`);
+          stockfishEngine.postMessage('isready');
+        }
+
+        if (msg === 'readyok') {
+          stockfishReady = true;
+          console.log('✅ Stockfish ready (NNUE loaded)');
+        }
+
+        // FIXED ISSUE 2: Correct depth parsing
+        if (msg.startsWith('info') && msg.includes(' depth ')) {
+          const depthMatch = msg.match(/depth (\d+)/);
+          if (depthMatch) {
+            const depthElement = document.getElementById('engineDepth');
+            if (depthElement) {
+              depthElement.textContent = `Depth: ${depthMatch[1]}`;
             }
           }
         }
-      } else if (msg.includes('depth')) {
-        // Extract depth information from info lines
-        const depthMatch = msg.match(/depth (\d+)/);
-        if (depthMatch) {
-          document.getElementById('engineDepth').textContent = `Depth: ${depthMatch[1]}`;
+
+        // FIXED ISSUE 2: Clean bestmove handling
+        if (msg.startsWith('bestmove')) {
+          const parts = msg.split(' ');
+          if (parts.length >= 2) {
+            const move = parts[1];
+            if (move && move !== '(none)' && move !== 'none' && move !== 'null') {
+              if (stockfishOnBestMove) stockfishOnBestMove(move);
+            }
+          }
         }
+      };
+
+      stockfishEngine.postMessage('uci');
+    },
+
+    askMove: function(fen, movetime = 2000) {
+      // FIXED ISSUE 3: Use movetime only (valid UCI)
+      if (!stockfishEngine || !stockfishReady) {
+        console.warn('[Stockfish] Engine not ready');
+        return;
       }
-    };
 
-    stockfishEngine.postMessage('uci');
-  },
-
-  askMove: function(fen, movetime = 2000, depth = null) {
-    if (!stockfishEngine || !stockfishReady) return;
-
-    stockfishEngine.postMessage('ucinewgame');
-    stockfishEngine.postMessage('position fen ' + fen);
-    
-    if (depth) {
-      stockfishEngine.postMessage(`go depth ${depth} movetime ${movetime}`);
-    } else {
+      stockfishEngine.postMessage('ucinewgame');
+      stockfishEngine.postMessage('position fen ' + fen);
       stockfishEngine.postMessage(`go movetime ${movetime}`);
+    },
+
+    setSkillLevel: function(level) {
+      if (!stockfishEngine || !stockfishReady) {
+        console.warn('[Stockfish] Engine not ready');
+        return;
+      }
+      
+      // Stockfish Skill Level (0-20)
+      stockfishEngine.postMessage(`setoption name Skill Level value ${level}`);
+      
+      // Additional settings for weaker play at lower levels
+      if (level < 10) {
+        stockfishEngine.postMessage('setoption name Skill Level Maximum Error value 100');
+        stockfishEngine.postMessage('setoption name Skill Level Probability value 50');
+      }
+      
+      console.log(`[Stockfish] Skill level set to ${level}`);
+    },
+
+    stop: function() {
+      if (stockfishEngine && stockfishReady) {
+        stockfishEngine.postMessage('stop');
+      }
+    },
+
+    destroy: function() {
+      if (!stockfishEngine) return;
+      
+      try {
+        stockfishEngine.terminate();
+      } catch (e) {
+        console.warn('[Stockfish] Error terminating worker:', e);
+      }
+      
+      stockfishEngine = null;
+      stockfishReady = false;
+      console.log('[Stockfish] Engine destroyed');
+    },
+
+    isReady: function() {
+      return stockfishReady;
+    },
+
+    isRunning: function() {
+      return stockfishEngine !== null;
     }
-  },
-
-  setSkillLevel: function(level) {
-    if (!stockfishEngine || !stockfishReady) return;
-    
-    // Stockfish Skill Level (0-20)
-    stockfishEngine.postMessage(`setoption name Skill Level value ${level}`);
-    
-    // Additional settings for weaker play at lower levels
-    if (level < 10) {
-      stockfishEngine.postMessage('setoption name Skill Level Maximum Error value 100');
-      stockfishEngine.postMessage('setoption name Skill Level Probability value 50');
-    }
-  },
-
-  stop: function() {
-    if (stockfishEngine && stockfishReady) {
-      stockfishEngine.postMessage('stop');
-    }
-  },
-
-  destroy: function() {
-    if (!stockfishEngine) return;
-    stockfishEngine.terminate();
-    stockfishEngine = null;
-    stockfishReady = false;
-  },
-
-  isReady: function() {
-    return stockfishReady;
-  }
-};
+  };
+})();
 </script>
 
 <!-- Main Game Script -->
@@ -504,10 +531,13 @@ window.game = null;
   // Process engine's best move
   function processBestMove(moveStr) {
     if (!moveStr || moveStr === '(none)' || moveStr === 'none' || moveStr === 'null') {
+      console.log('[Stockfish] No valid move found');
       isThinking = false;
       engineThinking.style.display = 'none';
       return;
     }
+    
+    console.log('[Stockfish] Processing move:', moveStr);
     
     // Convert UCI to chess.js format
     const from = moveStr.substring(0, 2);
@@ -546,7 +576,7 @@ window.game = null;
         setTimeout(askEngineToMove, 1000);
       }
     } else {
-      console.log('Stockfish made illegal move: ' + moveStr);
+      console.error('Stockfish made illegal move:', moveStr);
       isThinking = false;
       engineThinking.style.display = 'none';
       
@@ -561,40 +591,40 @@ window.game = null;
 
   // Ask engine to make a move
   function askEngineToMove() {
-    if (game.game_over() || isThinking || !engineEnabled) return;
+    if (game.game_over() || isThinking || !engineEnabled) {
+      console.log('[Game] Not asking engine - game over, thinking, or engine disabled');
+      return;
+    }
     
     const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
     if (engineColor === 'both' || 
         (engineColor === 'white' && currentPlayer === 'white') ||
         (engineColor === 'black' && currentPlayer === 'black')) {
       
+      if (!window.StockfishManager.isReady()) {
+        console.warn('[Stockfish] Engine not ready yet');
+        setTimeout(askEngineToMove, 500);
+        return;
+      }
+      
       isThinking = true;
       engineThinking.style.display = 'inline';
       engineDepth.textContent = 'Depth: -';
       
-      // Ask Stockfish for move
-      const depth = Math.min(20, 10 + Math.floor(engineLevel/2));
-      window.StockfishManager.askMove(game.fen(), engineThinkTime, depth);
+      // Ask Stockfish for move (using movetime only - FIXED ISSUE 3)
+      window.StockfishManager.askMove(game.fen(), engineThinkTime);
+      console.log(`[Stockfish] Asking for move with ${engineThinkTime}ms thinking time`);
     }
   }
 
   // Start engine
   function startEngine() {
-    // Stop any existing engine
-    if (window.StockfishManager) {
-      window.StockfishManager.stop();
-      window.StockfishManager.destroy();
+    console.log('[Engine] Starting Stockfish...');
+    
+    // FIXED ISSUE 4: Don't destroy/recreate unnecessarily
+    if (!window.StockfishManager.isRunning()) {
+      window.StockfishManager.start(processBestMove);
     }
-    
-    // Start new Stockfish engine
-    window.StockfishManager.start(processBestMove);
-    
-    // Set skill level
-    setTimeout(() => {
-      if (window.StockfishManager.isReady()) {
-        window.StockfishManager.setSkillLevel(engineLevel);
-      }
-    }, 500);
     
     engineEnabled = true;
     engineOnBtn.style.display = 'none';
@@ -605,32 +635,42 @@ window.game = null;
       multiplayStatus.textContent = 'Playing vs Stockfish';
     }
     
+    // Set skill level after a short delay to ensure engine is ready
+    setTimeout(() => {
+      if (window.StockfishManager.isReady()) {
+        window.StockfishManager.setSkillLevel(engineLevel);
+      }
+    }, 800);
+    
     // If engine should move first
     if (!game.game_over() && !isHumanTurn()) {
-      setTimeout(() => {
+      console.log('[Engine] Engine moves first, waiting for ready state...');
+      
+      const checkReady = setInterval(() => {
         if (window.StockfishManager.isReady()) {
-          askEngineToMove();
-        } else {
-          // Retry after a delay if not ready yet
-          setTimeout(() => {
-            if (engineEnabled && !game.game_over() && !isHumanTurn()) {
-              askEngineToMove();
-            }
-          }, 1000);
+          clearInterval(checkReady);
+          setTimeout(askEngineToMove, 300);
         }
-      }, 1000);
+      }, 200);
+      
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkReady);
+      }, 5000);
     }
   }
 
   // Stop engine
   function stopEngine() {
+    console.log('[Engine] Stopping Stockfish...');
+    
     engineEnabled = false;
     isThinking = false;
     engineThinking.style.display = 'none';
     engineDepth.textContent = 'Depth: -';
     
-    if (window.StockfishManager) {
-      window.StockfishManager.stop();
+    // Only destroy if engine is running
+    if (window.StockfishManager.isRunning()) {
       window.StockfishManager.destroy();
     }
     
