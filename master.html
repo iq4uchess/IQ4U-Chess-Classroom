@@ -320,8 +320,8 @@
     const CUSTOM_PIECE_THEME = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/pieces/cburnett/{piece}.svg';
     const FALLBACK_THEME = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png';
 
-    // Stockfish paths
-    const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
+    // Stockfish paths - CORRECTED BASED ON YOUR STRUCTURE
+    const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232/stockfish-17.1-lite-single-03e3232.js';
     const STOCKFISH_WASM = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232/stockfish-17.1-lite-single-03e3232.wasm';
 
     const STUDENTS = [
@@ -373,26 +373,74 @@
       initBoard(s.id);
     }
 
-    // ---------- STOCKFISH ENGINE IMPLEMENTATION ----------
-    let stockfishWorkers = {};
+    // ---------- FIXED STOCKFISH LOADING ----------
     let stockfishLoaded = false;
+    let stockfishLoadPromise = null;
 
     async function loadStockfish() {
       if (stockfishLoaded) return true;
+      if (stockfishLoadPromise) return stockfishLoadPromise;
       
+      stockfishLoadPromise = new Promise((resolve) => {
+        // First check if the file exists
+        fetch(STOCKFISH_JS, { method: 'HEAD' })
+          .then(response => {
+            if (response.ok) {
+              // Load Stockfish using script tag
+              const script = document.createElement('script');
+              script.src = STOCKFISH_JS;
+              script.onload = () => {
+                // Check if Stockfish is available
+                if (typeof Stockfish !== 'undefined') {
+                  stockfishLoaded = true;
+                  console.log('✅ Stockfish loaded successfully');
+                  resolve(true);
+                } else {
+                  console.error('❌ Stockfish loaded but not available');
+                  resolve(false);
+                }
+              };
+              script.onerror = () => {
+                console.error('❌ Failed to load Stockfish script');
+                // Try alternative: use a generic Stockfish from CDN
+                loadAlternativeStockfish().then(resolve);
+              };
+              document.head.appendChild(script);
+            } else {
+              console.error('❌ Stockfish file not found');
+              // Try alternative
+              loadAlternativeStockfish().then(resolve);
+            }
+          })
+          .catch(error => {
+            console.error('❌ Error checking Stockfish:', error);
+            loadAlternativeStockfish().then(resolve);
+          });
+      });
+      
+      return stockfishLoadPromise;
+    }
+
+    async function loadAlternativeStockfish() {
       return new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = STOCKFISH_JS;
-        script.onload = () => {
-          stockfishLoaded = true;
-          console.log('✅ Stockfish loaded successfully');
-          resolve(true);
+        console.log('⚠️ Trying alternative Stockfish from CDN...');
+        const altScript = document.createElement('script');
+        altScript.src = 'https://cdn.jsdelivr.net/npm/stockfish-js@0.10.0/stockfish.js';
+        altScript.onload = () => {
+          if (typeof Stockfish !== 'undefined') {
+            stockfishLoaded = true;
+            console.log('✅ Alternative Stockfish loaded');
+            resolve(true);
+          } else {
+            console.error('❌ Alternative Stockfish also failed');
+            resolve(false);
+          }
         };
-        script.onerror = () => {
-          console.error('❌ Failed to load Stockfish');
+        altScript.onerror = () => {
+          console.error('❌ All Stockfish loading attempts failed');
           resolve(false);
         };
-        document.head.appendChild(script);
+        document.head.appendChild(altScript);
       });
     }
 
@@ -401,18 +449,45 @@
       if (!st) return null;
       
       try {
-        // Check if Stockfish is available
-        if (typeof Stockfish === 'undefined') {
-          console.warn('Stockfish not loaded yet');
+        // Try to create worker using different methods
+        let worker;
+        
+        if (typeof Stockfish === 'function') {
+          // Method 1: Stockfish as a function
+          worker = Stockfish();
+        } else if (typeof Stockfish === 'object' && Stockfish.createWorker) {
+          // Method 2: Stockfish has createWorker method
+          worker = Stockfish.createWorker();
+        } else if (typeof Worker !== 'undefined') {
+          // Method 3: Create a Worker directly with the JS file
+          try {
+            worker = new Worker(STOCKFISH_JS);
+          } catch (e) {
+            console.warn('Direct Worker creation failed:', e);
+            return null;
+          }
+        } else {
+          console.warn('No Stockfish worker creation method available');
           return null;
         }
         
-        // Create worker
-        const worker = Stockfish();
+        if (!worker) return null;
         
-        // Configure engine
+        // Configure worker
         worker.onmessage = function(event) {
           handleStockfishMessage(boardId, event.data);
+        };
+        
+        worker.onerror = function(error) {
+          console.warn(`Stockfish worker error for ${boardId}:`, error);
+          updateEngineStatus(boardId, 'Worker error');
+          // Don't retry - mark as not running
+          st.engineRunning = false;
+          const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
+          if (toggleBtn) {
+            toggleBtn.textContent = 'Engine: OFF';
+            toggleBtn.className = 'engine-btn';
+          }
         };
         
         // Initialize engine
@@ -421,6 +496,8 @@
         worker.postMessage('setoption name Threads value 2');
         worker.postMessage('setoption name Hash value 64');
         worker.postMessage('isready');
+        
+        updateEngineStatus(boardId, 'Starting...');
         
         return worker;
       } catch (error) {
@@ -437,15 +514,16 @@
       if (message === 'uciok') {
         updateEngineStatus(boardId, 'Engine ready');
       } else if (message === 'readyok') {
+        st.engineReady = true;
         updateEngineStatus(boardId, 'Ready');
         // Start analysis if pending
         if (st.pendingAnalysis) {
           analyzePosition(boardId);
           st.pendingAnalysis = false;
         }
-      } else if (message.startsWith('info')) {
+      } else if (typeof message === 'string' && message.startsWith('info')) {
         parseAnalysisInfo(boardId, message);
-      } else if (message.startsWith('bestmove')) {
+      } else if (typeof message === 'string' && message.startsWith('bestmove')) {
         parseBestMove(boardId, message);
       }
     }
@@ -612,12 +690,10 @@
       if (!st || st.engineRunning) return;
       
       // Load Stockfish if needed
-      if (!stockfishLoaded) {
-        const loaded = await loadStockfish();
-        if (!loaded) {
-          addNotification(boardId, 'Failed to load engine');
-          return;
-        }
+      const loaded = await loadStockfish();
+      if (!loaded) {
+        addNotification(boardId, 'Failed to load engine');
+        return;
       }
       
       // Create worker
@@ -748,7 +824,8 @@
               st.moveHistory.push({
                 move: lastMove,
                 fen: fen,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                previousEval: st.currentEval
               });
             }
           }
