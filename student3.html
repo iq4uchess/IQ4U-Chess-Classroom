@@ -49,6 +49,8 @@
     .wasm-loading { color: #8b5cf6; font-weight: 600; font-size: 12px; }
     #engineLoadStatus { display: none; }
     .error-message { color: #dc2626; font-weight: 600; font-size: 12px; }
+    .success-message { color: #059669; font-weight: 600; font-size: 12px; }
+    #engineStatus { margin-left: 8px; }
   </style>
 </head>
 
@@ -121,11 +123,12 @@
     <div>
       <span id="engineLoadStatus" class="wasm-loading" style="display:none;">🔄 Loading Stockfish...</span>
       <span id="engineError" class="error-message" style="display:none;"></span>
+      <span id="engineSuccess" class="success-message" style="display:none;"></span>
       <span id="engineThinking" style="display:none;">🤔 Thinking...</span>
       <span id="engineDepth" class="engine-status">Depth: -</span>
     </div>
     
-    <button id="engineOnBtn">Start Stockfish</button>
+    <button id="engineOnBtn">Start Stockfish NNUE</button>
     <button id="engineOffBtn" style="display:none;">Stop Stockfish</button>
   </div>
 </div>
@@ -170,7 +173,9 @@ window.game = null;
   
   // Stockfish files - ONLY YOUR SPECIFIED PATHS
   const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
-  const STOCKFISH_WASM = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.wasm';
+  // NOTE: You need to extract the NNUE file from the ZIP parts
+  // and upload it as a single .nnue file. Example:
+  // const NNUE_FILE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/nn-xxxxxxxxxxxx.nnue';
   
   // DOM
   const boardEl = document.getElementById('board');
@@ -186,6 +191,7 @@ window.game = null;
   const engineThinking = document.getElementById('engineThinking');
   const engineLoadStatus = document.getElementById('engineLoadStatus');
   const engineError = document.getElementById('engineError');
+  const engineSuccess = document.getElementById('engineSuccess');
   const engineDepth = document.getElementById('engineDepth');
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
@@ -208,6 +214,7 @@ window.game = null;
   let lastMoveSquares = [];
   let pendingPromo = null;
   let isEngineReady = false;
+  let nnueLoaded = false;
 
   // Promotion Modal
   const promoteModal = document.getElementById('promoteModal');
@@ -412,11 +419,12 @@ window.game = null;
     return 'snap';
   }
 
-  // Create Stockfish 17.1 with WASM and NNUE - ONLY USING YOUR FILES
+  // Create Stockfish 17.1 Worker with WASM
   function createStockfishEngine() {
     engineLoadStatus.style.display = 'inline';
     engineLoadStatus.textContent = '🔄 Loading Stockfish 17.1...';
     engineError.style.display = 'none';
+    engineSuccess.style.display = 'none';
     
     // Create Worker with your specific Stockfish JS file
     const stockfish = new Worker(STOCKFISH_JS);
@@ -424,7 +432,7 @@ window.game = null;
     let onMessageCallback = null;
     let isUciOk = false;
     let isReadyOk = false;
-    let hasNNUE = false;
+    let nnueLoaded = false;
 
     stockfish.onmessage = function (e) {
       const line = e.data;
@@ -436,15 +444,52 @@ window.game = null;
       if (line === 'uciok') {
         isUciOk = true;
         console.log('Stockfish: UCI OK received');
-      } else if (line === 'readyok') {
+        
+        // AFTER uciok, set NNUE file and other options
+        setTimeout(() => {
+          // IMPORTANT: Set NNUE file path
+          // You need to extract the NNUE file from the ZIP parts first
+          // and upload it to your server, then use the correct path here
+          // Example: stockfish.postMessage('setoption name EvalFile value /stockfish/nn-xxxxxxxxxxxx.nnue');
+          
+          // For now, we'll try to load NNUE if available
+          stockfish.postMessage('setoption name Use NNUE value true');
+          
+          // Set other options
+          stockfish.postMessage(`setoption name Skill Level value ${engineLevel}`);
+          stockfish.postMessage('setoption name Contempt value 0');
+          stockfish.postMessage('setoption name Threads value 2');
+          stockfish.postMessage('setoption name Hash value 256');
+          
+          // Reduce strength for lower levels
+          if (engineLevel < 10) {
+            stockfish.postMessage('setoption name Skill Level Maximum Error value 100');
+            stockfish.postMessage('setoption name Skill Level Probability value 50');
+          }
+          
+          // Now send isready
+          stockfish.postMessage('isready');
+        }, 50);
+      } 
+      else if (line === 'readyok') {
         isReadyOk = true;
         isEngineReady = true;
         engineLoadStatus.style.display = 'none';
+        engineSuccess.textContent = '✓ Stockfish 17.1 ready';
+        engineSuccess.style.display = 'inline';
         console.log('Stockfish: Ready OK received');
-      } else if (line.includes('NNUE evaluated')) {
-        hasNNUE = true;
+        
+        // Check if NNUE is working
+        setTimeout(() => {
+          stockfish.postMessage('eval');
+        }, 100);
+      } 
+      else if (line.includes('NNUE evaluated') || line.includes('nnue')) {
+        nnueLoaded = true;
+        engineSuccess.textContent = '✓ Stockfish 17.1 with NNUE ready';
         console.log('Stockfish: NNUE evaluation is active');
-      } else if (line.startsWith('bestmove')) {
+      } 
+      else if (line.startsWith('bestmove')) {
         if (onMessageCallback) onMessageCallback(line);
       } 
       else if (line.startsWith('info') && line.includes(' depth ')) {
@@ -464,7 +509,7 @@ window.game = null;
     stockfish.onerror = function (error) {
       console.error('Stockfish Worker error:', error);
       engineLoadStatus.style.display = 'none';
-      engineError.textContent = 'Failed to load Stockfish. Check console for details.';
+      engineError.textContent = 'Failed to load Stockfish. Check if the file exists and is Worker-compatible.';
       engineError.style.display = 'inline';
     };
 
@@ -484,63 +529,15 @@ window.game = null;
         isEngineReady = false;
         isUciOk = false;
         isReadyOk = false;
-        hasNNUE = false;
+        nnueLoaded = false;
       },
       isReady() {
         return isEngineReady;
       },
       hasNNUE() {
-        return hasNNUE;
+        return nnueLoaded;
       }
     };
-  }
-
-  // Initialize Stockfish engine with proper UCI sequence
-  function initStockfish(engineObj, callback) {
-    if (!engineObj) {
-      if (callback) callback(false);
-      return;
-    }
-    
-    // Reset ready flags
-    isEngineReady = false;
-    
-    // Proper UCI initialization sequence
-    setTimeout(() => {
-      engineObj.postMessage('uci');
-      
-      // Wait for uciok, then send isready
-      setTimeout(() => {
-        engineObj.postMessage('isready');
-        
-        // Set up engine options after it's ready
-        setTimeout(() => {
-          // Set skill level (0-20, where 20 is strongest)
-          engineObj.postMessage(`setoption name Skill Level value ${engineLevel}`);
-          
-          // Set additional options for better play
-          engineObj.postMessage('setoption name Contempt value 0');
-          engineObj.postMessage('setoption name Threads value 2');
-          engineObj.postMessage('setoption name Hash value 256');
-          
-          // Note: Stockfish 17.1 automatically uses NNUE if available
-          // The NNUE file should be in the same directory as the WASM file
-          
-          // Reduce strength for lower levels
-          if (engineLevel < 10) {
-            engineObj.postMessage('setoption name Skill Level Maximum Error value 100');
-            engineObj.postMessage('setoption name Skill Level Probability value 50');
-          }
-          
-          // Verify NNUE is working
-          setTimeout(() => {
-            engineObj.postMessage('eval');
-          }, 100);
-          
-          if (callback) callback(true);
-        }, 200);
-      }, 200);
-    }, 100);
   }
 
   // Process engine's best move
@@ -617,6 +614,7 @@ window.game = null;
       engineDepth.textContent = 'Depth: -';
       
       // Send position to engine
+      engine.postMessage('ucinewgame');
       engine.postMessage('position fen ' + game.fen());
       
       // Calculate thinking time based on level
@@ -637,25 +635,31 @@ window.game = null;
     engine = createStockfishEngine();
     engine.setOnMessage(processBestMove);
     
-    initStockfish(engine, function(success) {
-      if (success) {
-        engineEnabled = true;
-        engineOnBtn.style.display = 'none';
-        engineOffBtn.style.display = 'inline-block';
+    // Start UCI initialization
+    setTimeout(() => {
+      engine.postMessage('uci');
+    }, 100);
+    
+    // Enable engine after a short delay
+    setTimeout(() => {
+      engineEnabled = true;
+      engineOnBtn.style.display = 'none';
+      engineOffBtn.style.display = 'inline-block';
 
-        if (multiplayStatus) {
-          multiplayStatus.textContent = 'Playing vs Stockfish 17.1 NNUE';
-        }
-
-        if (!game.game_over() && !isHumanTurn()) {
-          setTimeout(askEngineToMove, 500);
-        }
-      } else {
-        engineError.textContent = 'Failed to initialize Stockfish';
-        engineError.style.display = 'inline';
-        engineLoadStatus.style.display = 'none';
+      if (multiplayStatus) {
+        multiplayStatus.textContent = 'Playing vs Stockfish 17.1';
       }
-    });
+
+      // If engine should move first, wait for it to be ready
+      if (!game.game_over() && !isHumanTurn()) {
+        const checkReady = setInterval(() => {
+          if (isEngineReady) {
+            clearInterval(checkReady);
+            setTimeout(askEngineToMove, 500);
+          }
+        }, 100);
+      }
+    }, 500);
   }
 
   // Stop engine
@@ -668,6 +672,7 @@ window.game = null;
     engineDepth.textContent = 'Depth: -';
     engineLoadStatus.style.display = 'none';
     engineError.style.display = 'none';
+    engineSuccess.style.display = 'none';
 
     if (engine && engine.postMessage) {
       engine.postMessage('stop');
