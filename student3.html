@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IQ4U — Student Puzzle (student3) - Stockfish 17.1 NNUE</title>
+  <title>IQ4U — Student Puzzle (student3)</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
@@ -46,17 +46,14 @@
     #engineOffBtn { background: #ef4444; display: none; }
     .engine-status { padding: 4px 8px; border-radius: 4px; background: #f3f4f6; font-size: 12px; color: #666; }
     #engineThinking { display: none; color: #059669; font-weight: 600; }
-    .wasm-loading { color: #8b5cf6; font-weight: 600; font-size: 12px; }
-    #engineLoadStatus { display: none; }
-    .error-message { color: #dc2626; font-weight: 600; font-size: 12px; }
-    .success-message { color: #059669; font-weight: 600; font-size: 12px; }
-    #engineStatus { margin-left: 8px; }
+    .engine-strength { display: flex; align-items: center; gap: 8px; }
+    .engine-strength input[type="range"] { width: 180px; }
   </style>
 </head>
 
 <body>
 
-<h1>Student3 - Play vs Stockfish 17.1 NNUE</h1>
+<h1>Student3 - Play vs Stockfish Engine</h1>
 
 <div class="panel">
   <div class="controls">
@@ -93,42 +90,30 @@
       </select>
     </div>
     
-    <div>
+    <div class="engine-strength">
       <label class="small">Skill Level:</label>
-      <select id="engineLevel">
-        <option value="0">0 (Easiest)</option>
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5" selected>5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="11">11</option>
-        <option value="12">12</option>
-        <option value="13">13</option>
-        <option value="14">14</option>
-        <option value="15">15</option>
-        <option value="16">16</option>
-        <option value="17">17</option>
-        <option value="18">18</option>
-        <option value="19">19</option>
-        <option value="20">20 (Hardest)</option>
+      <input type="range" id="engineLevelRange" min="0" max="20" value="10">
+      <span id="engineLevelDisplay">10</span>
+    </div>
+    
+    <div>
+      <label class="small">Thinking Time (ms):</label>
+      <select id="engineTime">
+        <option value="500">500 ms</option>
+        <option value="1000" selected>1 sec</option>
+        <option value="2000">2 sec</option>
+        <option value="3000">3 sec</option>
+        <option value="5000">5 sec</option>
+        <option value="10000">10 sec</option>
       </select>
     </div>
     
     <div>
-      <span id="engineLoadStatus" class="wasm-loading" style="display:none;">🔄 Loading Stockfish...</span>
-      <span id="engineError" class="error-message" style="display:none;"></span>
-      <span id="engineSuccess" class="success-message" style="display:none;"></span>
       <span id="engineThinking" style="display:none;">🤔 Thinking...</span>
       <span id="engineDepth" class="engine-status">Depth: -</span>
     </div>
     
-    <button id="engineOnBtn">Start Stockfish NNUE</button>
+    <button id="engineOnBtn">Start Stockfish</button>
     <button id="engineOffBtn" style="display:none;">Stop Stockfish</button>
   </div>
 </div>
@@ -158,24 +143,124 @@
   </div>
 </div>
 
-<!-- Same libraries as student2.html -->
+<!-- Libraries -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
+<!-- Custom Stockfish Engine Module -->
+<script type="module">
+// Stockfish Engine Manager Module
+let stockfishEngine = null;
+let stockfishReady = false;
+let stockfishOnBestMove = null;
+
+// Paths to Stockfish files
+const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
+const STOCKFISH_NNUE_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.nnue';
+
+// Export functions to global scope
+window.StockfishManager = {
+  start: function(callback) {
+    if (stockfishEngine) return;
+
+    stockfishOnBestMove = callback;
+    stockfishEngine = new Worker(STOCKFISH_JS_URL);
+
+    stockfishEngine.onmessage = (e) => {
+      const msg = e.data;
+      console.log('[Stockfish]', msg);
+
+      if (msg === 'uciok') {
+        // Load NNUE evaluation file
+        stockfishEngine.postMessage(`setoption name EvalFile value ${STOCKFISH_NNUE_URL}`);
+        stockfishEngine.postMessage('isready');
+      }
+
+      if (msg === 'readyok') {
+        stockfishReady = true;
+        console.log('✅ Stockfish ready (NNUE loaded)');
+      }
+
+      if (msg.startsWith('bestmove')) {
+        const move = msg.split(' ')[1];
+        if (stockfishOnBestMove) stockfishOnBestMove(move);
+        
+        // Also extract depth info for display
+        const lines = e.data.split('\n');
+        for (const line of lines) {
+          if (line.includes('depth')) {
+            const depthMatch = line.match(/depth (\d+)/);
+            if (depthMatch) {
+              document.getElementById('engineDepth').textContent = `Depth: ${depthMatch[1]}`;
+            }
+          }
+        }
+      } else if (msg.includes('depth')) {
+        // Extract depth information from info lines
+        const depthMatch = msg.match(/depth (\d+)/);
+        if (depthMatch) {
+          document.getElementById('engineDepth').textContent = `Depth: ${depthMatch[1]}`;
+        }
+      }
+    };
+
+    stockfishEngine.postMessage('uci');
+  },
+
+  askMove: function(fen, movetime = 2000, depth = null) {
+    if (!stockfishEngine || !stockfishReady) return;
+
+    stockfishEngine.postMessage('ucinewgame');
+    stockfishEngine.postMessage('position fen ' + fen);
+    
+    if (depth) {
+      stockfishEngine.postMessage(`go depth ${depth} movetime ${movetime}`);
+    } else {
+      stockfishEngine.postMessage(`go movetime ${movetime}`);
+    }
+  },
+
+  setSkillLevel: function(level) {
+    if (!stockfishEngine || !stockfishReady) return;
+    
+    // Stockfish Skill Level (0-20)
+    stockfishEngine.postMessage(`setoption name Skill Level value ${level}`);
+    
+    // Additional settings for weaker play at lower levels
+    if (level < 10) {
+      stockfishEngine.postMessage('setoption name Skill Level Maximum Error value 100');
+      stockfishEngine.postMessage('setoption name Skill Level Probability value 50');
+    }
+  },
+
+  stop: function() {
+    if (stockfishEngine && stockfishReady) {
+      stockfishEngine.postMessage('stop');
+    }
+  },
+
+  destroy: function() {
+    if (!stockfishEngine) return;
+    stockfishEngine.terminate();
+    stockfishEngine = null;
+    stockfishReady = false;
+  },
+
+  isReady: function() {
+    return stockfishReady;
+  }
+};
+</script>
+
+<!-- Main Game Script -->
 <script>
 // GLOBAL GAME INSTANCE - REQUIRED FOR MASTER SPECTATING
 window.game = null;
 
 (function(){
-  // Config - USING ONLY YOUR SPECIFIED FILES
+  // Config
   const PIECES_BASE = '/IQ4U-Chess-Classroom/assets/pieces/cburnett/';
-  
-  // Stockfish files - ONLY YOUR SPECIFIED PATHS
-  const STOCKFISH_JS = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/stockfish-17.1.js';
-  // NOTE: You need to extract the NNUE file from the ZIP parts
-  // and upload it as a single .nnue file. Example:
-  // const NNUE_FILE = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/Stockfish-17.1-.js-.wasm-.nnue-main/nn-xxxxxxxxxxxx.nnue';
   
   // DOM
   const boardEl = document.getElementById('board');
@@ -184,14 +269,13 @@ window.game = null;
   const boardSizeLabel = document.getElementById('boardSizeLabel');
   const statusEl = document.getElementById('status');
   const movesList = document.getElementById('movesList');
-  const engineLevelSelect = document.getElementById('engineLevel');
+  const engineLevelRange = document.getElementById('engineLevelRange');
+  const engineLevelDisplay = document.getElementById('engineLevelDisplay');
+  const engineTimeSelect = document.getElementById('engineTime');
   const engineColorSelect = document.getElementById('engineColor');
   const engineOnBtn = document.getElementById('engineOnBtn');
   const engineOffBtn = document.getElementById('engineOffBtn');
   const engineThinking = document.getElementById('engineThinking');
-  const engineLoadStatus = document.getElementById('engineLoadStatus');
-  const engineError = document.getElementById('engineError');
-  const engineSuccess = document.getElementById('engineSuccess');
   const engineDepth = document.getElementById('engineDepth');
   const undoBtn = document.getElementById('undoBtn');
   const flipBtn = document.getElementById('flipBtn');
@@ -206,15 +290,13 @@ window.game = null;
   let board = null;
   let game = new Chess(); // Local game instance
   window.game = game; // EXPOSED GLOBALLY FOR SPECTATING
-  let engine = null;
   let engineEnabled = false;
   let engineColor = 'black';
-  let engineLevel = 5;
+  let engineLevel = 10;
+  let engineThinkTime = 1000;
   let isThinking = false;
   let lastMoveSquares = [];
   let pendingPromo = null;
-  let isEngineReady = false;
-  let nnueLoaded = false;
 
   // Promotion Modal
   const promoteModal = document.getElementById('promoteModal');
@@ -412,143 +494,20 @@ window.game = null;
     window.emitFenToMaster();
     
     // If engine is enabled and it's engine's turn, ask engine to move
-    if (engineEnabled && engine && !game.game_over() && !isHumanTurn()) {
+    if (engineEnabled && !game.game_over() && !isHumanTurn()) {
       setTimeout(askEngineToMove, 100);
     }
     
     return 'snap';
   }
 
-  // Create Stockfish 17.1 Worker with WASM
-  function createStockfishEngine() {
-    engineLoadStatus.style.display = 'inline';
-    engineLoadStatus.textContent = '🔄 Loading Stockfish 17.1...';
-    engineError.style.display = 'none';
-    engineSuccess.style.display = 'none';
-    
-    // Create Worker with your specific Stockfish JS file
-    const stockfish = new Worker(STOCKFISH_JS);
-
-    let onMessageCallback = null;
-    let isUciOk = false;
-    let isReadyOk = false;
-    let nnueLoaded = false;
-
-    stockfish.onmessage = function (e) {
-      const line = e.data;
-      if (typeof line !== 'string') return;
-
-      console.log('Stockfish:', line);
-
-      // Handle UCI protocol responses
-      if (line === 'uciok') {
-        isUciOk = true;
-        console.log('Stockfish: UCI OK received');
-        
-        // AFTER uciok, set NNUE file and other options
-        setTimeout(() => {
-          // IMPORTANT: Set NNUE file path
-          // You need to extract the NNUE file from the ZIP parts first
-          // and upload it to your server, then use the correct path here
-          // Example: stockfish.postMessage('setoption name EvalFile value /stockfish/nn-xxxxxxxxxxxx.nnue');
-          
-          // For now, we'll try to load NNUE if available
-          stockfish.postMessage('setoption name Use NNUE value true');
-          
-          // Set other options
-          stockfish.postMessage(`setoption name Skill Level value ${engineLevel}`);
-          stockfish.postMessage('setoption name Contempt value 0');
-          stockfish.postMessage('setoption name Threads value 2');
-          stockfish.postMessage('setoption name Hash value 256');
-          
-          // Reduce strength for lower levels
-          if (engineLevel < 10) {
-            stockfish.postMessage('setoption name Skill Level Maximum Error value 100');
-            stockfish.postMessage('setoption name Skill Level Probability value 50');
-          }
-          
-          // Now send isready
-          stockfish.postMessage('isready');
-        }, 50);
-      } 
-      else if (line === 'readyok') {
-        isReadyOk = true;
-        isEngineReady = true;
-        engineLoadStatus.style.display = 'none';
-        engineSuccess.textContent = '✓ Stockfish 17.1 ready';
-        engineSuccess.style.display = 'inline';
-        console.log('Stockfish: Ready OK received');
-        
-        // Check if NNUE is working
-        setTimeout(() => {
-          stockfish.postMessage('eval');
-        }, 100);
-      } 
-      else if (line.includes('NNUE evaluated') || line.includes('nnue')) {
-        nnueLoaded = true;
-        engineSuccess.textContent = '✓ Stockfish 17.1 with NNUE ready';
-        console.log('Stockfish: NNUE evaluation is active');
-      } 
-      else if (line.startsWith('bestmove')) {
-        if (onMessageCallback) onMessageCallback(line);
-      } 
-      else if (line.startsWith('info') && line.includes(' depth ')) {
-        const match = line.match(/depth (\d+)/);
-        if (match) {
-          engineDepth.textContent = `Depth: ${match[1]}`;
-        }
-      }
-      // Handle errors
-      else if (line.includes('error') || line.includes('failed') || line.includes('Error')) {
-        console.error('Stockfish error:', line);
-        engineError.textContent = 'Engine error: ' + line;
-        engineError.style.display = 'inline';
-      }
-    };
-
-    stockfish.onerror = function (error) {
-      console.error('Stockfish Worker error:', error);
-      engineLoadStatus.style.display = 'none';
-      engineError.textContent = 'Failed to load Stockfish. Check if the file exists and is Worker-compatible.';
-      engineError.style.display = 'inline';
-    };
-
-    return {
-      postMessage(cmd) {
-        if (stockfish) {
-          stockfish.postMessage(cmd);
-        }
-      },
-      setOnMessage(cb) {
-        onMessageCallback = cb;
-      },
-      terminate() {
-        if (stockfish) {
-          stockfish.terminate();
-        }
-        isEngineReady = false;
-        isUciOk = false;
-        isReadyOk = false;
-        nnueLoaded = false;
-      },
-      isReady() {
-        return isEngineReady;
-      },
-      hasNNUE() {
-        return nnueLoaded;
-      }
-    };
-  }
-
   // Process engine's best move
-  function processBestMove(line) {
-    if (!line || !line.startsWith('bestmove')) return;
-    
-    const parts = line.split(' ');
-    if (parts.length < 2) return;
-    
-    const moveStr = parts[1];
-    if (moveStr === '(none)' || moveStr === 'none' || moveStr === 'null') return;
+  function processBestMove(moveStr) {
+    if (!moveStr || moveStr === '(none)' || moveStr === 'none' || moveStr === 'null') {
+      isThinking = false;
+      engineThinking.style.display = 'none';
+      return;
+    }
     
     // Convert UCI to chess.js format
     const from = moveStr.substring(0, 2);
@@ -602,7 +561,7 @@ window.game = null;
 
   // Ask engine to make a move
   function askEngineToMove() {
-    if (!engine || game.game_over() || isThinking || !isEngineReady) return;
+    if (game.game_over() || isThinking || !engineEnabled) return;
     
     const currentPlayer = game.turn() === 'w' ? 'white' : 'black';
     if (engineColor === 'both' || 
@@ -613,103 +572,81 @@ window.game = null;
       engineThinking.style.display = 'inline';
       engineDepth.textContent = 'Depth: -';
       
-      // Send position to engine
-      engine.postMessage('ucinewgame');
-      engine.postMessage('position fen ' + game.fen());
-      
-      // Calculate thinking time based on level
-      const thinkTime = Math.min(5000, 500 + (engineLevel * 200));
-      
-      // Ask for move with time constraints
-      engine.postMessage(`go movetime ${thinkTime}`);
+      // Ask Stockfish for move
+      const depth = Math.min(20, 10 + Math.floor(engineLevel/2));
+      window.StockfishManager.askMove(game.fen(), engineThinkTime, depth);
     }
   }
 
   // Start engine
   function startEngine() {
-    if (engine && engine.terminate) {
-      try { engine.terminate(); } catch (e) {}
-      engine = null;
+    // Stop any existing engine
+    if (window.StockfishManager) {
+      window.StockfishManager.stop();
+      window.StockfishManager.destroy();
     }
-
-    engine = createStockfishEngine();
-    engine.setOnMessage(processBestMove);
     
-    // Start UCI initialization
-    setTimeout(() => {
-      engine.postMessage('uci');
-    }, 100);
+    // Start new Stockfish engine
+    window.StockfishManager.start(processBestMove);
     
-    // Enable engine after a short delay
+    // Set skill level
     setTimeout(() => {
-      engineEnabled = true;
-      engineOnBtn.style.display = 'none';
-      engineOffBtn.style.display = 'inline-block';
-
-      if (multiplayStatus) {
-        multiplayStatus.textContent = 'Playing vs Stockfish 17.1';
-      }
-
-      // If engine should move first, wait for it to be ready
-      if (!game.game_over() && !isHumanTurn()) {
-        const checkReady = setInterval(() => {
-          if (isEngineReady) {
-            clearInterval(checkReady);
-            setTimeout(askEngineToMove, 500);
-          }
-        }, 100);
+      if (window.StockfishManager.isReady()) {
+        window.StockfishManager.setSkillLevel(engineLevel);
       }
     }, 500);
+    
+    engineEnabled = true;
+    engineOnBtn.style.display = 'none';
+    engineOffBtn.style.display = 'inline-block';
+    
+    // Update multiplayer status
+    if (multiplayStatus) {
+      multiplayStatus.textContent = 'Playing vs Stockfish';
+    }
+    
+    // If engine should move first
+    if (!game.game_over() && !isHumanTurn()) {
+      setTimeout(() => {
+        if (window.StockfishManager.isReady()) {
+          askEngineToMove();
+        } else {
+          // Retry after a delay if not ready yet
+          setTimeout(() => {
+            if (engineEnabled && !game.game_over() && !isHumanTurn()) {
+              askEngineToMove();
+            }
+          }, 1000);
+        }
+      }, 1000);
+    }
   }
 
   // Stop engine
   function stopEngine() {
     engineEnabled = false;
     isThinking = false;
-    isEngineReady = false;
-
     engineThinking.style.display = 'none';
     engineDepth.textContent = 'Depth: -';
-    engineLoadStatus.style.display = 'none';
-    engineError.style.display = 'none';
-    engineSuccess.style.display = 'none';
-
-    if (engine && engine.postMessage) {
-      engine.postMessage('stop');
+    
+    if (window.StockfishManager) {
+      window.StockfishManager.stop();
+      window.StockfishManager.destroy();
     }
-
-    if (engine && engine.terminate) {
-      try { engine.terminate(); } catch (e) {}
-      engine = null;
-    }
-
+    
     engineOnBtn.style.display = 'inline-block';
     engineOffBtn.style.display = 'none';
-
-    if (multiplayStatus && multiplayStatus.textContent.includes('Stockfish')) {
+    
+    // Update multiplayer status
+    if (multiplayStatus && multiplayStatus.textContent === 'Playing vs Stockfish') {
       multiplayStatus.textContent = 'Stockfish stopped';
     }
   }
 
   // Reset game
   function resetGame() {
-    // Clear pending promotion
-    if (pendingPromo && pendingPromo.resolve) {
-      pendingPromo.resolve('q');
-    }
-    pendingPromo = null;
-    hidePromotionDialog();
-    
-    // Stop engine thinking
-    if (engine && engine.postMessage) {
-      engine.postMessage('stop');
-    }
-    isThinking = false;
-    engineThinking.style.display = 'none';
-    
-    // Use reset() instead of reassigning
-    game.reset();
-    
+    game = new Chess();
+    window.game = game; // Update global reference
     board.position('start');
     updateStatus();
     refreshNotation();
@@ -727,7 +664,11 @@ window.game = null;
     engineDepth.textContent = 'Depth: -';
     
     if (engineEnabled && !game.game_over() && !isHumanTurn()) {
-      setTimeout(askEngineToMove, 500);
+      setTimeout(() => {
+        if (window.StockfishManager.isReady()) {
+          askEngineToMove();
+        }
+      }, 500);
     }
     
     // Update master board
@@ -736,20 +677,6 @@ window.game = null;
 
   // Undo move
   function undoMove() {
-    // Clear pending promotion
-    if (pendingPromo && pendingPromo.resolve) {
-      pendingPromo.resolve('q');
-    }
-    pendingPromo = null;
-    hidePromotionDialog();
-    
-    // Stop engine thinking
-    if (engine && engine.postMessage) {
-      engine.postMessage('stop');
-    }
-    isThinking = false;
-    engineThinking.style.display = 'none';
-    
     if (!game || game.history().length === 0) {
       return;
     }
@@ -826,34 +753,34 @@ window.game = null;
     
     // Engine settings
     engineColorSelect.addEventListener('change', () => {
-      // Stop engine before changing side
-      if (engine && engine.postMessage) {
-        engine.postMessage('stop');
-      }
-      isThinking = false;
-      engineThinking.style.display = 'none';
-      
       engineColor = engineColorSelect.value;
       
       if (engineEnabled && !game.game_over() && !isHumanTurn()) {
-        setTimeout(askEngineToMove, 300);
+        setTimeout(() => {
+          if (window.StockfishManager.isReady()) {
+            askEngineToMove();
+          }
+        }, 300);
       }
     });
 
-    engineLevelSelect.addEventListener('change', () => {
-      engineLevel = Number(engineLevelSelect.value);
+    engineLevelRange.addEventListener('input', () => {
+      engineLevel = Number(engineLevelRange.value);
+      engineLevelDisplay.textContent = engineLevel;
       
       // Update Stockfish skill level if engine is running
-      if (engineEnabled && engine) {
-        engine.postMessage(`setoption name Skill Level value ${engineLevel}`);
-        
-        if (engineLevel < 10) {
-          engine.postMessage('setoption name Skill Level Maximum Error value 100');
-          engine.postMessage('setoption name Skill Level Probability value 50');
-        }
+      if (engineEnabled && window.StockfishManager.isReady()) {
+        window.StockfishManager.setSkillLevel(engineLevel);
       }
     });
 
+    engineTimeSelect.addEventListener('change', () => {
+      engineThinkTime = Number(engineTimeSelect.value);
+    });
+
+    // Initialize engine level display
+    engineLevelDisplay.textContent = engineLevelRange.value;
+    
     // Board size range
     boardSizeRange.addEventListener('input', (e) => setBoardSize(e.target.value));
     
@@ -908,7 +835,7 @@ window.game = null;
     authDomain: "iq4u-chess-classroom.firebaseapp.com",
     databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "iq4u-chess-classroom",
-    storageBucket: "iq4uchess-classroom.firebasedestorage.app",
+    storageBucket: "iq4uchess-classroom.firebasestorage.app",
     messagingSenderId: "833620718306",
     appId: "1:833620718306:web:b599bb6936fe0da4bb"
   };
