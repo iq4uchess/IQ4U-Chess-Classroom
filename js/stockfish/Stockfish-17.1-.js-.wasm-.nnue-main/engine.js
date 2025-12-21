@@ -1,5 +1,12 @@
 // engine.js
-importScripts('./stockfish-17.1.js');
 
-// DO NOTHING ELSE
-// Stockfish sets up onmessage/postMessage internally
+var Module = {
+  locateFile: function (path) {
+    if (path.endsWith('.wasm')) {
+      return './stockfish-17.1.wasm';
+    }
+    return path;
+  }
+};
+
+importScripts('./stockfish-17.1.js');
