@@ -824,7 +824,8 @@
         arrowSvg: null,
         moveQualityHistory: [],
         isAnalyzing: false,
-        engineVersion: 'Stockfish 17.1 Lite'
+        engineVersion: 'Stockfish 17.1 Lite',
+        multiPV: [] // NEW: Store multiple best moves
       };
 
       // Event listeners
@@ -991,10 +992,11 @@
             isReady = true;
             console.log(`✅ Stockfish 17.1 Lite loaded for ${boardId}`);
             
-            // Configure Stockfish for better performance
+            // Configure Stockfish for better performance (FIXED: Added MultiPV)
             worker.postMessage('setoption name Use NNUE value true');
             worker.postMessage('setoption name Threads value 2');
             worker.postMessage('setoption name Hash value 128');
+            worker.postMessage('setoption name MultiPV value 2'); // NEW: Enable 2 best moves
             worker.postMessage('isready');
             
             // Update UI
@@ -1075,61 +1077,72 @@
       }
     }
 
+    // FIXED: Updated to handle MultiPV
     function processAnalysisInfo(boardId, line) {
       const st = boardsState[boardId];
       if (!st) return;
-      
-      // Parse evaluation
-      const depthMatch = line.match(/depth (\d+)/);
+
+      const multipvMatch = line.match(/multipv (\d+)/);
       const scoreMatch = line.match(/score cp (-?\d+)/);
       const mateMatch = line.match(/score mate (-?\d+)/);
       const pvMatch = line.match(/pv (.+)$/);
-      
-      let evaluation = 0;
-      let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
-      let pvMoves = [];
-      
-      if (scoreMatch) {
-        evaluation = parseInt(scoreMatch[1]) / 100;
-      } else if (mateMatch) {
-        const mateIn = parseInt(mateMatch[1]);
-        evaluation = mateIn > 0 ? 10000 : -10000;
+
+      if (!multipvMatch || !pvMatch) return;
+
+      const idx = parseInt(multipvMatch[1], 10) - 1;
+      if (!st.multiPV) st.multiPV = [];
+
+      let evalScore = 0;
+      if (scoreMatch) evalScore = parseInt(scoreMatch[1]) / 100;
+      if (mateMatch) evalScore = mateMatch[1] > 0 ? 10000 : -10000;
+
+      st.multiPV[idx] = {
+        eval: evalScore,
+        moves: pvMatch[1].split(' ')
+      };
+
+      // Update UI only when first PV updates
+      if (idx === 0) {
+        updateEngineDisplay(boardId, null, evalScore, pvMatch[1].split(' '));
       }
-      
-      if (pvMatch) {
-        pvMoves = pvMatch[1].split(' ').slice(0, 5); // First 5 moves of variation
-      }
-      
-      // Update display with intermediate results
-      updateEngineDisplay(boardId, null, evaluation, pvMoves);
     }
 
+    // FIXED: Updated to show 2 best moves
     function processBestMove(boardId, line) {
       const st = boardsState[boardId];
-      if (!st) return;
-      
-      const match = line.match(/bestmove (\S+)/);
-      if (match && match[1] !== '0000') {
-        const bestMove = match[1];
-        st.bestMove = bestMove;
-        st.bestMoveUCI = bestMove;
-        
-        // Draw arrow for best move
-        if (bestMove.length >= 4) {
-          drawBestMoveArrow(boardId, bestMove);
-        }
-        
-        // Analyze move quality
-        analyzeMoveQuality(boardId);
-        
-        // Update display with final result
-        updateEngineDisplay(boardId, bestMove, st.evalScore, st.pvMoves);
+      if (!st || !st.multiPV || st.multiPV.length === 0) return;
+
+      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+
+      // Get top 2 moves
+      const movesText = st.multiPV
+        .slice(0, 2)
+        .map(pv => formatUCIToSan(pv.moves[0], st.game))
+        .join(', ');
+
+      if (bestMoveEl) {
+        bestMoveEl.textContent = `Best: ${movesText}`;
+        bestMoveEl.style.backgroundColor = '#d1fae5';
+        bestMoveEl.style.color = '#065f46';
       }
+
+      // Draw arrow only for top move
+      if (st.multiPV[0]?.moves[0]) {
+        const bestMoveUCI = st.multiPV[0].moves[0];
+        st.bestMoveUCI = bestMoveUCI;
+        drawBestMoveArrow(boardId, bestMoveUCI);
+      }
+
+      // Analyze move quality
+      analyzeMoveQuality(boardId);
     }
 
     function analyzePosition(boardId, fen = null) {
       const st = boardsState[boardId];
       if (!st || !st.engineRunning || !st.engineWorker) return;
+      
+      // Reset multiPV array for new analysis
+      st.multiPV = [];
       
       if (!fen && st.game) {
         fen = st.game.fen();
@@ -1724,7 +1737,7 @@
       st.evalScore = evaluation;
       st.pvMoves = pvMoves;
       
-      // Update best move
+      // Update best move (now handled by processBestMove)
       if (bestMoveEl) {
         if (bestMove && bestMove !== 'timeout' && bestMove !== '0000') {
           // Format best move (e.g., e2e4 -> e4)
@@ -1736,7 +1749,7 @@
           bestMoveEl.textContent = 'Best: (timeout)';
           bestMoveEl.style.backgroundColor = '#fef3c7';
           bestMoveEl.style.color = '#92400e';
-        } else {
+        } else if (!st.multiPV || st.multiPV.length === 0) {
           bestMoveEl.textContent = 'Best: --';
           bestMoveEl.style.backgroundColor = '#f3f4f6';
           bestMoveEl.style.color = '#4b5563';
@@ -2361,18 +2374,30 @@
     // Call this after Firebase is initialized
     setupFirebaseConnectionListener();
 
-    // ---------- UTILITIES ----------
+    // ---------- FIXED LOGOUT FUNCTION ----------
     document.getElementById('globalLogout').addEventListener('click', () => {
-      try{ 
-        localStorage.removeItem('role'); 
-        localStorage.removeItem('username'); 
-        localStorage.removeItem('email'); 
-        sessionStorage.removeItem('iq4u_clientId'); 
-      }catch(e){}
-      try{ 
-        onlineRef.child(MASTER_ID).remove().catch(()=>{}); 
-      }catch(e){}
-      window.location.href = 'index.html';
+      try {
+        // Stop all engines immediately
+        for (const boardId in boardsState) {
+          const st = boardsState[boardId];
+          if (st?.engineWorker) {
+            try { st.engineWorker.terminate(); } catch(e) {}
+          }
+        }
+
+        // Remove Firebase presence
+        onlineRef.child(MASTER_ID).remove().catch(()=>{});
+
+        // Clear storage
+        localStorage.clear();
+        sessionStorage.clear();
+
+      } catch (e) {
+        console.warn('Logout cleanup error', e);
+      }
+
+      // HARD redirect (bypasses SPA / listeners)
+      window.location.replace('index.html');
     });
 
     window.addEventListener('beforeunload', () => {
