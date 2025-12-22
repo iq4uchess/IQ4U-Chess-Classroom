@@ -571,6 +571,9 @@
     // Stockfish URLs - Using the "single" version you provided
     const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
 
+    // Starting FEN position
+    const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
     // ---------- WATCH MODES (DEFINED EARLY) ----------
     const WATCH_MODES = {
       SINGLE: 'single',
@@ -1135,10 +1138,14 @@
         fen = st.game.fen();
       }
       
-      if (!fen || fen === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
-        // Skip starting position
+      if (!fen) {
+        return;
+      }
+      
+      // FIX 1: Allow eval display even at start position
+      if (fen === START_FEN) {
+        st.evalScore = 0;
         updateEngineDisplay(boardId, null, 0, []);
-        clearArrow(boardId);
         return;
       }
       
@@ -1180,9 +1187,7 @@
           st.analysisInterval = setInterval(() => {
             if (st.engineRunning && st.game && st.watchedClientId && !st.isAnalyzing) {
               const fen = st.game.fen();
-              if (fen !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
-                analyzePosition(boardId, fen);
-              }
+              analyzePosition(boardId, fen);
             }
           }, 15000); // Analyze every 15 seconds
           
@@ -1833,7 +1838,9 @@
     // ---------- MOVE QUALITY ANALYSIS ----------
     function analyzeMoveQuality(boardId) {
       const st = boardsState[boardId];
-      if (!st || !st.game || !st.engineRunning || !st.evalScore) return;
+      
+      // FIX 2: Do NOT block move-quality on evalScore = 0
+      if (!st || !st.game || !st.engineRunning) return;
       
       // Get game history
       const history = st.game.history();
@@ -1844,6 +1851,12 @@
       
       // We need to analyze the previous position to determine move quality
       if (currentMoveIndex > 0) {
+        // FIX 3: Initialize previousEvalScore properly
+        if (st.previousEvalScore === undefined) {
+          st.previousEvalScore = st.evalScore;
+          return;
+        }
+        
         // Store previous eval for CPL calculation
         st.previousEvalScore = st.evalScore || 0;
         
@@ -1879,7 +1892,7 @@
     function calculateSimplifiedCPL(boardId, move, currentFen) {
       const st = boardsState[boardId];
       
-      if (st.evalScore && st.previousEvalScore) {
+      if (st.evalScore !== undefined && st.previousEvalScore !== undefined) {
         // Calculate the difference in evaluation before and after the move
         const evalDiff = Math.abs(st.evalScore - st.previousEvalScore);
         return Math.round(evalDiff * 100); // Convert to centipawns
@@ -1955,79 +1968,108 @@
       
       if (!whiteStatsEl || !blackStatsEl || !moveHistoryEl) return;
       
+      // FIX 4: Show eval-only stats even without moves
+      if (!st.moveQualityHistory || st.moveQualityHistory.length === 0) {
+        // Show current evaluation
+        const whiteEval = st.evalScore > 0 ? st.evalScore : 0;
+        const blackEval = st.evalScore < 0 ? -st.evalScore : 0;
+        
+        whiteStatsEl.innerHTML = `
+          <div>Accuracy: --%</div>
+          <div>Avg CPL: --</div>
+          <div>Current Eval: <span style="color:#059669">${whiteEval.toFixed(2)}</span></div>
+        `;
+        blackStatsEl.innerHTML = `
+          <div>Accuracy: --%</div>
+          <div>Avg CPL: --</div>
+          <div>Current Eval: <span style="color:#059669">${blackEval.toFixed(2)}</span></div>
+        `;
+        return;
+      }
+      
       // Calculate statistics
-      if (st.moveQualityHistory && st.moveQualityHistory.length > 0) {
-        const whiteMoves = st.moveQualityHistory.filter(m => m.player === 'white');
-        const blackMoves = st.moveQualityHistory.filter(m => m.player === 'black');
+      const whiteMoves = st.moveQualityHistory.filter(m => m.player === 'white');
+      const blackMoves = st.moveQualityHistory.filter(m => m.player === 'black');
+      
+      // White stats
+      if (whiteMoves.length > 0) {
+        const whiteAvgCPL = Math.round(whiteMoves.reduce((sum, m) => sum + m.cpl, 0) / whiteMoves.length);
+        const whiteAccuracy = Math.round(whiteMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / whiteMoves.length);
+        const whiteBlunders = whiteMoves.filter(m => m.classification === 'blunder').length;
+        const whiteMistakes = whiteMoves.filter(m => m.classification === 'mistake').length;
+        const whiteInaccuracies = whiteMoves.filter(m => m.classification === 'inaccuracy').length;
         
-        // White stats
-        if (whiteMoves.length > 0) {
-          const whiteAvgCPL = Math.round(whiteMoves.reduce((sum, m) => sum + m.cpl, 0) / whiteMoves.length);
-          const whiteAccuracy = Math.round(whiteMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / whiteMoves.length);
-          const whiteBlunders = whiteMoves.filter(m => m.classification === 'blunder').length;
-          const whiteMistakes = whiteMoves.filter(m => m.classification === 'mistake').length;
-          const whiteInaccuracies = whiteMoves.filter(m => m.classification === 'inaccuracy').length;
-          
-          whiteStatsEl.innerHTML = `
-            <div>Accuracy: ${whiteAccuracy}%</div>
-            <div>Avg CPL: ${whiteAvgCPL}</div>
-            <div>Blunders: <span style="color:#dc2626">${whiteBlunders}</span></div>
-            <div>Mistakes: <span style="color:#ea580c">${whiteMistakes}</span></div>
-            <div>Inaccuracies: <span style="color:#ca8a04">${whiteInaccuracies}</span></div>
-          `;
+        whiteStatsEl.innerHTML = `
+          <div>Accuracy: ${whiteAccuracy}%</div>
+          <div>Avg CPL: ${whiteAvgCPL}</div>
+          <div>Blunders: <span style="color:#dc2626">${whiteBlunders}</span></div>
+          <div>Mistakes: <span style="color:#ea580c">${whiteMistakes}</span></div>
+          <div>Inaccuracies: <span style="color:#ca8a04">${whiteInaccuracies}</span></div>
+        `;
+      } else {
+        whiteStatsEl.innerHTML = `
+          <div>Accuracy: --%</div>
+          <div>Avg CPL: --</div>
+          <div>No moves yet</div>
+        `;
+      }
+      
+      // Black stats
+      if (blackMoves.length > 0) {
+        const blackAvgCPL = Math.round(blackMoves.reduce((sum, m) => sum + m.cpl, 0) / blackMoves.length);
+        const blackAccuracy = Math.round(blackMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / blackMoves.length);
+        const blackBlunders = blackMoves.filter(m => m.classification === 'blunder').length;
+        const blackMistakes = blackMoves.filter(m => m.classification === 'mistake').length;
+        const blackInaccuracies = blackMoves.filter(m => m.classification === 'inaccuracy').length;
+        
+        blackStatsEl.innerHTML = `
+          <div>Accuracy: ${blackAccuracy}%</div>
+          <div>Avg CPL: ${blackAvgCPL}</div>
+          <div>Blunders: <span style="color:#f87171">${blackBlunders}</span></div>
+          <div>Mistakes: <span style="color:#fb923c">${blackMistakes}</span></div>
+          <div>Inaccuracies: <span style="color:#fbbf24">${blackInaccuracies}</span></div>
+        `;
+      } else {
+        blackStatsEl.innerHTML = `
+          <div>Accuracy: --%</div>
+          <div>Avg CPL: --</div>
+          <div>No moves yet</div>
+        `;
+      }
+      
+      // Update move history
+      moveHistoryEl.innerHTML = `
+        <div style="display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-weight: bold;">
+          <div>Move</div>
+          <div>Player</div>
+          <div>Move</div>
+          <div>CPL</div>
+          <div>Type</div>
+        </div>
+      `;
+      
+      st.moveQualityHistory.forEach((move, index) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6;';
+        
+        let typeColor;
+        switch (move.classification) {
+          case 'blunder': typeColor = '#dc2626'; break;
+          case 'mistake': typeColor = '#ea580c'; break;
+          case 'inaccuracy': typeColor = '#ca8a04'; break;
+          default: typeColor = '#16a34a'; break;
         }
         
-        // Black stats
-        if (blackMoves.length > 0) {
-          const blackAvgCPL = Math.round(blackMoves.reduce((sum, m) => sum + m.cpl, 0) / blackMoves.length);
-          const blackAccuracy = Math.round(blackMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / blackMoves.length);
-          const blackBlunders = blackMoves.filter(m => m.classification === 'blunder').length;
-          const blackMistakes = blackMoves.filter(m => m.classification === 'mistake').length;
-          const blackInaccuracies = blackMoves.filter(m => m.classification === 'inaccuracy').length;
-          
-          blackStatsEl.innerHTML = `
-            <div>Accuracy: ${blackAccuracy}%</div>
-            <div>Avg CPL: ${blackAvgCPL}</div>
-            <div>Blunders: <span style="color:#f87171">${blackBlunders}</span></div>
-            <div>Mistakes: <span style="color:#fb923c">${blackMistakes}</span></div>
-            <div>Inaccuracies: <span style="color:#fbbf24">${blackInaccuracies}</span></div>
-          `;
-        }
-        
-        // Update move history
-        moveHistoryEl.innerHTML = `
-          <div style="display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-weight: bold;">
-            <div>Move</div>
-            <div>Player</div>
-            <div>Move</div>
-            <div>CPL</div>
-            <div>Type</div>
-          </div>
+        row.innerHTML = `
+          <div>${move.moveNumber}${move.player === 'white' ? '. ' : '...'}</div>
+          <div>${move.player === 'white' ? 'White' : 'Black'}</div>
+          <div>${move.move}</div>
+          <div>${move.cpl}</div>
+          <div style="color: ${typeColor}">${move.classification}</div>
         `;
         
-        st.moveQualityHistory.forEach((move, index) => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display: grid; grid-template-columns: 40px 60px 80px 60px 60px; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6;';
-          
-          let typeColor;
-          switch (move.classification) {
-            case 'blunder': typeColor = '#dc2626'; break;
-            case 'mistake': typeColor = '#ea580c'; break;
-            case 'inaccuracy': typeColor = '#ca8a04'; break;
-            default: typeColor = '#16a34a'; break;
-          }
-          
-          row.innerHTML = `
-            <div>${move.moveNumber}${move.player === 'white' ? '. ' : '...'}</div>
-            <div>${move.player === 'white' ? 'White' : 'Black'}</div>
-            <div>${move.move}</div>
-            <div>${move.cpl}</div>
-            <div style="color: ${typeColor}">${move.classification}</div>
-          `;
-          
-          moveHistoryEl.appendChild(row);
-        });
-      }
+        moveHistoryEl.appendChild(row);
+      });
     }
 
     // ---------- ARROW FUNCTIONS ----------
