@@ -846,7 +846,8 @@
         arrowSvg: null,
         moveQualityHistory: [],
         isAnalyzing: false,
-        engineVersion: 'Stockfish 17.1 Lite'
+        engineVersion: 'Stockfish 17.1 Lite',
+        currentAnalysisFen: null // ADDED: Store current FEN being analyzed
       };
 
       // Event listeners
@@ -1122,6 +1123,7 @@
 
         st.isAnalyzing = true;
         st.multiPV = [];
+        st.currentAnalysisFen = fen; // Store the FEN being analyzed
 
         st.engineWorker.worker.postMessage('stop');
         st.engineWorker.worker.postMessage(`position fen ${fen}`);
@@ -1139,7 +1141,7 @@
           if (line.startsWith('bestmove')) {
             st.isAnalyzing = false;
 
-            finalizeSingleMoveAnalysis(boardId, moveIndex);
+            finalizeSingleMoveAnalysis(boardId, moveIndex, fen);
             st.engineWorker.worker.onmessage = originalProcess;
             resolve();
           }
@@ -1148,7 +1150,7 @@
     }
 
     // Finalize ONE move
-    function finalizeSingleMoveAnalysis(boardId, moveIndex) {
+    function finalizeSingleMoveAnalysis(boardId, moveIndex, fen) {
       const st = boardsState[boardId];
       if (!st.multiPV.length) return;
 
@@ -1163,7 +1165,8 @@
         player: side,
         move: st.game.history()[moveIndex],
         cpl,
-        classification
+        classification,
+        fen: fen // Store FEN for correct SAN conversion
       });
 
       st.previousEvalScore = best.score;
@@ -1188,7 +1191,12 @@
 
       st.isAnalyzing = true;
       st.multiPV = [];
-      clearArrow(boardId);
+      st.currentAnalysisFen = fen;
+
+      // Only clear arrows if not analyzing
+      if (!st.isAnalyzing) {
+        clearArrow(boardId);
+      }
 
       const statusEl = document.getElementById(`engine-status-${boardId}`);
       if (statusEl) statusEl.textContent = 'Analyzing…';
@@ -1213,7 +1221,8 @@
     // Step 3: Collect MultiPV ONLY at final depth
     function processAnalysisInfo(boardId, line) {
       const st = boardsState[boardId];
-      if (!st || !st.isAnalyzing) return;
+      // FIX 1: Remove isAnalyzing guard - CRITICAL FIX
+      if (!st) return;
 
       const depthMatch = line.match(/depth (\d+)/);
       const multiPvMatch = line.match(/multipv (\d+)/);
@@ -1284,8 +1293,17 @@
 
       if (top.length === 0) return;
 
-      // FIX 2: Improved SAN conversion
-      const sanMoves = top.map(pv => formatUCIToSan(pv.uci, st.game));
+      // FIX 3: Use correct FEN for SAN conversion
+      let fenForSan = st.currentAnalysisFen;
+      if (!fenForSan && st.moveQualityHistory.length > 0) {
+        fenForSan = st.moveQualityHistory[st.moveQualityHistory.length - 1].fen;
+      }
+      if (!fenForSan) {
+        fenForSan = st.game.fen();
+      }
+      
+      const tempGame = new Chess(fenForSan);
+      const sanMoves = top.map(pv => formatUCIToSan(pv.uci, tempGame));
 
       // Update evaluation display
       st.evalScore = top[0].score;
@@ -1301,8 +1319,8 @@
         }
       }
 
-      // Clear previous arrows
-      clearArrow(boardId);
+      // FIX 4: Reinitialize arrow overlay before drawing
+      initArrowOverlay(boardId);
 
       // Draw arrows for top 2 moves with delay (FIX 3)
       if (top[0]) {
@@ -1353,7 +1371,8 @@
           move: history[currentMoveIndex],
           cpl: cpl,
           classification: classification,
-          player: side
+          player: side,
+          fen: st.game.fen()
         });
         
         // Update previous eval for next analysis
@@ -2244,14 +2263,16 @@
           st.boardObj.position(pos);
         }
         
-        // Clear previous analysis when moves are applied
-        clearArrow(boardId);
-        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-        const evalEl = document.getElementById(`engine-eval-${boardId}`);
-        if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
-        if (evalEl) {
-          evalEl.textContent = '+0.0';
-          evalEl.className = 'eval-display eval-neutral';
+        // FIX 2: Only clear arrows if not analyzing
+        if (!st.isAnalyzing) {
+          clearArrow(boardId);
+          const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+          const evalEl = document.getElementById(`engine-eval-${boardId}`);
+          if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
+          if (evalEl) {
+            evalEl.textContent = '+0.0';
+            evalEl.className = 'eval-display eval-neutral';
+          }
         }
         
       }catch(e){ 
