@@ -524,6 +524,8 @@
   <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <!-- Firebase Auth compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
 
   <script>
   (async function(){
@@ -2362,20 +2364,25 @@
     setupFirebaseConnectionListener();
 
     // ---------- FIXED LOGOUT FUNCTION (RELIABLE VERSION) ----------
-    document.getElementById('globalLogout').addEventListener('click', () => {
+    document.getElementById('globalLogout').addEventListener('click', async () => {
       try {
-        // Stop all engines immediately
+        // 1. Stop Stockfish engines
         for (const boardId in boardsState) {
           const st = boardsState[boardId];
           if (st?.engineWorker) {
-            try { st.engineWorker.terminate(); } catch(e) {}
+            try { st.engineWorker.terminate(); } catch {}
           }
         }
 
-        // Remove Firebase presence
-        onlineRef.child(MASTER_ID).remove().catch(()=>{});
+        // 2. Remove Firebase presence
+        await onlineRef.child(MASTER_ID).remove().catch(() => {});
 
-        // Clear storage
+        // 3. SIGN OUT FROM FIREBASE AUTH (CRITICAL)
+        if (firebase.auth) {
+          await firebase.auth().signOut();
+        }
+
+        // 4. Clear storage
         localStorage.clear();
         sessionStorage.clear();
 
@@ -2383,7 +2390,7 @@
         console.warn('Logout cleanup error', e);
       }
 
-      // HARD redirect (bypasses SPA / listeners)
+      // 5. HARD redirect
       window.location.replace('index.html');
     });
 
