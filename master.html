@@ -570,7 +570,6 @@
 
     // Stockfish URLs - Using the "single" version you provided
     const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
-    const STOCKFISH_WASM_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.wasm';
 
     // ---------- WATCH MODES (DEFINED EARLY) ----------
     const WATCH_MODES = {
@@ -979,7 +978,6 @@
       
       try {
         // Create a worker with the Stockfish single version
-        // This version should handle the WASM loading internally
         const worker = new Worker(STOCKFISH_JS_URL);
         
         let onMessageCallback = null;
@@ -1037,12 +1035,8 @@
           if (statusEl) statusEl.textContent = 'Error';
           st.isAnalyzing = false;
           
-          // Try to load a fallback simple engine
-          setTimeout(() => {
-            if (!st.engineRunning) return;
-            console.log(`Trying fallback engine for ${boardId}`);
-            st.engineWorker = createSimpleEngine(boardId);
-          }, 1000);
+          // Show error notification
+          addNotification(boardId, 'Stockfish engine failed to load');
         };
         
         // Initialize Stockfish
@@ -1076,122 +1070,9 @@
         };
       } catch (error) {
         console.error(`Failed to create Stockfish worker for ${boardId}:`, error);
-        // Fallback to simple engine
-        return createSimpleEngine(boardId);
+        addNotification(boardId, 'Failed to initialize Stockfish engine');
+        return null;
       }
-    }
-
-    // Fallback simple engine for when Stockfish fails
-    function createSimpleEngine(boardId) {
-      const st = boardsState[boardId];
-      console.log(`Using simple engine for ${boardId}`);
-      
-      const engineCode = `
-        self.onmessage = function(e) {
-          const cmd = e.data;
-          
-          if (cmd === 'uci') {
-            self.postMessage('id name Simple Chess Engine');
-            self.postMessage('id author IQ4U');
-            self.postMessage('uciok');
-          }
-          else if (cmd === 'isready') {
-            self.postMessage('readyok');
-          }
-          else if (cmd.startsWith('position fen')) {
-            // Store position
-            self.position = cmd.replace('position fen ', '');
-          }
-          else if (cmd.startsWith('go depth')) {
-            const depth = parseInt(cmd.match(/depth (\\d+)/)[1]) || 15;
-            const time = parseInt(cmd.match(/movetime (\\d+)/)[1]) || 3000;
-            
-            // Generate plausible moves
-            const moves = ['e2e4', 'd2d4', 'g1f3', 'c2c4', 'b1c3', 'f2f4',
-                          'e7e5', 'd7d5', 'g8f6', 'b8c6', 'c7c5', 'f7f5'];
-            const bestMove = moves[Math.floor(Math.random() * moves.length)];
-            
-            // Send progressive analysis
-            for (let d = 1; d <= depth; d++) {
-              setTimeout(() => {
-                const evalScore = (Math.random() * 4 - 2) * 100;
-                const pv = [bestMove];
-                for (let i = 1; i < Math.min(3, d); i++) {
-                  pv.push(moves[(moves.indexOf(bestMove) + i) % moves.length]);
-                }
-                
-                self.postMessage(\`info depth \${d} score cp \${Math.round(evalScore)} pv \${pv.join(' ')}\`);
-                
-                if (d === depth) {
-                  self.postMessage(\`bestmove \${bestMove}\`);
-                }
-              }, d * 100);
-            }
-          }
-          else if (cmd === 'stop') {
-            self.postMessage('bestmove 0000');
-          }
-        };
-      `;
-      
-      const blob = new Blob([engineCode], { type: 'application/javascript' });
-      const worker = new Worker(URL.createObjectURL(blob));
-      
-      let onMessageCallback = null;
-      let isReady = false;
-      
-      worker.onmessage = function(e) {
-        const line = e.data;
-        
-        if (line.includes('uciok')) {
-          isReady = true;
-          const statusEl = document.getElementById(`engine-status-${boardId}`);
-          if (statusEl) statusEl.textContent = 'Ready (Simple)';
-        }
-        else if (line.startsWith('info')) {
-          processAnalysisInfo(boardId, line);
-        }
-        else if (line.startsWith('bestmove')) {
-          st.isAnalyzing = false;
-          const statusEl = document.getElementById(`engine-status-${boardId}`);
-          if (statusEl) statusEl.textContent = 'Idle';
-          
-          processBestMove(boardId, line);
-        }
-        
-        if (onMessageCallback) {
-          onMessageCallback(line);
-        }
-      };
-      
-      worker.postMessage('uci');
-      
-      return {
-        worker: worker,
-        setOnMessage: function(callback) {
-          onMessageCallback = callback;
-        },
-        analyze: function(fen, depth, time) {
-          if (!isReady || st.isAnalyzing) return;
-          
-          st.isAnalyzing = true;
-          const statusEl = document.getElementById(`engine-status-${boardId}`);
-          if (statusEl) statusEl.textContent = 'Analyzing...';
-          
-          worker.postMessage(`position fen ${fen}`);
-          worker.postMessage(`go depth ${depth} movetime ${time}`);
-        },
-        stop: function() {
-          worker.postMessage('stop');
-          st.isAnalyzing = false;
-        },
-        terminate: function() {
-          worker.postMessage('stop');
-          setTimeout(() => {
-            try { worker.terminate(); } catch(e) {}
-          }, 100);
-        }
-      };
     }
 
     function processAnalysisInfo(boardId, line) {
