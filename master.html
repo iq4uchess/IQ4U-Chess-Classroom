@@ -415,6 +415,16 @@
       padding: 4px 8px; 
     }
     
+    /* Move explanation tooltip */
+    .move-explanation {
+      font-size: 10px;
+      color: #666;
+      margin-top: 4px;
+      font-style: italic;
+      max-width: 200px;
+      line-height: 1.3;
+    }
+    
     /* Old connection status (removed from fixed position) */
     .connection-status {
       display: none; /* We'll use the header version instead */
@@ -587,7 +597,6 @@
 
     const onlineMap = {};   // clientId => {email, role, ts}
     const boardsState = {}; // per-board state
-    const gameMatches = {}; // Stores which players are playing which color
 
     // Stockfish URLs - Using the "single" version you provided
     const STOCKFISH_JS_URL = 'https://iq4uchess.github.io/IQ4U-Chess-Classroom/js/stockfish/stockfish-17.1-lite-single-03e3232.js';
@@ -642,8 +651,6 @@
           updateFirebaseConnectionStatus(false, 'Disconnected');
         }
       });
-      
-      // REMOVED the problematic onDisconnect() call
     }
 
     // ---------- ensure chess.js loaded ----------
@@ -748,11 +755,12 @@
       `;
       card.appendChild(notifArea);
 
-      // Enhanced Engine analysis panel
+      // Engine analysis panel - SIMPLIFIED for on-demand analysis
       const enginePanel = document.createElement('div');
       enginePanel.className = 'engine-panel';
       enginePanel.innerHTML = `
         <button id="engine-toggle-${student.id}" class="engine-btn">Stockfish: OFF</button>
+        <button id="analyze-btn-${student.id}" class="engine-btn">Analyse</button>
         <span id="engine-version-${student.id}" class="engine-status" style="background:#f3f4f6; padding:4px 8px; border-radius:4px; font-size:11px;">v17.1 Lite</span>
         <label style="font-size:12px; color:#666;">Depth:</label>
         <select id="depth-select-${student.id}" style="font-size:11px; padding:3px 6px; border-radius:4px; border:1px solid #d1d5db;">
@@ -761,21 +769,11 @@
           <option value="15" selected>15</option>
           <option value="18">18</option>
           <option value="20">20</option>
-          <option value="22">22</option>
-        </select>
-        <label style="font-size:12px; color:#666;">Time:</label>
-        <select id="time-select-${student.id}" style="font-size:11px; padding:3px 6px; border-radius:4px; border:1px solid #d1d5db;">
-          <option value="1000">1s</option>
-          <option value="2000">2s</option>
-          <option value="3000" selected>3s</option>
-          <option value="5000">5s</option>
-          <option value="10000">10s</option>
         </select>
         <div style="display:flex; align-items:center; gap:4px; margin-left:8px;">
           <span id="best-move-${student.id}" class="best-move-display">Best: --</span>
           <span id="engine-eval-${student.id}" class="eval-display eval-neutral">+0.0</span>
         </div>
-        <span id="variation-${student.id}" class="variation-moves"></span>
         <span id="engine-status-${student.id}" class="engine-status">Idle</span>
         <button class="analysis-toggle-btn engine-btn" style="margin-left:auto;" id="analysis-toggle-${student.id}">Show Analysis</button>
       `;
@@ -834,23 +832,19 @@
         boardObj: null,
         game: null,
         pieceTheme,
-        // Enhanced Engine properties
+        // Engine properties - SIMPLIFIED for on-demand
         engineWorker: null,
         engineRunning: false,
         analysisDepth: 15,
-        analysisTime: 3000,
         evalScore: 0,
         bestMove: null,
         bestMoveUCI: null,
-        pvMoves: [],
+        multiPV: [],  // Store multiple principal variations
         previousEvalScore: 0,
-        analysisInterval: null,
         arrowSvg: null,
         moveQualityHistory: [],
         isAnalyzing: false,
-        engineVersion: 'Stockfish 17.1 Lite',
-        // PART 1: MultiPV storage
-        multiPV: []  // Array to store multiple principal variations
+        engineVersion: 'Stockfish 17.1 Lite'
       };
 
       // Event listeners
@@ -914,33 +908,22 @@
 
       // Engine event listeners
       const engineToggleBtn = enginePanel.querySelector(`#engine-toggle-${student.id}`);
+      const analyzeBtn = enginePanel.querySelector(`#analyze-btn-${student.id}`);
       const depthSelect = enginePanel.querySelector(`#depth-select-${student.id}`);
-      const timeSelect = enginePanel.querySelector(`#time-select-${student.id}`);
       const analysisToggleBtn = enginePanel.querySelector(`#analysis-toggle-${student.id}`);
 
       engineToggleBtn.addEventListener('click', () => {
         toggleEngine(student.id);
       });
 
+      analyzeBtn.addEventListener('click', () => {
+        analyzeOnce(student.id);
+      });
+
       depthSelect.addEventListener('change', (e) => {
         const st = boardsState[student.id];
         if(st) {
           st.analysisDepth = parseInt(e.target.value);
-          if (st.engineRunning && !st.isAnalyzing) {
-            setTimeout(() => {
-              if (st.game) {
-                const fen = st.game.fen();
-                analyzePosition(student.id, fen);
-              }
-            }, 200);
-          }
-        }
-      });
-
-      timeSelect.addEventListener('change', (e) => {
-        const st = boardsState[student.id];
-        if(st) {
-          st.analysisTime = parseInt(e.target.value);
         }
       });
 
@@ -1008,7 +991,6 @@
         
         let onMessageCallback = null;
         let isReady = false;
-        let currentBestMove = null;
         
         worker.onmessage = function(e) {
           const line = e.data;
@@ -1022,7 +1004,7 @@
             worker.postMessage('setoption name Threads value 2');
             worker.postMessage('setoption name Hash value 128');
             
-            // PART 1: Enable MultiPV for showing top 2 best moves
+            // Enable MultiPV for showing top 2 best moves
             worker.postMessage('setoption name MultiPV value 2');
             
             worker.postMessage('isready');
@@ -1031,10 +1013,6 @@
             const statusEl = document.getElementById(`engine-status-${boardId}`);
             if (statusEl) statusEl.textContent = 'Ready';
             
-            // Analyze current position if needed
-            if (st.game) {
-              setTimeout(() => analyzePosition(boardId, st.game.fen()), 500);
-            }
           }
           else if (line.includes('readyok')) {
             // Engine is ready for analysis
@@ -1042,15 +1020,11 @@
             if (statusEl) statusEl.textContent = 'Ready';
           }
           else if (line.startsWith('info')) {
-            // Parse analysis info
+            // Parse analysis info - ONLY for final depth
             processAnalysisInfo(boardId, line);
           }
           else if (line.startsWith('bestmove')) {
             // Analysis complete
-            st.isAnalyzing = false;
-            const statusEl = document.getElementById(`engine-status-${boardId}`);
-            if (statusEl) statusEl.textContent = 'Idle';
-            
             processBestMove(boardId, line);
           }
           
@@ -1077,19 +1051,6 @@
           setOnMessage: function(callback) {
             onMessageCallback = callback;
           },
-          analyze: function(fen, depth, time) {
-            if (!isReady || st.isAnalyzing) return;
-            
-            st.isAnalyzing = true;
-            const statusEl = document.getElementById(`engine-status-${boardId}`);
-            if (statusEl) statusEl.textContent = 'Analyzing...';
-            
-            // Clear previous MultiPV data
-            st.multiPV = [];
-            
-            worker.postMessage(`position fen ${fen}`);
-            worker.postMessage(`go depth ${depth} movetime ${time}`);
-          },
           stop: function() {
             worker.postMessage('stop');
             st.isAnalyzing = false;
@@ -1108,206 +1069,284 @@
       }
     }
 
-    function processAnalysisInfo(boardId, line) {
+    // ---------- ON-DEMAND ANALYSIS FUNCTIONS ----------
+    
+    // Step 2: Single-shot analysis function
+    function analyzeOnce(boardId) {
       const st = boardsState[boardId];
-      if (!st) return;
-      
-      // Parse evaluation
-      const depthMatch = line.match(/depth (\d+)/);
-      const scoreMatch = line.match(/score cp (-?\d+)/);
-      const mateMatch = line.match(/score mate (-?\d+)/);
-      const pvMatch = line.match(/pv (.+)$/);
-      
-      let evaluation = 0;
-      let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
-      let pvMoves = [];
-      
-      if (scoreMatch) {
-        evaluation = parseInt(scoreMatch[1]) / 100;
-      } else if (mateMatch) {
-        const mateIn = parseInt(mateMatch[1]);
-        evaluation = mateIn > 0 ? 10000 : -10000;
+      if (!st || !st.engineWorker || !st.game || !st.engineRunning) {
+        addNotification(boardId, 'Engine not ready. Please start Stockfish first.');
+        return;
       }
-      
-      if (pvMatch) {
-        pvMoves = pvMatch[1].split(' ').slice(0, 5); // First 5 moves of variation
+
+      const fen = st.game.fen();
+      if (fen === START_FEN) {
+        addNotification(boardId, 'Starting position - nothing to analyze yet.');
+        return;
       }
-      
-      // PART 1: Parse MultiPV lines
-      const multiPvMatch = line.match(/multipv (\d+)/);
-      if (multiPvMatch && pvMatch) {
-        const idx = parseInt(multiPvMatch[1], 10) - 1;
-        
-        if (!st.multiPV) st.multiPV = [];
-        
-        // Extract only the first move from the PV line
-        const firstMove = pvMatch[1].split(' ')[0];
-        
-        st.multiPV[idx] = {
-          pv: firstMove,
-          score: evaluation
-        };
-        
-        // Sort by score (best first)
-        st.multiPV.sort((a, b) => {
-          const aScore = Math.abs(a.score) > 1000 ? (a.score > 0 ? 10000 : -10000) : a.score;
-          const bScore = Math.abs(b.score) > 1000 ? (b.score > 0 ? 10000 : -10000) : b.score;
-          return bScore - aScore; // Descending order
-        });
-        
-        // Update display with multiple best moves
-        updateMultiPVDisplay(boardId);
+
+      st.isAnalyzing = true;
+      st.multiPV = [];
+      clearArrow(boardId);
+
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      if (statusEl) statusEl.textContent = 'Analyzing…';
+
+      // Clear previous analysis
+      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+      const evalEl = document.getElementById(`engine-eval-${boardId}`);
+      if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
+      if (evalEl) {
+        evalEl.textContent = '+0.0';
+        evalEl.className = 'eval-display eval-neutral';
       }
+
+      // Stop any ongoing analysis and start new one
+      st.engineWorker.worker.postMessage('stop');
+      st.engineWorker.worker.postMessage(`position fen ${fen}`);
+      st.engineWorker.worker.postMessage(`go depth ${st.analysisDepth}`);
       
-      // Update display with intermediate results
-      updateEngineDisplay(boardId, null, evaluation, pvMoves);
+      addNotification(boardId, `Analyzing position at depth ${st.analysisDepth}...`);
     }
 
+    // Step 3: Collect MultiPV ONLY at final depth
+    function processAnalysisInfo(boardId, line) {
+      const st = boardsState[boardId];
+      if (!st || !st.isAnalyzing) return;
+
+      const depthMatch = line.match(/depth (\d+)/);
+      const multiPvMatch = line.match(/multipv (\d+)/);
+      const pvMatch = line.match(/pv (.+)$/);
+      const scoreMatch = line.match(/score cp (-?\d+)/);
+      const mateMatch = line.match(/score mate (-?\d+)/);
+
+      if (!depthMatch || !multiPvMatch || !pvMatch) return;
+
+      const depth = Number(depthMatch[1]);
+      // IMPORTANT: Only collect data at final depth to avoid flicker
+      if (depth !== st.analysisDepth) return;
+
+      const idx = Number(multiPvMatch[1]) - 1;
+      const firstMove = pvMatch[1].split(' ')[0];
+
+      let score = 0;
+      if (scoreMatch) {
+        score = Number(scoreMatch[1]) / 100;
+      } else if (mateMatch) {
+        const mateIn = Number(mateMatch[1]);
+        score = mateIn > 0 ? 100 : -100;
+      }
+
+      st.multiPV[idx] = { 
+        uci: firstMove, 
+        score: score,
+        pv: pvMatch[1].split(' ').slice(0, 3) // Store first 3 moves for variation
+      };
+    }
+
+    // Step 4: When bestmove arrives → finalize analysis
     function processBestMove(boardId, line) {
       const st = boardsState[boardId];
       if (!st) return;
-      
+
+      st.isAnalyzing = false;
+
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
+      if (statusEl) statusEl.textContent = 'Idle';
+
+      // Extract the actual best move
       const match = line.match(/bestmove (\S+)/);
       if (match && match[1] !== '0000') {
-        const bestMove = match[1];
-        st.bestMove = bestMove;
-        st.bestMoveUCI = bestMove;
-        
-        // Draw arrow for best move
-        if (bestMove.length >= 4) {
-          drawBestMoveArrow(boardId, bestMove);
-        }
-        
-        // Analyze move quality
-        analyzeMoveQuality(boardId);
-        
-        // Update display with final result
-        updateEngineDisplay(boardId, bestMove, st.evalScore, st.pvMoves);
+        st.bestMoveUCI = match[1];
       }
+
+      // Finalize the analysis with all collected data
+      finalizeAnalysis(boardId);
+      
+      addNotification(boardId, 'Analysis complete');
     }
 
-    function analyzePosition(boardId, fen = null) {
-      const st = boardsState[boardId];
-      if (!st || !st.engineRunning || !st.engineWorker) return;
-      
-      if (!fen && st.game) {
-        fen = st.game.fen();
-      }
-      
-      if (!fen) {
-        return;
-      }
-      
-      // Allow eval display even at start position
-      if (fen === START_FEN) {
-        st.evalScore = 0;
-        updateEngineDisplay(boardId, null, 0, []);
-        return;
-      }
-      
-      try {
-        st.engineWorker.analyze(fen, st.analysisDepth, st.analysisTime);
-      } catch (e) {
-        console.error(`Analysis error for ${boardId}:`, e);
-        st.isAnalyzing = false;
-        const statusEl = document.getElementById(`engine-status-${boardId}`);
-        if (statusEl) statusEl.textContent = 'Error';
-      }
-    }
-
-    function toggleEngine(boardId) {
-      const st = boardsState[boardId];
-      if (!st) return;
-      
-      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
-      const statusEl = document.getElementById(`engine-status-${boardId}`);
-      
-      if (!st.engineRunning) {
-        // Start engine
-        addNotification(boardId, 'Starting Stockfish 17.1 Lite...');
-        
-        st.engineWorker = createStockfishWorker(boardId);
-        if (st.engineWorker) {
-          st.engineRunning = true;
-          
-          if (toggleBtn) {
-            toggleBtn.textContent = 'Stockfish: ON';
-            toggleBtn.className = 'engine-btn engine-btn-stop';
-          }
-          if (statusEl) {
-            statusEl.textContent = 'Loading...';
-            statusEl.style.color = '#f59e0b';
-          }
-          
-          // Set up periodic analysis
-          st.analysisInterval = setInterval(() => {
-            if (st.engineRunning && st.game && st.watchedClientId && !st.isAnalyzing) {
-              const fen = st.game.fen();
-              analyzePosition(boardId, fen);
-            }
-          }, 15000); // Analyze every 15 seconds
-          
-        } else {
-          addNotification(boardId, 'Failed to start Stockfish');
-          if (toggleBtn) toggleBtn.textContent = 'Stockfish: OFF';
-          if (statusEl) statusEl.textContent = 'Load failed';
-        }
-        
-      } else {
-        // Stop engine
-        st.engineRunning = false;
-        st.isAnalyzing = false;
-        
-        if (st.analysisInterval) {
-          clearInterval(st.analysisInterval);
-          st.analysisInterval = null;
-        }
-        
-        if (st.engineWorker) {
-          st.engineWorker.terminate();
-          st.engineWorker = null;
-        }
-        
-        if (toggleBtn) {
-          toggleBtn.textContent = 'Stockfish: OFF';
-          toggleBtn.className = 'engine-btn';
-        }
-        if (statusEl) {
-          statusEl.textContent = 'Idle';
-          statusEl.style.color = '#666';
-        }
-        
-        updateEngineDisplay(boardId, null, 0, [], []);
-        clearArrow(boardId);
-        
-        addNotification(boardId, 'Stockfish stopped');
-      }
-    }
-
-    // PART 1: Update display to show multiple best moves
-    function updateMultiPVDisplay(boardId) {
+    // Step 5: Finalize: SAN, arrows, explanations
+    function finalizeAnalysis(boardId) {
       const st = boardsState[boardId];
       if (!st || !st.multiPV || st.multiPV.length === 0) return;
-      
+
+      // Filter and sort by score (best first)
+      const top = st.multiPV
+        .filter(pv => pv && pv.uci && pv.uci.length >= 4)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 2); // Get top 2 moves
+
+      if (top.length === 0) return;
+
+      // Convert to SAN notation
+      const sanMoves = top.map(pv => formatUCIToSan(pv.uci, st.game));
+
+      // Update evaluation display
+      st.evalScore = top[0].score;
+      updateEvalDisplay(boardId, top[0].score);
+
+      // Display best moves
       const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-      if (!bestMoveEl) return;
+      if (bestMoveEl) {
+        if (sanMoves.length === 1) {
+          bestMoveEl.textContent = `Best: ${sanMoves[0]}`;
+        } else {
+          bestMoveEl.innerHTML = `Best: <span class="multi-pv-move best">${sanMoves[0]}</span><span class="multi-pv-move second-best">${sanMoves[1]}</span>`;
+        }
+      }
+
+      // Clear previous arrows
+      clearArrow(boardId);
+
+      // Draw arrows for top 2 moves
+      if (top[0]) {
+        drawArrow(boardId, {
+          from: top[0].uci.slice(0, 2),
+          to: top[0].uci.slice(2, 4),
+          color: '#10b981', // Green for best move
+          width: 3,
+          opacity: 0.8
+        });
+      }
+
+      if (top[1]) {
+        drawArrow(boardId, {
+          from: top[1].uci.slice(0, 2),
+          to: top[1].uci.slice(2, 4),
+          color: '#3b82f6', // Blue for second best
+          width: 2,
+          opacity: 0.6
+        });
+      }
+
+      // Show move explanation
+      if (top[0]) {
+        explainMove(boardId, top[0].score);
+      }
+
+      // Store analysis for the analysis grid
+      const history = st.game.history();
+      if (history.length > 0) {
+        const currentMoveIndex = history.length - 1;
+        const side = currentMoveIndex % 2 === 0 ? 'white' : 'black';
+        
+        if (!st.moveQualityHistory) st.moveQualityHistory = [];
+        
+        // Calculate CPL for the last move
+        const cpl = st.previousEvalScore !== undefined ? 
+          calculateCPL(st.previousEvalScore, st.evalScore, side) : 0;
+        
+        const classification = classifyMoveByCPL(cpl);
+        
+        st.moveQualityHistory.push({
+          moveNumber: Math.ceil((currentMoveIndex + 1) / 2),
+          move: history[currentMoveIndex],
+          cpl: cpl,
+          classification: classification,
+          player: side
+        });
+        
+        // Update previous eval for next analysis
+        st.previousEvalScore = st.evalScore;
+        
+        // Update analysis grid
+        updateAnalysisGrid(boardId);
+      }
+    }
+
+    function updateEvalDisplay(boardId, evaluation) {
+      const evalEl = document.getElementById(`engine-eval-${boardId}`);
+      if (!evalEl) return;
       
-      // Filter out invalid moves and get first move from each PV
-      const validMoves = st.multiPV
-        .filter(pv => pv && pv.pv && pv.pv.length >= 4)
-        .slice(0, 2); // Show top 2 moves
+      let evalText = '';
+      let isMate = false;
       
-      if (validMoves.length === 0) return;
+      if (Math.abs(evaluation) > 100) {
+        // Mate score
+        const mateIn = evaluation > 0 ? Math.ceil((100 - evaluation)) : Math.ceil((-100 - evaluation));
+        evalText = evaluation > 0 ? `+M${mateIn}` : `-M${mateIn}`;
+        isMate = true;
+      } else {
+        // Normal score
+        if (evaluation > 0) {
+          evalText = `+${evaluation.toFixed(1)}`;
+        } else if (evaluation < 0) {
+          evalText = evaluation.toFixed(1);
+        } else {
+          evalText = '0.0';
+        }
+      }
       
-      // Format each move
-      const moveElements = validMoves.map((pv, index) => {
-        const formatted = formatUCIToSan(pv.pv, st.game);
-        const className = index === 0 ? 'multi-pv-move best' : 'multi-pv-move second-best';
-        return `<span class="${className}">${formatted}</span>`;
+      evalEl.textContent = evalText;
+      
+      if (isMate) {
+        evalEl.className = 'eval-display eval-positive';
+      } else if (evaluation > 1.0) {
+        evalEl.className = 'eval-display eval-positive';
+      } else if (evaluation < -1.0) {
+        evalEl.className = 'eval-display eval-negative';
+      } else {
+        evalEl.className = 'eval-display eval-neutral';
+      }
+    }
+
+    // Step 6: "Why it's a blunder / good / forcing"
+    function explainMove(boardId, evalScore) {
+      const st = boardsState[boardId];
+      if (!st || !st.game) return;
+
+      const history = st.game.history();
+      if (history.length === 0) return;
+
+      const currentMoveIndex = history.length - 1;
+      const side = currentMoveIndex % 2 === 0 ? 'white' : 'black';
+      const prevEval = st.previousEvalScore !== undefined ? st.previousEvalScore : 0;
+      
+      const cpl = calculateCPL(prevEval, evalScore, side);
+      const classification = classifyMoveByCPL(cpl);
+      
+      let explanation = '';
+      
+      switch (classification) {
+        case 'blunder':
+          explanation = 'Loses decisive material or allows a winning tactic.';
+          break;
+        case 'mistake':
+          explanation = 'Significantly worsens the position.';
+          break;
+        case 'inaccuracy':
+          explanation = 'Misses a stronger continuation.';
+          break;
+        case 'good':
+          if (Math.abs(evalScore) > 2.0) {
+            explanation = 'Very strong move that maintains a significant advantage.';
+          } else if (Math.abs(evalScore) > 1.0) {
+            explanation = 'Good move that maintains an advantage.';
+          } else {
+            explanation = 'Solid move with no tactical issues.';
+          }
+          break;
+      }
+
+      // Check if move is a check
+      const lastMove = history[history.length - 1];
+      const isCheck = lastMove.includes('+');
+      if (isCheck) {
+        explanation += ' This move gives check.';
+      }
+
+      // Check if move captures
+      const isCapture = lastMove.includes('x');
+      if (isCapture) {
+        explanation += ' This move captures material.';
+      }
+
+      updateMoveQualityDisplay(boardId, {
+        classification: classification,
+        cpl: cpl,
+        explanation: explanation
       });
-      
-      // Update display
-      bestMoveEl.innerHTML = `Best: ${moveElements.join(' ')}`;
     }
 
     // ---------- MULTI-WATCH FUNCTIONS ----------
@@ -1370,7 +1409,6 @@
     }
 
     // ---------- SINGLE AUTHORITATIVE PIPELINE ----------
-    // This is the KEY: One path for all Firebase data → Chess.js → Chessboard.js
     const CANDIDATE_PATHS = ['','game','move','moves'];
 
     function startWatching(boardId, clientId){
@@ -1705,10 +1743,16 @@
           st.boardObj.position(pos);
         }
         
-        // Trigger engine analysis if running
-        if(st.engineRunning && !st.isAnalyzing) {
-          setTimeout(() => analyzePosition(boardId), 300);
+        // Clear previous analysis when moves are applied
+        clearArrow(boardId);
+        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+        const evalEl = document.getElementById(`engine-eval-${boardId}`);
+        if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
+        if (evalEl) {
+          evalEl.textContent = '+0.0';
+          evalEl.className = 'eval-display eval-neutral';
         }
+        
       }catch(e){ 
         addNotification(boardId, 'Apply moves error: ' + (e && e.message)); 
       }
@@ -1758,11 +1802,6 @@
           st.game.load(fen); 
           if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen()); 
           updateNotation(boardId);
-          
-          // Trigger engine analysis if running
-          if(st.engineRunning && !st.isAnalyzing) {
-            setTimeout(() => analyzePosition(boardId), 300);
-          }
         }
         else if(st.boardObj && typeof st.boardObj.position === 'function'){ 
           st.boardObj.position(fen); 
@@ -1784,11 +1823,6 @@
           } else {
             if(st.boardObj && typeof st.boardObj.position === 'function') st.boardObj.position(st.game.fen());
             updateNotation(boardId);
-            
-            // Trigger engine analysis if running
-            if(st.engineRunning && !st.isAnalyzing) {
-              setTimeout(() => analyzePosition(boardId), 300);
-            }
           }
         } else {
           if(fallbackFen) applyFenToBoard(boardId, fallbackFen);
@@ -1798,72 +1832,68 @@
       }
     }
 
-    // ---------- ENGINE DISPLAY FUNCTIONS ----------
-    function updateEngineDisplay(boardId, bestMove, evaluation, pvMoves, moveQuality = null) {
+    // ---------- ENGINE TOGGLE FUNCTION ----------
+    function toggleEngine(boardId) {
       const st = boardsState[boardId];
       if (!st) return;
       
-      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
-      const evalEl = document.getElementById(`engine-eval-${boardId}`);
-      const variationEl = document.getElementById(`variation-${boardId}`);
+      const toggleBtn = document.getElementById(`engine-toggle-${boardId}`);
+      const statusEl = document.getElementById(`engine-status-${boardId}`);
       
-      // Store evaluation
-      st.evalScore = evaluation;
-      st.pvMoves = pvMoves;
-      
-      // Update evaluation
-      if (evalEl) {
-        let evalText = '';
-        let isMate = false;
+      if (!st.engineRunning) {
+        // Start engine
+        addNotification(boardId, 'Starting Stockfish 17.1 Lite...');
         
-        if (Math.abs(evaluation) > 1000) {
-          // Mate score
-          const mateIn = evaluation > 0 ? Math.ceil((10000 - evaluation) / 100) : Math.ceil((-10000 - evaluation) / 100);
-          evalText = evaluation > 0 ? `+M${mateIn}` : `-M${mateIn}`;
-          isMate = true;
-        } else {
-          // Normal score
-          if (evaluation > 0) {
-            evalText = `+${evaluation.toFixed(1)}`;
-          } else if (evaluation < 0) {
-            evalText = evaluation.toFixed(1);
-          } else {
-            evalText = '0.0';
+        st.engineWorker = createStockfishWorker(boardId);
+        if (st.engineWorker) {
+          st.engineRunning = true;
+          
+          if (toggleBtn) {
+            toggleBtn.textContent = 'Stockfish: ON';
+            toggleBtn.className = 'engine-btn engine-btn-stop';
           }
+          if (statusEl) {
+            statusEl.textContent = 'Loading...';
+            statusEl.style.color = '#f59e0b';
+          }
+          
+        } else {
+          addNotification(boardId, 'Failed to start Stockfish');
+          if (toggleBtn) toggleBtn.textContent = 'Stockfish: OFF';
+          if (statusEl) statusEl.textContent = 'Load failed';
         }
         
-        evalEl.textContent = evalText;
+      } else {
+        // Stop engine
+        st.engineRunning = false;
+        st.isAnalyzing = false;
         
-        if (isMate) {
-          evalEl.className = 'eval-display eval-positive';
-        } else if (evaluation > 1.0) {
-          evalEl.className = 'eval-display eval-positive';
-        } else if (evaluation < -1.0) {
-          evalEl.className = 'eval-display eval-negative';
-        } else {
+        if (st.engineWorker) {
+          st.engineWorker.terminate();
+          st.engineWorker = null;
+        }
+        
+        if (toggleBtn) {
+          toggleBtn.textContent = 'Stockfish: OFF';
+          toggleBtn.className = 'engine-btn';
+        }
+        if (statusEl) {
+          statusEl.textContent = 'Idle';
+          statusEl.style.color = '#666';
+        }
+        
+        // Clear analysis display
+        const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+        const evalEl = document.getElementById(`engine-eval-${boardId}`);
+        if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
+        if (evalEl) {
+          evalEl.textContent = '+0.0';
           evalEl.className = 'eval-display eval-neutral';
         }
-      }
-      
-      // Update variation
-      if (variationEl && pvMoves && pvMoves.length > 0) {
-        let variationHTML = 'PV: ';
-        for (let i = 0; i < Math.min(pvMoves.length, 5); i++) {
-          const move = pvMoves[i];
-          const formatted = formatUCIToSan(move, st.game);
-          variationHTML += `<span class="move-san">${formatted}</span>`;
-          if (i < Math.min(pvMoves.length, 5) - 1) {
-            variationHTML += ' ';
-          }
-        }
-        variationEl.innerHTML = variationHTML;
-      } else if (variationEl) {
-        variationEl.innerHTML = '';
-      }
-      
-      // Update move quality display if available
-      if (moveQuality) {
-        updateMoveQualityDisplay(boardId, moveQuality);
+        
+        clearArrow(boardId);
+        
+        addNotification(boardId, 'Stockfish stopped');
       }
     }
 
@@ -1899,64 +1929,6 @@
     }
 
     // ---------- MOVE QUALITY ANALYSIS ----------
-    function analyzeMoveQuality(boardId) {
-      const st = boardsState[boardId];
-      
-      // Do NOT block move-quality on evalScore = 0
-      if (!st || !st.game || !st.engineRunning) return;
-      
-      // Get game history
-      const history = st.game.history();
-      if (history.length === 0) return;
-      
-      const currentMoveIndex = history.length - 1;
-      const currentFen = st.game.fen();
-      
-      // We need to analyze the previous position to determine move quality
-      if (currentMoveIndex > 0) {
-        // Initialize previousEvalScore properly
-        if (st.previousEvalScore === undefined) {
-          st.previousEvalScore = st.evalScore;
-          return;
-        }
-        
-        // PART 2: Correct CPL calculation
-        const side = currentMoveIndex % 2 === 0 ? 'white' : 'black';
-        const cpl = calculateCPL(st.previousEvalScore, st.evalScore, side);
-        
-        // PART 2: Correct classification using standard Lichess thresholds
-        const moveQuality = classifyMoveByCPL(cpl);
-        
-        // Update display
-        updateMoveQualityDisplay(boardId, {
-          move: history[currentMoveIndex],
-          cpl: cpl,
-          classification: moveQuality,
-          accuracy: calculateAccuracy(cpl)
-        });
-        
-        // Store in game state for later display
-        if (!st.moveQualityHistory) st.moveQualityHistory = [];
-        st.moveQualityHistory.push({
-          moveNumber: Math.ceil((currentMoveIndex + 1) / 2),
-          move: history[currentMoveIndex],
-          cpl: cpl,
-          classification: moveQuality,
-          player: side
-        });
-        
-        // Update the analysis grid
-        updateAnalysisGrid(boardId);
-        
-        // Update previous evaluation for next move
-        st.previousEvalScore = st.evalScore;
-      } else {
-        // First move - just set baseline
-        st.previousEvalScore = st.evalScore;
-      }
-    }
-
-    // PART 2: Correct CPL calculation
     function calculateCPL(prevEval, newEval, side) {
       // side = 'white' or 'black'
       const sign = side === 'white' ? 1 : -1;
@@ -1964,7 +1936,6 @@
       return loss;
     }
 
-    // PART 2: Correct classification using standard Lichess thresholds
     function classifyMoveByCPL(cpl) {
       if (cpl >= 300) return 'blunder';
       if (cpl >= 100) return 'mistake';
@@ -1972,26 +1943,28 @@
       return 'good';
     }
 
-    function calculateAccuracy(cpl) {
-      const maxCPL = 300;
-      let accuracy = 100 - (cpl / maxCPL * 100);
-      accuracy = Math.max(0, Math.min(100, accuracy));
-      accuracy += (Math.random() - 0.5) * 10;
-      accuracy = Math.max(0, Math.min(100, accuracy));
-      return Math.round(accuracy);
-    }
-
     function updateMoveQualityDisplay(boardId, quality) {
       let qualityEl = document.getElementById(`move-quality-${boardId}`);
+      let explanationEl = document.getElementById(`move-explanation-${boardId}`);
+      
       if (!qualityEl) {
         const enginePanel = document.querySelector(`[data-student-id="${boardId}"] .engine-panel`);
         if (enginePanel) {
+          // Create quality display
           qualityEl = document.createElement('span');
           qualityEl.id = `move-quality-${boardId}`;
           qualityEl.className = 'move-quality-display';
           qualityEl.style.marginLeft = '8px';
           enginePanel.appendChild(qualityEl);
+          
+          // Create explanation tooltip
+          explanationEl = document.createElement('div');
+          explanationEl.id = `move-explanation-${boardId}`;
+          explanationEl.className = 'move-explanation';
+          enginePanel.appendChild(explanationEl);
         }
+      } else {
+        explanationEl = document.getElementById(`move-explanation-${boardId}`);
       }
       
       if (qualityEl) {
@@ -2010,6 +1983,10 @@
         qualityEl.textContent = `${text} (${quality.cpl}cp)`;
         qualityEl.style.backgroundColor = bgColor;
         qualityEl.style.color = textColor;
+        
+        if (explanationEl && quality.explanation) {
+          explanationEl.textContent = quality.explanation;
+        }
       }
     }
 
@@ -2023,9 +2000,8 @@
       
       if (!whiteStatsEl || !blackStatsEl || !moveHistoryEl) return;
       
-      // Show eval-only stats even without moves
+      // Show current evaluation if no moves analyzed yet
       if (!st.moveQualityHistory || st.moveQualityHistory.length === 0) {
-        // Show current evaluation
         const whiteEval = st.evalScore > 0 ? st.evalScore : 0;
         const blackEval = st.evalScore < 0 ? -st.evalScore : 0;
         
@@ -2049,10 +2025,11 @@
       // White stats
       if (whiteMoves.length > 0) {
         const whiteAvgCPL = Math.round(whiteMoves.reduce((sum, m) => sum + m.cpl, 0) / whiteMoves.length);
-        const whiteAccuracy = Math.round(whiteMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / whiteMoves.length);
         const whiteBlunders = whiteMoves.filter(m => m.classification === 'blunder').length;
         const whiteMistakes = whiteMoves.filter(m => m.classification === 'mistake').length;
         const whiteInaccuracies = whiteMoves.filter(m => m.classification === 'inaccuracy').length;
+        const whiteAccuracy = whiteMoves.length > 0 ? 
+          Math.round((whiteMoves.filter(m => m.classification === 'good').length / whiteMoves.length) * 100) : 0;
         
         whiteStatsEl.innerHTML = `
           <div>Accuracy: ${whiteAccuracy}%</div>
@@ -2065,17 +2042,18 @@
         whiteStatsEl.innerHTML = `
           <div>Accuracy: --%</div>
           <div>Avg CPL: --</div>
-          <div>No moves yet</div>
+          <div>No moves analyzed</div>
         `;
       }
       
       // Black stats
       if (blackMoves.length > 0) {
         const blackAvgCPL = Math.round(blackMoves.reduce((sum, m) => sum + m.cpl, 0) / blackMoves.length);
-        const blackAccuracy = Math.round(blackMoves.reduce((sum, m) => sum + calculateAccuracy(m.cpl), 0) / blackMoves.length);
         const blackBlunders = blackMoves.filter(m => m.classification === 'blunder').length;
         const blackMistakes = blackMoves.filter(m => m.classification === 'mistake').length;
         const blackInaccuracies = blackMoves.filter(m => m.classification === 'inaccuracy').length;
+        const blackAccuracy = blackMoves.length > 0 ? 
+          Math.round((blackMoves.filter(m => m.classification === 'good').length / blackMoves.length) * 100) : 0;
         
         blackStatsEl.innerHTML = `
           <div>Accuracy: ${blackAccuracy}%</div>
@@ -2088,7 +2066,7 @@
         blackStatsEl.innerHTML = `
           <div>Accuracy: --%</div>
           <div>Avg CPL: --</div>
-          <div>No moves yet</div>
+          <div>No moves analyzed</div>
         `;
       }
       
@@ -2150,31 +2128,9 @@
       st.arrowSvg = svg;
     }
 
-    function drawBestMoveArrow(boardId, uciMove) {
-      const st = boardsState[boardId];
-      if (!st || !st.arrowSvg || !uciMove || uciMove.length < 4) return;
-      
-      clearArrow(boardId);
-      
-      const from = uciMove.substring(0, 2);
-      const to = uciMove.substring(2, 4);
-      
-      const arrow = {
-        from: from,
-        to: to,
-        color: '#10b981',
-        width: 3,
-        opacity: 0.7
-      };
-      
-      drawArrow(boardId, arrow);
-    }
-
     function drawArrow(boardId, arrow) {
       const st = boardsState[boardId];
       if (!st || !st.arrowSvg) return;
-      
-      st.arrowSvg.innerHTML = '';
       
       const boardEl = document.getElementById(`board_${boardId}`);
       if (!boardEl) return;
@@ -2205,32 +2161,39 @@
         y2 = (7 - toRank) * squareSize + squareSize / 2;
       }
       
-      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-      marker.setAttribute('id', `arrowhead-${boardId}`);
-      marker.setAttribute('markerWidth', '10');
-      marker.setAttribute('markerHeight', '7');
-      marker.setAttribute('refX', '9');
-      marker.setAttribute('refY', '3.5');
-      marker.setAttribute('orient', 'auto');
-      
-      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
-      polygon.setAttribute('fill', arrow.color);
-      
-      marker.appendChild(polygon);
-      defs.appendChild(marker);
-      st.arrowSvg.appendChild(defs);
-      
+      // Create a new arrow element
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute('x1', x1);
       line.setAttribute('y1', y1);
       line.setAttribute('x2', x2);
       line.setAttribute('y2', y2);
       line.setAttribute('stroke', arrow.color);
-      line.setAttribute('stroke-width', arrow.width);
-      line.setAttribute('stroke-opacity', arrow.opacity);
-      line.setAttribute('marker-end', `url(#arrowhead-${boardId})`);
+      line.setAttribute('stroke-width', arrow.width || 3);
+      line.setAttribute('stroke-opacity', arrow.opacity || 0.8);
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('marker-end', `url(#arrowhead-${boardId}-${arrow.color.replace('#', '')})`);
+      
+      // Create marker if it doesn't exist
+      let markerId = `arrowhead-${boardId}-${arrow.color.replace('#', '')}`;
+      if (!st.arrowSvg.querySelector(`#${markerId}`)) {
+        const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+        marker.setAttribute('id', markerId);
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '7');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '3.5');
+        marker.setAttribute('orient', 'auto');
+        
+        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+        polygon.setAttribute('fill', arrow.color);
+        
+        marker.appendChild(polygon);
+        defs.appendChild(marker);
+        st.arrowSvg.appendChild(defs);
+      }
+      
       st.arrowSvg.appendChild(line);
     }
 
