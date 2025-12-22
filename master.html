@@ -375,6 +375,27 @@
       margin-left:8px; 
     }
     
+    /* MultiPV move display */
+    .multi-pv-move {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #f3f4f6;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    
+    .multi-pv-move.best {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    .multi-pv-move.second-best {
+      background: #f0f9ff;
+      color: #0369a1;
+    }
+    
     /* Analysis Grid Styles */
     .analysis-grid { 
       margin-top: 12px; 
@@ -827,7 +848,9 @@
         arrowSvg: null,
         moveQualityHistory: [],
         isAnalyzing: false,
-        engineVersion: 'Stockfish 17.1 Lite'
+        engineVersion: 'Stockfish 17.1 Lite',
+        // PART 1: MultiPV storage
+        multiPV: []  // Array to store multiple principal variations
       };
 
       // Event listeners
@@ -998,6 +1021,10 @@
             worker.postMessage('setoption name Use NNUE value true');
             worker.postMessage('setoption name Threads value 2');
             worker.postMessage('setoption name Hash value 128');
+            
+            // PART 1: Enable MultiPV for showing top 2 best moves
+            worker.postMessage('setoption name MultiPV value 2');
+            
             worker.postMessage('isready');
             
             // Update UI
@@ -1057,6 +1084,9 @@
             const statusEl = document.getElementById(`engine-status-${boardId}`);
             if (statusEl) statusEl.textContent = 'Analyzing...';
             
+            // Clear previous MultiPV data
+            st.multiPV = [];
+            
             worker.postMessage(`position fen ${fen}`);
             worker.postMessage(`go depth ${depth} movetime ${time}`);
           },
@@ -1103,6 +1133,32 @@
         pvMoves = pvMatch[1].split(' ').slice(0, 5); // First 5 moves of variation
       }
       
+      // PART 1: Parse MultiPV lines
+      const multiPvMatch = line.match(/multipv (\d+)/);
+      if (multiPvMatch && pvMatch) {
+        const idx = parseInt(multiPvMatch[1], 10) - 1;
+        
+        if (!st.multiPV) st.multiPV = [];
+        
+        // Extract only the first move from the PV line
+        const firstMove = pvMatch[1].split(' ')[0];
+        
+        st.multiPV[idx] = {
+          pv: firstMove,
+          score: evaluation
+        };
+        
+        // Sort by score (best first)
+        st.multiPV.sort((a, b) => {
+          const aScore = Math.abs(a.score) > 1000 ? (a.score > 0 ? 10000 : -10000) : a.score;
+          const bScore = Math.abs(b.score) > 1000 ? (b.score > 0 ? 10000 : -10000) : b.score;
+          return bScore - aScore; // Descending order
+        });
+        
+        // Update display with multiple best moves
+        updateMultiPVDisplay(boardId);
+      }
+      
       // Update display with intermediate results
       updateEngineDisplay(boardId, null, evaluation, pvMoves);
     }
@@ -1142,7 +1198,7 @@
         return;
       }
       
-      // FIX 1: Allow eval display even at start position
+      // Allow eval display even at start position
       if (fen === START_FEN) {
         st.evalScore = 0;
         updateEngineDisplay(boardId, null, 0, []);
@@ -1226,6 +1282,32 @@
         
         addNotification(boardId, 'Stockfish stopped');
       }
+    }
+
+    // PART 1: Update display to show multiple best moves
+    function updateMultiPVDisplay(boardId) {
+      const st = boardsState[boardId];
+      if (!st || !st.multiPV || st.multiPV.length === 0) return;
+      
+      const bestMoveEl = document.getElementById(`best-move-${boardId}`);
+      if (!bestMoveEl) return;
+      
+      // Filter out invalid moves and get first move from each PV
+      const validMoves = st.multiPV
+        .filter(pv => pv && pv.pv && pv.pv.length >= 4)
+        .slice(0, 2); // Show top 2 moves
+      
+      if (validMoves.length === 0) return;
+      
+      // Format each move
+      const moveElements = validMoves.map((pv, index) => {
+        const formatted = formatUCIToSan(pv.pv, st.game);
+        const className = index === 0 ? 'multi-pv-move best' : 'multi-pv-move second-best';
+        return `<span class="${className}">${formatted}</span>`;
+      });
+      
+      // Update display
+      bestMoveEl.innerHTML = `Best: ${moveElements.join(' ')}`;
     }
 
     // ---------- MULTI-WATCH FUNCTIONS ----------
@@ -1729,25 +1811,6 @@
       st.evalScore = evaluation;
       st.pvMoves = pvMoves;
       
-      // Update best move
-      if (bestMoveEl) {
-        if (bestMove && bestMove !== 'timeout' && bestMove !== '0000') {
-          // Format best move (e.g., e2e4 -> e4)
-          const formatted = formatUCIToSan(bestMove, st.game);
-          bestMoveEl.textContent = `Best: ${formatted}`;
-          bestMoveEl.style.backgroundColor = '#d1fae5';
-          bestMoveEl.style.color = '#065f46';
-        } else if (bestMove === 'timeout') {
-          bestMoveEl.textContent = 'Best: (timeout)';
-          bestMoveEl.style.backgroundColor = '#fef3c7';
-          bestMoveEl.style.color = '#92400e';
-        } else {
-          bestMoveEl.textContent = 'Best: --';
-          bestMoveEl.style.backgroundColor = '#f3f4f6';
-          bestMoveEl.style.color = '#4b5563';
-        }
-      }
-      
       // Update evaluation
       if (evalEl) {
         let evalText = '';
@@ -1839,7 +1902,7 @@
     function analyzeMoveQuality(boardId) {
       const st = boardsState[boardId];
       
-      // FIX 2: Do NOT block move-quality on evalScore = 0
+      // Do NOT block move-quality on evalScore = 0
       if (!st || !st.game || !st.engineRunning) return;
       
       // Get game history
@@ -1851,19 +1914,17 @@
       
       // We need to analyze the previous position to determine move quality
       if (currentMoveIndex > 0) {
-        // FIX 3: Initialize previousEvalScore properly
+        // Initialize previousEvalScore properly
         if (st.previousEvalScore === undefined) {
           st.previousEvalScore = st.evalScore;
           return;
         }
         
-        // Store previous eval for CPL calculation
-        st.previousEvalScore = st.evalScore || 0;
+        // PART 2: Correct CPL calculation
+        const side = currentMoveIndex % 2 === 0 ? 'white' : 'black';
+        const cpl = calculateCPL(st.previousEvalScore, st.evalScore, side);
         
-        // Calculate centipawn loss (simplified)
-        const cpl = calculateSimplifiedCPL(boardId, history[currentMoveIndex], currentFen);
-        
-        // Classify move based on CPL
+        // PART 2: Correct classification using standard Lichess thresholds
         const moveQuality = classifyMoveByCPL(cpl);
         
         // Update display
@@ -1881,39 +1942,33 @@
           move: history[currentMoveIndex],
           cpl: cpl,
           classification: moveQuality,
-          player: currentMoveIndex % 2 === 0 ? 'white' : 'black'
+          player: side
         });
         
         // Update the analysis grid
         updateAnalysisGrid(boardId);
-      }
-    }
-
-    function calculateSimplifiedCPL(boardId, move, currentFen) {
-      const st = boardsState[boardId];
-      
-      if (st.evalScore !== undefined && st.previousEvalScore !== undefined) {
-        // Calculate the difference in evaluation before and after the move
-        const evalDiff = Math.abs(st.evalScore - st.previousEvalScore);
-        return Math.round(evalDiff * 100); // Convert to centipawns
-      }
-      
-      // Fallback: random CPL for demonstration
-      const randomBase = Math.random() * 100;
-      
-      if (move.includes('x')) {
-        return Math.floor(randomBase * 0.5);
-      } else if (move.length <= 3) {
-        return Math.floor(randomBase * 0.8);
+        
+        // Update previous evaluation for next move
+        st.previousEvalScore = st.evalScore;
       } else {
-        return Math.floor(randomBase * 1.5);
+        // First move - just set baseline
+        st.previousEvalScore = st.evalScore;
       }
     }
 
+    // PART 2: Correct CPL calculation
+    function calculateCPL(prevEval, newEval, side) {
+      // side = 'white' or 'black'
+      const sign = side === 'white' ? 1 : -1;
+      const loss = Math.max(0, Math.round((prevEval - newEval) * sign * 100));
+      return loss;
+    }
+
+    // PART 2: Correct classification using standard Lichess thresholds
     function classifyMoveByCPL(cpl) {
-      if (cpl > 200) return 'blunder';
-      if (cpl > 100) return 'mistake';
-      if (cpl > 50) return 'inaccuracy';
+      if (cpl >= 300) return 'blunder';
+      if (cpl >= 100) return 'mistake';
+      if (cpl >= 50) return 'inaccuracy';
       return 'good';
     }
 
@@ -1968,7 +2023,7 @@
       
       if (!whiteStatsEl || !blackStatsEl || !moveHistoryEl) return;
       
-      // FIX 4: Show eval-only stats even without moves
+      // Show eval-only stats even without moves
       if (!st.moveQualityHistory || st.moveQualityHistory.length === 0) {
         // Show current evaluation
         const whiteEval = st.evalScore > 0 ? st.evalScore : 0;
