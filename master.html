@@ -2361,56 +2361,30 @@
     // Call this after Firebase is initialized
     setupFirebaseConnectionListener();
 
-    // ---------- UTILITIES ----------
-    // Fixed logout function - redirects to correct page
+    // ---------- FIXED LOGOUT FUNCTION (RELIABLE VERSION) ----------
     document.getElementById('globalLogout').addEventListener('click', () => {
-      try{ 
-        localStorage.removeItem('role'); 
-        localStorage.removeItem('username'); 
-        localStorage.removeItem('email'); 
-        sessionStorage.removeItem('iq4u_clientId'); 
-      }catch(e){}
-      
-      try{ 
-        // Remove master from online list
-        onlineRef.child(MASTER_ID).remove().catch(()=>{}); 
-      }catch(e){}
-      
-      // Stop all watching and terminate engines
-      STUDENTS.forEach(s => stopWatching(s.id));
-      
-      // Terminate all Stockfish workers
-      for (const boardId in boardsState) {
-        const st = boardsState[boardId];
-        if (st && st.engineWorker) {
-          try { st.engineWorker.terminate(); } catch(e) {}
+      try {
+        // Stop all engines immediately
+        for (const boardId in boardsState) {
+          const st = boardsState[boardId];
+          if (st?.engineWorker) {
+            try { st.engineWorker.terminate(); } catch(e) {}
+          }
         }
+
+        // Remove Firebase presence
+        onlineRef.child(MASTER_ID).remove().catch(()=>{});
+
+        // Clear storage
+        localStorage.clear();
+        sessionStorage.clear();
+
+      } catch (e) {
+        console.warn('Logout cleanup error', e);
       }
-      
-      // Redirect to login page - FIXED PATH
-      // Try different possible login page locations
-      const loginPages = [
-        'login.html',
-        'index.html',
-        'student-login.html',
-        '/login.html',
-        '/index.html',
-        '/student-login.html',
-        '../login.html',
-        '../index.html'
-      ];
-      
-      // Try to redirect, if fails show message
-      setTimeout(() => {
-        window.location.href = 'index.html'; // Primary target
-      }, 100);
-      
-      // Fallback if primary fails
-      setTimeout(() => {
-        if (window.location.href.indexOf('master') !== -1) {
-          window.location.href = '../index.html';
-        }
-      }, 1000);
+
+      // HARD redirect (bypasses SPA / listeners)
+      window.location.replace('index.html');
     });
 
     window.addEventListener('beforeunload', () => {
