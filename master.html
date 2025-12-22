@@ -920,7 +920,6 @@
       });
 
       analyzeBtn.addEventListener('click', () => {
-        // FIX 1: Changed from analyzeOnce to analyzeFullGame
         analyzeFullGame(student.id);
       });
 
@@ -1077,14 +1076,26 @@
     
     async function analyzeFullGame(boardId) {
       const st = boardsState[boardId];
-      if (!st || !st.engineWorker || !st.game || !st.engineRunning) {
-        addNotification(boardId, 'Engine not ready. Please start Stockfish first.');
+      if (!st || !st.game) {
+        addNotification(boardId, 'No game to analyze');
         return;
       }
 
       const history = st.game.history({ verbose: true });
       if (history.length === 0) {
         addNotification(boardId, 'No moves to analyze');
+        return;
+      }
+
+      // Auto-start engine if not running
+      if (!st.engineRunning) {
+        addNotification(boardId, 'Starting engine for analysis...');
+        toggleEngine(boardId);
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      if (!st.engineWorker || !st.engineRunning) {
+        addNotification(boardId, 'Engine not ready for analysis');
         return;
       }
 
@@ -1105,7 +1116,7 @@
 
       updateAnalysisGrid(boardId);
       
-      // FIX 4: Auto-show analysis after full game
+      // Auto-show analysis after full game
       const grid = document.getElementById(`analysis-grid-${boardId}`);
       const toggleBtn = document.getElementById(`analysis-toggle-${boardId}`);
       if (grid && toggleBtn) {
@@ -1120,10 +1131,15 @@
     function analyzeFenForMove(boardId, fen, moveIndex) {
       return new Promise(resolve => {
         const st = boardsState[boardId];
+        if (!st || !st.engineWorker) {
+          resolve();
+          return;
+        }
 
         st.isAnalyzing = true;
         st.multiPV = [];
-        st.currentAnalysisFen = fen; // Store the FEN being analyzed
+        st.currentAnalysisFen = fen;
+        st.currentMateScore = null; // Reset mate score
 
         st.engineWorker.worker.postMessage('stop');
         st.engineWorker.worker.postMessage(`position fen ${fen}`);
@@ -1152,7 +1168,7 @@
     // Finalize ONE move
     function finalizeSingleMoveAnalysis(boardId, moveIndex, fen) {
       const st = boardsState[boardId];
-      if (!st.multiPV.length) return;
+      if (!st.multiPV || st.multiPV.length === 0) return;
 
       const best = st.multiPV.sort((a,b)=>b.score-a.score)[0];
       const side = moveIndex % 2 === 0 ? 'white' : 'black';
@@ -1166,7 +1182,7 @@
         move: st.game.history()[moveIndex],
         cpl,
         classification,
-        fen: fen // Store FEN for correct SAN conversion
+        fen: fen
       });
 
       st.previousEvalScore = best.score;
@@ -1175,11 +1191,10 @@
 
     // ---------- ON-DEMAND ANALYSIS FUNCTIONS ----------
     
-    // Step 2: Single-shot analysis function (kept for compatibility)
     function analyzeOnce(boardId) {
       const st = boardsState[boardId];
-      if (!st || !st.engineWorker || !st.game || !st.engineRunning) {
-        addNotification(boardId, 'Engine not ready. Please start Stockfish first.');
+      if (!st || !st.game) {
+        addNotification(boardId, 'No game to analyze');
         return;
       }
 
@@ -1189,9 +1204,23 @@
         return;
       }
 
+      // Auto-start engine if not running
+      if (!st.engineRunning) {
+        addNotification(boardId, 'Starting engine for analysis...');
+        toggleEngine(boardId);
+        setTimeout(() => analyzeOnce(boardId), 600);
+        return;
+      }
+
+      if (!st.engineWorker || !st.engineRunning) {
+        addNotification(boardId, 'Engine not ready for analysis');
+        return;
+      }
+
       st.isAnalyzing = true;
       st.multiPV = [];
       st.currentAnalysisFen = fen;
+      st.currentMateScore = null; // Reset mate score
 
       // Only clear arrows if not analyzing
       if (!st.isAnalyzing) {
@@ -1201,7 +1230,7 @@
       const statusEl = document.getElementById(`engine-status-${boardId}`);
       if (statusEl) statusEl.textContent = 'Analyzing…';
 
-      // Clear previous analysis
+      // Clear previous analysis display
       const bestMoveEl = document.getElementById(`best-move-${boardId}`);
       const evalEl = document.getElementById(`engine-eval-${boardId}`);
       if (bestMoveEl) bestMoveEl.textContent = 'Best: --';
@@ -1221,7 +1250,7 @@
     // Step 3: Collect MultiPV ONLY at final depth
     function processAnalysisInfo(boardId, line) {
       const st = boardsState[boardId];
-      // FIX 1: Remove isAnalyzing guard - CRITICAL FIX
+      // CRITICAL FIX: Remove isAnalyzing guard entirely
       if (!st) return;
 
       const depthMatch = line.match(/depth (\d+)/);
@@ -1250,11 +1279,14 @@
         isMate = true;
       }
 
+      // Ensure multiPV array exists
+      if (!st.multiPV) st.multiPV = [];
+      
       st.multiPV[idx] = { 
         uci: firstMove, 
         score: score,
         isMate: isMate,
-        pv: pvMatch[1].split(' ').slice(0, 3) // Store first 3 moves for variation
+        pv: pvMatch[1].split(' ').slice(0, 3)
       };
     }
 
@@ -1293,14 +1325,11 @@
 
       if (top.length === 0) return;
 
-      // FIX 3: Use correct FEN for SAN conversion
-      let fenForSan = st.currentAnalysisFen;
-      if (!fenForSan && st.moveQualityHistory.length > 0) {
-        fenForSan = st.moveQualityHistory[st.moveQualityHistory.length - 1].fen;
-      }
-      if (!fenForSan) {
-        fenForSan = st.game.fen();
-      }
+      // FIX 2: Correct FEN for SAN conversion
+      const fenForSan = st.currentAnalysisFen ||
+        (st.moveQualityHistory.length > 0 
+          ? st.moveQualityHistory[st.moveQualityHistory.length - 1].fen 
+          : st.game.fen());
       
       const tempGame = new Chess(fenForSan);
       const sanMoves = top.map(pv => formatUCIToSan(pv.uci, tempGame));
@@ -1322,7 +1351,7 @@
       // FIX 4: Reinitialize arrow overlay before drawing
       initArrowOverlay(boardId);
 
-      // Draw arrows for top 2 moves with delay (FIX 3)
+      // Draw arrows for top 2 moves with delay
       if (top[0]) {
         setTimeout(() => {
           drawArrow(boardId, {
@@ -1375,8 +1404,8 @@
           fen: st.game.fen()
         });
         
-        // Update previous eval for next analysis
-        st.previousEvalScore = st.evalScore;
+        // CRITICAL FIX 1: DO NOT update previousEvalScore here
+        // It should only be updated in finalizeSingleMoveAnalysis()
         
         // Update analysis grid
         updateAnalysisGrid(boardId);
@@ -1481,8 +1510,8 @@
         return;
       }
       
-      // Detector 2: Hanging piece
-      const sideToMove = st.game.turn() === 'w' ? 'black' : 'white';
+      // Detector 2: Hanging piece - FIX: Use move index not game.turn()
+      const sideToMove = side === 'white' ? 'black' : 'white'; // The side that just moved
       const hanging = detectHangingPieces(st.game, sideToMove);
       
       if (hanging.length > 0 && cpl >= 100) {
@@ -1935,6 +1964,10 @@
       const st = boardsState[boardId];
       if(!st) return;
       stopWatching(boardId); // teardown previous
+      
+      // Clear arrows when switching
+      clearArrow(boardId);
+      
       st.watchedClientId = clientId;
       st.whitePlayer = clientId; // Default to white
       st.blackPlayer = null;
@@ -2034,6 +2067,10 @@
       if(!st) return;
       
       stopWatching(boardId); // teardown previous
+      
+      // Clear arrows when switching
+      clearArrow(boardId);
+      
       st.whitePlayer = whitePlayerId;
       st.blackPlayer = blackPlayerId;
       st.watchedClientId = `${whitePlayerId}|${blackPlayerId}`;
@@ -2124,6 +2161,9 @@
     function stopWatching(boardId){
       const st = boardsState[boardId];
       if(!st) return;
+      
+      // Clear arrows when stopping
+      clearArrow(boardId);
       
       // Stop engine
       if(st.engineRunning) {
@@ -2263,7 +2303,7 @@
           st.boardObj.position(pos);
         }
         
-        // FIX 2: Only clear arrows if not analyzing
+        // Only clear arrows if not analyzing
         if (!st.isAnalyzing) {
           clearArrow(boardId);
           const bestMoveEl = document.getElementById(`best-move-${boardId}`);
