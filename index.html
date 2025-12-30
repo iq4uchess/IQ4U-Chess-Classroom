@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IQ4U Chess Classroom - Login</title>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -35,7 +37,6 @@
             min-height: 600px;
         }
 
-        /* Logo/Brand Section */
         .brand-section {
             flex: 1;
             background: linear-gradient(135deg, #2d4059 0%, #1a1a2e 100%);
@@ -48,17 +49,13 @@
             text-align: center;
         }
 
-        .logo-container {
-            margin-bottom: 40px;
-        }
-
         .logo {
             width: 200px;
             height: 200px;
             border-radius: 50%;
             background: white;
             padding: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
         }
 
         .logo img {
@@ -70,7 +67,6 @@
         .brand-title {
             font-size: 2.5rem;
             font-weight: 700;
-            margin-bottom: 10px;
             background: linear-gradient(45deg, #ffd166, #06d6a0);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -79,558 +75,167 @@
         .brand-subtitle {
             font-size: 1.2rem;
             opacity: 0.9;
-            max-width: 400px;
-            line-height: 1.6;
+            margin-top: 10px;
         }
 
-        .chess-icon {
-            font-size: 4rem;
-            margin-top: 30px;
-            color: #ffd166;
-        }
-
-        /* Login Section */
         .login-section {
             flex: 1;
             padding: 60px 40px;
+            background: #f8f9fa;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            background: #f8f9fa;
         }
 
         .login-title {
             font-size: 2rem;
-            color: #2d4059;
-            margin-bottom: 10px;
             text-align: center;
+            margin-bottom: 10px;
         }
 
         .login-subtitle {
-            color: #666;
-            margin-bottom: 40px;
             text-align: center;
-        }
-
-        .login-form {
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
+            margin-bottom: 40px;
+            color: #666;
         }
 
         .form-group {
             margin-bottom: 20px;
         }
 
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #2d4059;
-            font-weight: 600;
-        }
-
         .form-group input {
             width: 100%;
             padding: 15px;
-            border: 2px solid #e0e0e0;
             border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #06d6a0;
-            box-shadow: 0 0 0 3px rgba(6, 214, 160, 0.1);
+            border: 2px solid #e0e0e0;
         }
 
         .submit-btn {
             width: 100%;
-            padding: 17px;
+            padding: 16px;
+            border-radius: 10px;
+            border: none;
             background: linear-gradient(45deg, #ef476f, #ff9a5a);
             color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 30px;
         }
 
-        .submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(239, 71, 111, 0.3);
-        }
-
-        .message {
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 20px;
-            text-align: center;
-            display: none;
-        }
-
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        /* Loading animation */
-        .loading {
-            display: none;
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #06d6a0;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Student Options Section */
         .student-options {
-            margin-top: 20px;
-            width: 100%;
-            max-width: 400px;
-            margin: 20px auto 0;
-            padding-top: 20px;
+            margin-top: 30px;
             border-top: 2px solid #e0e0e0;
-        }
-
-        .options-title {
-            text-align: center;
-            color: #2d4059;
-            margin-bottom: 20px;
-            font-size: 1.3rem;
-            font-weight: 600;
+            padding-top: 20px;
         }
 
         .options-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 15px;
-            margin-bottom: 20px;
         }
 
         .option-btn {
             padding: 18px;
-            border: none;
             border-radius: 12px;
-            font-weight: 600;
-            font-size: 1rem;
+            border: none;
             cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            min-height: 100px;
-        }
-
-        .option-btn.play {
-            background: linear-gradient(45deg, #06d6a0, #118ab2);
+            font-weight: 600;
             color: white;
         }
 
-        .option-btn.puzzle {
-            background: linear-gradient(45deg, #ffd166, #ff9a5a);
-            color: #333;
-        }
+        .play { background: linear-gradient(45deg, #06d6a0, #118ab2); }
+        .puzzle { background: linear-gradient(45deg, #ffd166, #ff9a5a); }
+        .ai { background: linear-gradient(45deg, #ef476f, #ff4d6d); }
+        .lessons { background: linear-gradient(45deg, #7209b7, #4361ee); }
 
-        .option-btn.ai {
-            background: linear-gradient(45deg, #ef476f, #ff4d6d);
-            color: white;
-        }
-
-        .option-btn.test {
-            background: linear-gradient(45deg, #7209b7, #4361ee);
-            color: white;
-        }
-
-        .option-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        }
-
-        .option-btn:active {
-            transform: translateY(-1px);
-        }
-
-        .option-icon {
-            font-size: 2rem;
-        }
-
-        .option-text {
-            font-size: 0.95rem;
+        .message {
+            margin-top: 20px;
+            padding: 10px;
+            display: none;
             text-align: center;
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-                max-width: 500px;
-            }
-
-            .brand-section {
-                padding: 30px 20px;
-                order: 2;
-            }
-
-            .login-section {
-                padding: 40px 20px;
-                order: 1;
-            }
-
-            .logo {
-                width: 150px;
-                height: 150px;
-            }
-
-            .brand-title {
-                font-size: 2rem;
-            }
-
-            .options-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .chess-icon {
-                font-size: 3rem;
-                margin-top: 20px;
-            }
-
-            .option-btn {
-                padding: 16px;
-                min-height: 90px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .brand-title {
-                font-size: 1.8rem;
-            }
-
-            .login-title {
-                font-size: 1.8rem;
-            }
-
-            .logo {
-                width: 120px;
-                height: 120px;
-            }
-
-            .option-btn {
-                min-height: 80px;
-            }
-
-            .option-icon {
-                font-size: 1.8rem;
-            }
         }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <!-- Left Side: Brand/Logo Section -->
-        <div class="brand-section">
-            <div class="logo-container">
-                <div class="logo">
-                    <img src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/android-chrome-512x512.png" 
-                         alt="IQ4U Chess Logo" 
-                         onerror="this.src='https://via.placeholder.com/200/2d4059/ffffff?text=IQ4U+Chess'">
-                </div>
-            </div>
-            <h1 class="brand-title">IQ4U Chess Classroom</h1>
-            <p class="brand-subtitle">
-                Master the game of kings with our interactive chess learning platform. 
-                Designed for students and instructors to learn, practice, and excel in chess.
-            </p>
-            <div class="chess-icon">♔♕♖♗♘♙</div>
+<div class="container">
+
+    <div class="brand-section">
+        <div class="logo">
+            <img src="https://iq4uchess.github.io/IQ4U-Chess-Classroom/assets/android-chrome-512x512.png">
         </div>
-
-        <!-- Right Side: Login Section -->
-        <div class="login-section">
-            <h2 class="login-title">Welcome Back</h2>
-            <p class="login-subtitle">Sign in to access your chess classroom</p>
-
-            <form class="login-form" id="loginForm">
-                <div class="form-group">
-                    <label for="email">Email Address</label>
-                    <input type="email" id="email" placeholder="Enter your email" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" placeholder="Enter your password" required>
-                </div>
-                <button type="submit" class="submit-btn">Sign In</button>
-            </form>
-
-            <!-- Student Options Section -->
-            <div class="student-options">
-                <div class="options-title">Student Learning Modes</div>
-                <div class="options-grid">
-                    <button class="option-btn play" onclick="handleOptionClick('student.html')">
-                        <span class="option-icon">🎮</span>
-                        <span class="option-text">Play Chess</span>
-                    </button>
-                    <button class="option-btn puzzle" onclick="handleOptionClick('student2.html')">
-                        <span class="option-icon">🧩</span>
-                        <span class="option-text">Solve Puzzles</span>
-                    </button>
-                    <button class="option-btn ai" onclick="handleOptionClick('student3.html')">
-                        <span class="option-icon">🤖</span>
-                        <span class="option-text">Play vs AI</span>
-                    </button>
-                    <button class="option-btn test" onclick="handleOptionClick('student4.html')">
-                        <span class="option-icon">📝</span>
-                        <span class="option-text">Online Test</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Messages -->
-            <div class="message" id="message"></div>
-            
-            <!-- Loading Spinner -->
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Signing in...</p>
-            </div>
-        </div>
+        <h1 class="brand-title">IQ4U Chess Classroom</h1>
+        <p class="brand-subtitle">Learn chess step-by-step with guided lessons</p>
     </div>
 
-    <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
-            authDomain: "iq4u-chess-classroom.firebaseapp.com",
-            projectId: "iq4u-chess-classroom",
-            storageBucket: "iq4u-chess-classroom.appspot.com",
-            messagingSenderId: "833620718306",
-            appId: "1:833620718306:web:b599bb693d0736fe0da4bb",
-            databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app/"
-        };
+    <div class="login-section">
+        <h2 class="login-title">Welcome Back</h2>
+        <p class="login-subtitle">Sign in to continue</p>
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
+        <form id="loginForm">
+            <div class="form-group">
+                <input type="email" id="email" placeholder="Email" required>
+            </div>
+            <div class="form-group">
+                <input type="password" id="password" placeholder="Password" required>
+            </div>
+            <button class="submit-btn">Sign In</button>
+        </form>
 
-        // Special student UID
-        const STUDENT_UID = "mZBoxKMf5rclm88YAUQoGTnsuEo2";
-        // Master UID
-        const MASTER_UID = "lI6epV8iDnboHSr2MNfaXgEvePv1";
+        <div class="student-options">
+            <div class="options-grid">
+                <button class="option-btn play" onclick="handleOptionClick('student.html')">🎮 Play Chess</button>
+                <button class="option-btn puzzle" onclick="handleOptionClick('student2.html')">🧩 Puzzles</button>
+                <button class="option-btn ai" onclick="handleOptionClick('student3.html')">🤖 Play vs AI</button>
+                <button class="option-btn lessons" onclick="handleOptionClick('lessons')">📚 Lessons</button>
+            </div>
+        </div>
 
-        // UID → ROLE + TARGET PAGE
-        const USER_MAP = {
-            // Master user
-            [MASTER_UID]: { 
-                role: "master", 
-                page: "master.html" 
-            },
-            // Student user
-            [STUDENT_UID]: { 
-                role: "student", 
-                page: null  // Student gets options on login page
-            }
-        };
+        <div class="message" id="message"></div>
+    </div>
+</div>
 
-        // Track if user is logged in
-        let isLoggedIn = false;
-        let currentUserUID = null;
-        let currentUserRole = null;
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
+  authDomain: "iq4u-chess-classroom.firebaseapp.com",
+  projectId: "iq4u-chess-classroom",
+  databaseURL: "https://iq4u-chess-classroom-default-rtdb.asia-southeast1.firebasedatabase.app"
+};
 
-        // Show message
-        function showMessage(text, type) {
-            const messageEl = document.getElementById('message');
-            messageEl.textContent = text;
-            messageEl.className = `message ${type}`;
-            messageEl.style.display = 'block';
-            
-            setTimeout(() => {
-                messageEl.style.display = 'none';
-            }, 5000);
-        }
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 
-        // Show/hide loading
-        function setLoading(loading) {
-            document.getElementById('loading').style.display = loading ? 'block' : 'none';
-        }
+let isLoggedIn = false;
 
-        // Handle option button clicks
-        function handleOptionClick(page) {
-            console.log(`Option clicked: ${page}`);
-            
-            if (!isLoggedIn) {
-                showMessage("Please login first to access this feature.", 'error');
-                return;
-            }
-            
-            if (currentUserRole !== 'student') {
-                showMessage("This feature is only available for students.", 'error');
-                return;
-            }
-            
-            // Store the required UID for the page
-            localStorage.setItem('userUID', STUDENT_UID);
-            
-            // Set appropriate role based on page
-            if (page === 'student.html') {
-                localStorage.setItem('role', 'student1');
-            } else if (page === 'student2.html') {
-                localStorage.setItem('role', 'student2');
-            } else if (page === 'student3.html') {
-                localStorage.setItem('role', 'student3');
-            } else if (page === 'student4.html') {
-                localStorage.setItem('role', 'student4');
-            }
-            
-            showMessage(`Redirecting...`, 'success');
-            
-            setTimeout(() => {
-                console.log(`Redirecting to: ${page}`);
-                window.location.href = page;
-            }, 800);
-        }
+function handleOptionClick(target) {
+  if (!isLoggedIn) {
+    alert("Please login first");
+    return;
+  }
 
-        // Handle login success
-        function handleLoginSuccess(uid, role) {
-            console.log("Login successful, UID:", uid, "Role:", role);
-            
-            isLoggedIn = true;
-            currentUserUID = uid;
-            currentUserRole = role;
-            
-            // Store in localStorage
-            localStorage.setItem("role", role);
-            localStorage.setItem("uid", uid);
-            localStorage.setItem('userUID', uid);
-            
-            if (role === 'master') {
-                showMessage("Successfully logged in as Master", 'success');
-                setTimeout(() => {
-                    window.location.href = 'master.html';
-                }, 1000);
-            } else if (role === 'student') {
-                showMessage("Successfully logged in as Student", 'success');
-                // Student stays on login page to see options
-            }
-            
-            return true;
-        }
+  if (target === "lessons") {
+    window.location.href =
+      "https://iq4uchess.github.io/IQ4U-Chess-Classroom/React%20app/";
+    return;
+  }
 
-        // Manual login handler
-        async function handleLogin(event) {
-            event.preventDefault();
-            console.log("Manual login attempt");
-            setLoading(true);
-            
-            const email = document.getElementById("email").value.trim();
-            const password = document.getElementById("password").value.trim();
+  window.location.href = target;
+}
 
-            if (!email || !password) {
-                showMessage("Please enter email and password.", 'error');
-                setLoading(false);
-                return;
-            }
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = email.value;
+  const password = password.value;
 
-            try {
-                console.log(`Manual login with: ${email}`);
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const uid = userCredential.user.uid;
-                console.log(`Manual login successful, UID: ${uid}`);
+  await auth.signInWithEmailAndPassword(email, password);
+});
 
-                // Check if UID is authorized
-                if (!USER_MAP[uid]) {
-                    showMessage("Your account is not authorized to access this system.", 'error');
-                    await auth.signOut();
-                    return;
-                }
-                
-                const userRole = USER_MAP[uid].role;
-                handleLoginSuccess(uid, userRole);
-                
-            } catch (error) {
-                console.error("Manual login error:", error);
-                showMessage(`Login failed: Please check your credentials`, 'error');
-            } finally {
-                setLoading(false);
-            }
-        }
+auth.onAuthStateChanged(user => {
+  if (user) {
+    isLoggedIn = true;
+  }
+});
+</script>
 
-        // Attach form submit event
-        document.getElementById('loginForm').addEventListener('submit', handleLogin);
-
-        // Check if user is already logged in
-        auth.onAuthStateChanged((user) => {
-            if (user) {
-                const uid = user.uid;
-                console.log("User already logged in, UID:", uid);
-                
-                if (USER_MAP[uid]) {
-                    const userRole = USER_MAP[uid].role;
-                    const userPage = USER_MAP[uid].page;
-                    
-                    isLoggedIn = true;
-                    currentUserUID = uid;
-                    currentUserRole = userRole;
-                    
-                    localStorage.setItem("role", userRole);
-                    localStorage.setItem("uid", uid);
-                    localStorage.setItem('userUID', uid);
-                    
-                    // Auto-redirect for master
-                    if (userRole === 'master' && userPage) {
-                        console.log(`Master already logged in, redirecting to: ${userPage}`);
-                        setTimeout(() => {
-                            window.location.href = userPage;
-                        }, 500);
-                    } else if (userRole === 'student') {
-                        console.log("Student already logged in, showing options");
-                        showMessage("Welcome back, Student!", 'success');
-                    }
-                } else {
-                    showMessage("Your account is not authorized.", 'error');
-                    // Log out unauthorized user
-                    auth.signOut().then(() => {
-                        localStorage.clear();
-                        isLoggedIn = false;
-                        currentUserUID = null;
-                        currentUserRole = null;
-                    });
-                }
-            } else {
-                console.log("No user logged in");
-                isLoggedIn = false;
-                currentUserUID = null;
-                currentUserRole = null;
-            }
-        });
-
-        // Log initialization
-        console.log("IQ4U Chess Classroom Login initialized");
-        console.log("Student UID:", STUDENT_UID);
-        console.log("Master UID:", MASTER_UID);
-        console.log("4 Student options visible on login page");
-    </script>
 </body>
 </html>
