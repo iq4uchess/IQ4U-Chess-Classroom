@@ -72,7 +72,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
   <script>
-    /* ================= FIREBASE CONFIG ================= */
+    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyAIefVM1tBjWz35FRWRxmIdEJeO_vpHSKM",
       authDomain: "iq4u-chess-classroom.firebaseapp.com",
@@ -86,26 +86,21 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
 
-    /* ================= USER MAP ================= */
+    // UID → ROLE + TARGET PAGE
     const USER_MAP = {
       "ImAu93ICbAhwIcCPBQ8jvPz8DTQ2": { role: "student1", page: "student.html" },
       "G0G5lGUdMdRXduAcydCWPeTYdep2": { role: "student2", page: "student2.html" },
       "QAvO73vpF0ckJeNaIt5ZFKBhQK52": { role: "student3", page: "student3.html" },
 
-      /* LESSONS (REACT CLASSROOM) */
+      /* student4 = LESSONS (React Classroom) */
       "w2POcef2AkOY0BYdVwSXgZ75aVC3": {
-        role: "lessons",
+        role: "student4",
         page: "https://iq4uchess.github.io/IQ4U-Chess-Classroom/React%20app/"
       },
 
-      /* MASTER */
-      "PLCwUQ474lQrbxOJwFGgZ1ERheH3": {
-        role: "master",
-        page: "master.html"
-      }
+      "PLCwUQ474lQrbxOJwFGgZ1ERheH3": { role: "master", page: "master.html" }
     };
 
-    /* ================= LOGIN ================= */
     function login() {
       const email = document.getElementById("email").value.trim();
       const pass = document.getElementById("password").value.trim();
@@ -121,14 +116,11 @@
 
           if (!USER_MAP[uid]) {
             alert("This user does not have an assigned role.");
-            auth.signOut();
             return;
           }
 
           const { role, page } = USER_MAP[uid];
-
           localStorage.setItem("role", role);
-          localStorage.setItem("uid", uid);
 
           window.location.href = page;
         })
